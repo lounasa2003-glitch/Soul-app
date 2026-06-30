@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Momento del Match</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Inter:wght@300;400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #07050a;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Estrellas de fondo */
+  .stars {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+  .star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0;
+    animation: twinkle 4s infinite ease-in-out;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; }
+    50% { opacity: var(--max-op, 0.6); }
+  }
+
+  /* Los dos puntos de luz */
+  .point {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(0.5px);
+    z-index: 5;
+  }
+
+  .point-gold {
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle, #f5d98a, #c9a84c 60%, transparent 100%);
+    box-shadow: 0 0 18px 5px rgba(201,168,76,0.45), 0 0 50px 18px rgba(201,168,76,0.12);
+    left: -5%;
+    top: 30%;
+    animation: travelGold 11s cubic-bezier(0.45, 0, 0.2, 1) forwards 1s;
+  }
+
+  .point-silver {
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle, #e6e9f0, #a8b0c2 60%, transparent 100%);
+    box-shadow: 0 0 18px 5px rgba(168,176,194,0.45), 0 0 50px 18px rgba(168,176,194,0.12);
+    right: -5%;
+    top: 66%;
+    animation: travelSilver 11s cubic-bezier(0.45, 0, 0.2, 1) forwards 1s;
+  }
+
+  @keyframes travelGold {
+    0%   { left: -5%;  top: 30%; transform: scale(0.8); }
+    55%  { left: 30%;  top: 42%; transform: scale(1); }
+    85%  { left: 46%;  top: 49%; transform: scale(1.1); }
+    100% { left: 47%;  top: 50%; transform: scale(1.25); }
+  }
+
+  @keyframes travelSilver {
+    0%   { right: -5%;  top: 66%; transform: scale(0.8); }
+    55%  { right: 30%;  top: 54%; transform: scale(1); }
+    85%  { right: 46%;  top: 51%; transform: scale(1.1); }
+    100% { right: 47%;  top: 50%; transform: scale(1.25); }
+  }
+
+  /* Estela de estrellitas detrás de cada punto */
+  .trail-dot {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* La línea tenue que los conecta */
+  .connector {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    height: 1px;
+    width: 0;
+    background: linear-gradient(90deg, rgba(201,168,76,0.5), rgba(168,176,194,0.5));
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    animation: connectLine 1.8s ease forwards 9.5s;
+    z-index: 5;
+  }
+
+  @keyframes connectLine {
+    0%   { width: 0; opacity: 0; }
+    100% { width: 36px; opacity: 1; }
+  }
+
+  /* Glow ambiental que aparece al final */
+  .ambient-glow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0px;
+    height: 0px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(201,168,76,0.07), transparent 70%);
+    transform: translate(-50%, -50%);
+    animation: growGlow 2.5s ease forwards 9.5s;
+    z-index: 1;
+  }
+  @keyframes growGlow {
+    to { width: 480px; height: 480px; }
+  }
+
+  /* Anillo de estrellas girando alrededor del encuentro, una vez unidos */
+  .orbit-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 260px;
+    height: 260px;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    animation: fadeInOrbit 2s ease forwards 10.5s, rotateOrbit 18s linear infinite 10.5s;
+    z-index: 2;
+  }
+  @keyframes fadeInOrbit { to { opacity: 1; } }
+  @keyframes rotateOrbit { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+  .orbit-star {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(242,236,228,0.6);
+    animation: orbitPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes orbitPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 0.9; transform: scale(1.3); }
+  }
+
+  /* Texto */
+  .text-container {
+    position: absolute;
+    bottom: 16%;
+    left: 0;
+    right: 0;
+    text-align: center;
+    opacity: 0;
+    animation: fadeInText 2s ease forwards 11.5s;
+  }
+
+  @keyframes fadeInText {
+    to { opacity: 1; }
+  }
+
+  .alignment-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+    color: #b8aeb5;
+    letter-spacing: 0.04em;
+    margin-bottom: 2.2rem;
+  }
+
+  .buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    opacity: 0;
+    animation: fadeInButtons 1.2s ease forwards 13s;
+  }
+
+  @keyframes fadeInButtons {
+    to { opacity: 1; }
+  }
+
+  .btn-ready {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #8a6e2f, #c9a84c);
+    color: #07050a;
+    border: none;
+    padding: 0.9rem 2.2rem;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn-ready:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201,168,76,0.3); }
+
+  .btn-wait {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.8rem;
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: transparent;
+    color: #7a6e78;
+    border: 1px solid #2a1f28;
+    padding: 0.9rem 2.2rem;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .btn-wait:hover { color: #f2ece4; border-color: #7a6e78; }
+
+  .replay {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: none;
+    border: 1px solid #2a1f28;
+    color: #7a6e78;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.5rem 1rem;
+    border-radius: 2px;
+    cursor: pointer;
+    z-index: 10;
+  }
+  .replay:hover { color: #c9a84c; border-color: #c9a84c; }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <div class="stars" id="stars"></div>
+
+  <div class="ambient-glow"></div>
+  <div class="orbit-ring" id="orbitRing"></div>
+  <div class="point point-gold" id="pointGold"></div>
+  <div class="point point-silver" id="pointSilver"></div>
+  <div class="connector"></div>
+
+  <div class="text-container">
+    <p class="alignment-text">Los planetas se alinearon.</p>
+    <div class="buttons">
+      <button class="btn-ready">Estoy listo</button>
+      <button class="btn-wait">Necesito un momento</button>
+    </div>
+  </div>
+</div>
+
+<button class="replay" onclick="location.reload()">Repetir</button>
+
+<script>
+  // Generar estrellas de fondo aleatorias
+  const starsContainer = document.getElementById('stars');
+  for (let i = 0; i < 60; i++) {
+    const star = document.createElement('div');
+    star.className = 'star';
+    const size = Math.random() * 2 + 1;
+    star.style.width = size + 'px';
+    star.style.height = size + 'px';
+    star.style.left = Math.random() * 100 + '%';
+    star.style.top = Math.random() * 100 + '%';
+    star.style.setProperty('--max-op', (Math.random() * 0.5 + 0.2).toFixed(2));
+    star.style.animationDelay = (Math.random() * 4) + 's';
+    star.style.animationDuration = (Math.random() * 3 + 3) + 's';
+    starsContainer.appendChild(star);
+  }
+
+  // Generar anillo de estrellas orbitando — más cantidad, más movimiento
+  const orbitRing = document.getElementById('orbitRing');
+  const orbitCount = 18;
+  for (let i = 0; i < orbitCount; i++) {
+    const angle = (i / orbitCount) * 2 * Math.PI;
+    const radius = 115 + Math.random() * 18;
+    const x = 130 + radius * Math.cos(angle);
+    const y = 130 + radius * Math.sin(angle) * 0.55; // achatado, elíptico
+    const star = document.createElement('div');
+    star.className = 'orbit-star';
+    const size = Math.random() * 2.5 + 1.2;
+    star.style.width = size + 'px';
+    star.style.height = size + 'px';
+    star.style.left = x + 'px';
+    star.style.top = y + 'px';
+    star.style.animationDelay = (Math.random() * 2.5) + 's';
+    orbitRing.appendChild(star);
+  }
+
+  // Estela de estrellitas detrás de cada punto en movimiento
+  let trailsActive = true;
+  function createTrail(pointEl, color) {
+    let lastTime = 0;
+    function spawn() {
+      if (!trailsActive) return;
+      const now = Date.now();
+      if (now - lastTime < 90) { requestAnimationFrame(spawn); return; }
+      lastTime = now;
+      const rect = pointEl.getBoundingClientRect();
+      const stageRect = document.getElementById('stage').getBoundingClientRect();
+      const dot = document.createElement('div');
+      dot.className = 'trail-dot';
+      const size = Math.random() * 2 + 1;
+      dot.style.width = size + 'px';
+      dot.style.height = size + 'px';
+      dot.style.background = color;
+      dot.style.left = (rect.left - stageRect.left + rect.width/2 + (Math.random()*6-3)) + 'px';
+      dot.style.top = (rect.top - stageRect.top + rect.height/2 + (Math.random()*6-3)) + 'px';
+      dot.style.opacity = '0.55';
+      dot.style.transition = 'opacity 2.5s ease, transform 2.5s ease';
+      document.getElementById('stage').appendChild(dot);
+      requestAnimationFrame(() => {
+        dot.style.opacity = '0';
+        dot.style.transform = 'scale(0.3)';
+      });
+      setTimeout(() => dot.remove(), 2600);
+      requestAnimationFrame(spawn);
+    }
+    requestAnimationFrame(spawn);
+  }
+
+  createTrail(document.getElementById('pointGold'), 'rgba(201,168,76,0.7)');
+  createTrail(document.getElementById('pointSilver'), 'rgba(168,176,194,0.7)');
+
+  // Detener estelas cuando termina el recorrido (1s delay + 11s viaje + margen)
+  setTimeout(() => { trailsActive = false; }, 12200);
+</script>
+
+</body>
+</html>

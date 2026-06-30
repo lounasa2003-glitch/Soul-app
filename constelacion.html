@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOUL — Tu constelación</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07050a;min-height:100vh;overflow-y:auto;font-family:Arial,sans-serif;color:#f2ece4}
+.stage{position:relative;width:100%;min-height:100%;display:flex;flex-direction:column;align-items:center}
+
+/* Estrellas */
+.stars{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.star{position:absolute;background:white;border-radius:50%;opacity:0;animation:twinkle 4s infinite ease-in-out}
+@keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--op,.4)}}
+
+/* Constelación */
+.const-zone{position:relative;width:100%;padding:5vh 0 1rem;display:flex;align-items:center;justify-content:center;z-index:1}
+.constellation{position:relative;width:300px;height:160px}
+.const-svg{position:absolute;inset:0;width:100%;height:100%}
+.const-line{fill:none;stroke:rgba(201,168,76,.3);stroke-width:1;stroke-dasharray:4 4;opacity:0;transition:opacity .8s ease}
+.const-point{position:absolute;width:9px;height:9px;border-radius:50%;background:rgba(122,110,120,.3);transform:translate(-50%,-50%) scale(.7);transition:all .7s cubic-bezier(.34,1.56,.64,1)}
+.const-point.lit{background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 14px 4px rgba(201,168,76,.5),0 0 30px 10px rgba(201,168,76,.15);transform:translate(-50%,-50%) scale(1)}
+.const-point.photo-pt.lit{width:28px;height:28px;overflow:hidden;border:1.5px solid rgba(201,168,76,.7)}
+.const-point img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+
+/* Preguntas */
+.q-zone{position:relative;z-index:1;width:100%;max-width:480px;padding:0 1.2rem 4rem}
+.step{display:none;padding:.5rem 0}
+.step.active{display:block}
+
+.step-label{font-size:.68rem;letter-spacing:.15em;text-transform:uppercase;color:#7a6e78;margin-bottom:.7rem}
+.step-q{font-family:Georgia,serif;font-size:clamp(1.15rem,3vw,1.5rem);color:#f2ece4;margin-bottom:1.5rem;line-height:1.4}
+.step-input{width:100%;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Georgia,serif;font-size:1rem;padding:.8rem 1rem;outline:none;margin-bottom:.8rem;color-scheme:dark;box-sizing:border-box}
+.step-input:focus{border-color:rgba(201,168,76,.5)}
+.step-input::placeholder{color:#5a5058}
+.sublabel{font-size:.72rem;color:#9a8e96;margin-bottom:.4rem;margin-top:.2rem}
+.hint{font-size:.68rem;color:#7a6e78;font-style:italic;margin-bottom:1rem}
+
+/* Opciones tipo chip */
+.chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem}
+.chip{padding:.4rem .9rem;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:20px;color:#d8cdd2;font-family:Georgia,serif;font-size:.88rem;cursor:pointer;transition:all .2s}
+.chip.sel{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.6);color:#c9a84c}
+
+/* Textarea */
+.step-ta{width:100%;min-height:80px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Georgia,serif;font-size:.95rem;padding:.8rem 1rem;outline:none;resize:vertical;line-height:1.6;margin-bottom:.8rem;box-sizing:border-box}
+.step-ta:focus{border-color:rgba(201,168,76,.5)}
+.step-ta::placeholder{color:#5a5058}
+
+/* Fotos */
+.photo-pair{display:flex;gap:1.2rem;justify-content:center;margin:1rem 0 1.2rem}
+.photo-slot{display:flex;flex-direction:column;align-items:center}
+.photo-slot-label{font-size:.72rem;color:#9a8e96;margin-top:.5rem}
+.photo-upload{width:110px;height:110px;border-radius:50%;border:2px dashed #2a1f28;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:border-color .2s;overflow:hidden}
+.photo-upload:hover{border-color:rgba(201,168,76,.5)}
+.photo-upload img{width:100%;height:100%;object-fit:cover}
+.photo-icon{font-size:1.6rem;color:#5a5058}
+
+/* Botón continuar */
+.cont-btn{width:100%;padding:.9rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Arial,sans-serif;font-size:.78rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .2s;margin-top:.4rem}
+.cont-btn:disabled{opacity:.35;cursor:default}
+.cont-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,168,76,.25)}
+
+/* Final */
+.final-msg{text-align:center;padding:2rem 1rem}
+.final-title{font-family:Georgia,serif;font-style:italic;font-size:1.5rem;color:#c9a84c;margin-bottom:.6rem}
+.final-sub{font-family:Arial,sans-serif;font-size:.82rem;color:#7a6e78;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="stars" id="stars"></div>
+
+  <!-- Constelación de 7 puntos -->
+  <div class="const-zone">
+    <div class="constellation">
+      <svg class="const-svg" viewBox="0 0 300 160">
+        <path class="const-line" id="l01" d="M 20,40 L 70,20"/>
+        <path class="const-line" id="l12" d="M 70,20 L 130,35"/>
+        <path class="const-line" id="l23" d="M 130,35 L 185,25"/>
+        <path class="const-line" id="l34" d="M 185,25 L 240,50"/>
+        <path class="const-line" id="l45" d="M 240,50 L 265,100"/>
+        <path class="const-line" id="l56" d="M 265,100 L 200,135"/>
+      </svg>
+      <div class="const-point" id="pt0" style="left:20px;top:40px"></div>
+      <div class="const-point" id="pt1" style="left:70px;top:20px"></div>
+      <div class="const-point" id="pt2" style="left:130px;top:35px"></div>
+      <div class="const-point" id="pt3" style="left:185px;top:25px"></div>
+      <div class="const-point" id="pt4" style="left:240px;top:50px"></div>
+      <div class="const-point" id="pt5" style="left:265px;top:100px"></div>
+      <div class="const-point photo-pt" id="pt6" style="left:200px;top:135px"></div>
+    </div>
+  </div>
+
+  <!-- Pasos -->
+  <div class="q-zone">
+
+    <!-- PASO 0: Fecha y hora de nacimiento -->
+    <div class="step active" id="s0">
+      <p class="step-label">Paso 1 de 7</p>
+      <p class="step-q">¿Cuándo naciste?</p>
+      <input class="step-input" type="date" id="fecha" placeholder="Fecha de nacimiento">
+      <p class="sublabel">Hora de nacimiento (opcional)</p>
+      <input class="step-input" type="time" id="hora">
+      <p class="hint">Si no la sabés con exactitud, no hay problema — igualmente calculamos tu signo solar y lunar.</p>
+      <button class="cont-btn" id="btn0" disabled onclick="next(0)">Continuar</button>
+    </div>
+
+    <!-- PASO 1: Dónde reside -->
+    <div class="step" id="s1">
+      <p class="step-label">Paso 2 de 7</p>
+      <p class="step-q">¿Dónde vivís?</p>
+      <input class="step-input" type="text" id="ciudad" placeholder="Ciudad o zona">
+      <p class="sublabel">¿Hasta qué distancia estarías dispuesto/a para un encuentro?</p>
+      <div class="chips" id="distChips">
+        <div class="chip" onclick="selChip(this,'dist')">Mi ciudad</div>
+        <div class="chip" onclick="selChip(this,'dist')">Hasta 50 km</div>
+        <div class="chip" onclick="selChip(this,'dist')">Mismo país</div>
+        <div class="chip" onclick="selChip(this,'dist')">Cualquier lugar</div>
+      </div>
+      <button class="cont-btn" id="btn1" disabled onclick="next(1)">Continuar</button>
+    </div>
+
+    <!-- PASO 2: Género y preferencia -->
+    <div class="step" id="s2">
+      <p class="step-label">Paso 3 de 7</p>
+      <p class="step-q">¿Cómo te identificás?</p>
+      <div class="chips" id="genChips">
+        <div class="chip" onclick="selChip(this,'gen')">Mujer</div>
+        <div class="chip" onclick="selChip(this,'gen')">Hombre</div>
+        <div class="chip" onclick="selChip(this,'gen')">No binario/a</div>
+        <div class="chip" onclick="selChip(this,'gen')">Prefiero no decir</div>
+      </div>
+      <p class="sublabel" style="margin-top:.5rem">¿Con quién querés conectar?</p>
+      <div class="chips" id="prefChips">
+        <div class="chip" onclick="selChip(this,'pref')">Mujeres</div>
+        <div class="chip" onclick="selChip(this,'pref')">Hombres</div>
+        <div class="chip" onclick="selChip(this,'pref')">Cualquier género</div>
+        <div class="chip" onclick="selChip(this,'pref')">Todavía lo estoy definiendo</div>
+      </div>
+      <button class="cont-btn" id="btn2" disabled onclick="next(2)">Continuar</button>
+    </div>
+
+    <!-- PASO 3: Tipo de vínculo e hijos -->
+    <div class="step" id="s3">
+      <p class="step-label">Paso 4 de 7</p>
+      <p class="step-q">¿Qué tipo de vínculo buscás?</p>
+      <div class="chips" id="vincChips">
+        <div class="chip" onclick="selChipMulti(this,'vinc')">Romántico</div>
+        <div class="chip" onclick="selChipMulti(this,'vinc')">Amistad profunda</div>
+        <div class="chip" onclick="selChipMulti(this,'vinc')">Compañía y acompañamiento</div>
+        <div class="chip" onclick="selChipMulti(this,'vinc')">Todavía no lo sé</div>
+      </div>
+      <p class="sublabel" style="margin-top:.8rem">¿Tenés hijos?</p>
+      <div class="chips" id="hijosChips">
+        <div class="chip" onclick="selChip(this,'hijos')">No tengo</div>
+        <div class="chip" onclick="selChip(this,'hijos')">Sí, pequeños</div>
+        <div class="chip" onclick="selChip(this,'hijos')">Sí, adolescentes</div>
+        <div class="chip" onclick="selChip(this,'hijos')">Sí, adultos</div>
+      </div>
+      <button class="cont-btn" id="btn3" disabled onclick="next(3)">Continuar</button>
+    </div>
+
+    <!-- PASO 4: Estado civil y ocupación -->
+    <div class="step" id="s4">
+      <p class="step-label">Paso 5 de 7</p>
+      <p class="step-q">Un poco más sobre vos</p>
+      <p class="sublabel">Estado civil</p>
+      <div class="chips" id="civilChips">
+        <div class="chip" onclick="selChip(this,'civil')">Soltero/a</div>
+        <div class="chip" onclick="selChip(this,'civil')">Separado/a</div>
+        <div class="chip" onclick="selChip(this,'civil')">Divorciado/a</div>
+        <div class="chip" onclick="selChip(this,'civil')">Viudo/a</div>
+      </div>
+      <p class="sublabel" style="margin-top:.8rem">¿A qué te dedicás?</p>
+      <input class="step-input" type="text" id="ocupacion" placeholder="Tu ocupación o área">
+      <button class="cont-btn" id="btn4" disabled onclick="next(4)">Continuar</button>
+    </div>
+
+    <!-- PASO 5: No negociables y negociables -->
+    <div class="step" id="s5">
+      <p class="step-label">Paso 6 de 7</p>
+      <p class="step-q">Tus límites vinculares</p>
+      <p class="sublabel">¿Qué es lo que no estás dispuesto/a a negociar en un vínculo?</p>
+      <textarea class="step-ta" id="noNeg" placeholder="Lo que para vos es innegociable..."></textarea>
+      <p class="sublabel">¿Y qué podrías dejar pasar, aunque no sea ideal?</p>
+      <textarea class="step-ta" id="neg" placeholder="Lo que podrías negociar o tolerar..."></textarea>
+      <button class="cont-btn" id="btn5" disabled onclick="next(5)">Continuar</button>
+    </div>
+
+    <!-- PASO 6: Fotos -->
+    <div class="step" id="s6">
+      <p class="step-label">Paso 7 de 7</p>
+      <p class="step-q">Mostranos cómo sos</p>
+      <p class="hint">Dos fotos reales y actuales. Son parte de tu constelación — no hay filtros ni disfraces acá.</p>
+      <div class="photo-pair">
+        <div class="photo-slot">
+          <div class="photo-upload" id="upCara" onclick="document.getElementById('inCara').click()">
+            <span class="photo-icon">+</span>
+            <input type="file" id="inCara" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCara',true)">
+          </div>
+          <p class="photo-slot-label">Tu cara</p>
+        </div>
+        <div class="photo-slot">
+          <div class="photo-upload" id="upCuerpo" onclick="document.getElementById('inCuerpo').click()">
+            <span class="photo-icon">+</span>
+            <input type="file" id="inCuerpo" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCuerpo',false)">
+          </div>
+          <p class="photo-slot-label">Tu cuerpo</p>
+        </div>
+      </div>
+      <button class="cont-btn" id="btn6" disabled onclick="finish()">Completar mi constelación</button>
+    </div>
+
+    <!-- FINAL -->
+    <div class="step" id="sfinal">
+      <div class="final-msg">
+        <p class="final-title">Tu constelación está completa ✦</p>
+        <p class="final-sub">Ya tenemos lo que necesitamos para empezar a trabajar para vos.<br>Mientras seguís en Soul, el sistema ya busca en paralelo.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var caraOk=false, cuerpoOk=false;
+var chipSels={};
+
+// Estrellas
+var sc=document.getElementById('stars');
+for(var i=0;i<55;i++){
+  var s=document.createElement('div');s.className='star';
+  var sz=Math.random()*2+1;s.style.width=sz+'px';s.style.height=sz+'px';
+  s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';
+  s.style.setProperty('--op',(Math.random()*.4+.15).toFixed(2));
+  s.style.animationDelay=(Math.random()*4)+'s';s.style.animationDuration=(Math.random()*3+3)+'s';
+  sc.appendChild(s);
+}
+
+// Chip single select
+function selChip(el,group){
+  document.querySelectorAll('#'+group+'Chips .chip').forEach(function(c){c.classList.remove('sel')});
+  el.classList.add('sel');
+  chipSels[group]=el.textContent;
+  checkStep(currentStep);
+}
+
+// Chip multi select
+function selChipMulti(el,group){
+  el.classList.toggle('sel');
+  var sels=[];
+  document.querySelectorAll('#'+group+'Chips .chip.sel').forEach(function(c){sels.push(c.textContent)});
+  chipSels[group]=sels;
+  checkStep(currentStep);
+}
+
+var currentStep=0;
+
+function checkStep(s){
+  var ok=false;
+  if(s===0) ok=!!document.getElementById('fecha').value;
+  if(s===1) ok=document.getElementById('ciudad').value.trim().length>0 && chipSels['dist'];
+  if(s===2) ok=chipSels['gen'] && chipSels['pref'];
+  if(s===3) ok=(chipSels['vinc']&&chipSels['vinc'].length>0) && chipSels['hijos'];
+  if(s===4) ok=chipSels['civil'] && document.getElementById('ocupacion').value.trim().length>0;
+  if(s===5) ok=document.getElementById('noNeg').value.trim().length>2 && document.getElementById('neg').value.trim().length>2;
+  if(s===6) ok=caraOk && cuerpoOk;
+  var btn=document.getElementById('btn'+s);
+  if(btn) btn.disabled=!ok;
+}
+
+// Listeners para inputs de texto
+document.getElementById('fecha').addEventListener('input',function(){checkStep(0)});
+document.getElementById('ciudad').addEventListener('input',function(){checkStep(1)});
+document.getElementById('ocupacion').addEventListener('input',function(){checkStep(4)});
+document.getElementById('noNeg').addEventListener('input',function(){checkStep(5)});
+document.getElementById('neg').addEventListener('input',function(){checkStep(5)});
+
+function lightPoint(i){
+  document.getElementById('pt'+i).classList.add('lit');
+  if(i>0){var l=document.getElementById('l'+(i-1)+i);if(l)l.style.opacity='1';}
+}
+
+function next(s){
+  lightPoint(s);
+  document.getElementById('s'+s).classList.remove('active');
+  currentStep=s+1;
+  setTimeout(function(){
+    document.getElementById('s'+currentStep).classList.add('active');
+    window.scrollTo(0,0);
+    checkStep(currentStep);
+  },300);
+}
+
+function loadPhoto(input,uploadId,isCara){
+  var file=input.files[0];
+  if(!file)return;
+  var url=URL.createObjectURL(file);
+  var up=document.getElementById(uploadId);
+  up.innerHTML='<img src="'+url+'" alt="foto">';
+  if(isCara){
+    caraOk=true;
+    // Foto en constelación
+    var pt6=document.getElementById('pt6');
+    pt6.innerHTML='<img src="'+url+'" alt="foto">';
+  } else {
+    cuerpoOk=true;
+  }
+  checkStep(6);
+}
+
+function finish(){
+  lightPoint(6);
+  document.getElementById('s6').classList.remove('active');
+  setTimeout(function(){
+    document.getElementById('sfinal').classList.add('active');
+    window.scrollTo(0,0);
+  },300);
+}
+</script>
+</body>
+</html>
