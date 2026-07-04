@@ -308,13 +308,13 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <p class="sesion-sub">¿Qué querés hacer hoy?</p>
 
     <div class="sesion-opt" onclick="elegirSesion('soul')">
-      <p class="sesion-opt-title">Hablar con Soul</p>
-      <p class="sesion-opt-desc">Seguí conociéndote, avanzá en tu proceso, o retomá donde quedaste.</p>
+      <p class="sesion-opt-title">Seguir con Soul</p>
+      <p class="sesion-opt-desc">Continuá tu proceso — los módulos que te van a preparar mejor para el encuentro.</p>
     </div>
 
     <div class="sesion-opt" onclick="elegirSesion('analisis')">
       <p class="sesion-opt-title">Analizar una conversación</p>
-      <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y Soul la analiza contra tu perfil real.</p>
+      <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
   </div>
 </div>
@@ -619,7 +619,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="antes-line" id="al4" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.25rem);color:#d8cdd2;line-height:1.7;opacity:0;transition:opacity 1s ease">Un 60% hoy con alto potencial vale infinitamente más que un 90% sin capacidad de construir nada.</p>
       <p class="antes-line" id="al5" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.5rem);color:#c9a84c;line-height:1.6;opacity:0;transition:opacity 1s ease">Lo perfecto no existe. Se construye.</p>
     </div>
-    <button id="btnVerMatch" style="opacity:0;transition:opacity .8s ease;padding:.9rem 2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer" onclick="ir(5)">Ver mi compatibilidad →</button>
+    <button id="btnVerMatch" style="opacity:0;transition:opacity .8s ease;padding:.9rem 2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer" onclick="verResultadoMatch()">Ver mi compatibilidad →</button>
   </div>
 </div>
 
@@ -630,12 +630,22 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
   <p class="match-title">Los planetas<br>se alinearon.</p>
   <div class="match-scores">
-    <div class="score-block"><div class="score-num hoy" id="scoreHoy">68%</div><div class="score-lbl">Compatibilidad hoy</div></div>
-    <div class="score-block"><div class="score-num pot" id="scorePot">91%</div><div class="score-lbl">Potencial de construcción</div></div>
+    <div class="score-block"><div class="score-num hoy" id="scoreHoy">—</div><div class="score-lbl">Compatibilidad hoy</div></div>
+    <div class="score-block"><div class="score-num pot" id="scorePot">—</div><div class="score-lbl">Potencial de construcción</div></div>
   </div>
   <p class="match-sub">Ahora empieza la parte que ningún algoritmo puede hacer por ustedes.</p>
-  <div class="match-msg" id="matchMsg">Si se encuentran con curiosidad, tienen muchas posibilidades de sorprenderse mutuamente.</div>
+  <div class="match-msg" id="matchMsg"></div>
   <button class="btn-gold" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
+</div>
+
+<!-- ══ ESPERANDO MATCH ══ -->
+<div class="etapa" id="eEsperando">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
+    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 2rem;animation:pulse 3s ease-in-out infinite"></div>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem">Ya tenemos tu perfil completo.</p>
+    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px;margin-bottom:2rem">Mientras seguís conociéndote con los módulos, el sistema ya está buscando a alguien compatible. En cuanto encontremos algo, te lo hacemos saber.</p>
+    <button class="btn-gold" onclick="ir('4b')">Seguir conociéndome →</button>
+  </div>
 </div>
 
 <!-- ══ ETAPA 6 — PREPARACIÓN ══ -->
@@ -908,6 +918,17 @@ function addBotonMatch(){
   div.innerHTML='<button onclick="irAntesMatch()" style="padding:.8rem 1.8rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Continuar →</button>';
   document.getElementById('moduloArea').appendChild(div);
   document.getElementById('moduloArea').scrollTop=9999;
+}
+
+function verResultadoMatch(){
+  if(window.matchEncontrado&&window.matchData){
+    document.getElementById('scoreHoy').textContent=window.matchData.compatibilidad_hoy+'%';
+    document.getElementById('scorePot').textContent=window.matchData.potencial_construccion+'%';
+    document.getElementById('matchMsg').textContent=window.matchData.mensaje_dupla;
+    ir(5);
+  }else{
+    ir('Esperando');
+  }
 }
 
 function irAntesMatch(){
@@ -1196,7 +1217,16 @@ async function cargarProgreso(email){
 
 function elegirSesion(tipo){
   if(tipo==='soul'){
-    ir(4);
+    if(window.perfilRecienExtraido&&window.moduloInfoGuardada){
+      var perfil=window.perfilRecienExtraido;
+      var moduloInfo=window.moduloInfoGuardada;
+      window.perfilRecienExtraido=null;
+      window.moduloInfoGuardada=null;
+      ir('4b');
+      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales);
+    }else{
+      ir(4);
+    }
   }else{
     ir('AnalisisExterno');
   }
@@ -1295,14 +1325,14 @@ window.addEventListener('load',function(){
 // ── NAVEGACIÓN ──
 var etapaActual=0;
 function ir(n){
-  var idActual=(typeof etapaActual==='string')?'e'+etapaActual:'e'+etapaActual;
-  var idNuevo=(typeof n==='string'&&isNaN(n))?'e'+n:'e'+n;
+  var idActual='e'+etapaActual;
+  var idNuevo='e'+n;
   document.getElementById(idActual).classList.remove('activa');
   document.getElementById(idNuevo).classList.add('activa');
   etapaActual=n;
   window.scrollTo(0,0);
   if(n===4) initChat();
-  if(n===5){initMatch();extraerYGuardarPerfil();}
+  if(n===5) initMatch();
   if(n===7) initCita();
 }
 
@@ -1401,11 +1431,19 @@ CALIDEZ
 Reconocé gestos cálidos. De vez en cuando: "gracias por abrirte así", "la estás haciendo bien". Solo cuando el momento lo pida. Podés usar emojis como excepción puntual de calidez.
 
 CUÁNDO CERRAR LA CONVERSACIÓN
-Cuando tengas suficiente información — el identikit de la persona en tercera persona, el identikit de quien busca, al menos algunas referencias culturales, y una idea clara de sus valores y estilo vincular — proponés avanzar con esta frase exacta, sin variaciones:
+No propongas cerrar hasta haber reunido TODO esto:
+- El identikit de la persona en tercera persona ("contame un poco de [nombre]")
+- El identikit de quien busca ("¿cómo sería la persona que buscás?")
+- Al menos tres referencias culturales concretas (una película, una canción, un libro, una comida, un viaje, algo de deporte o baile — lo que haya surgido naturalmente)
+- Una idea clara de sus valores y estilo vincular
+
+Si todavía no tenés las referencias culturales, seguí conversando y buscá el espacio natural para preguntarlas — por ejemplo con algo como "¿hay alguna película o canción que sientas que te representa?" o "contame de algún viaje que te haya marcado". No cierres solo porque ya tenés el identikit — las referencias culturales son igual de importantes porque las vas a necesitar después.
+
+Cuando tengas TODO lo anterior, proponés avanzar con esta frase exacta, sin variaciones:
 
 "[Nombre], creo que ya tengo una imagen bastante clara de quién sos. Hiciste un buen trabajo hoy. ¿Querés que avancemos al siguiente paso?"
 
-No uses otras variaciones de esta frase — el sistema la detecta para saber cuándo activar el siguiente paso. Solo la usás cuando realmente tenés suficiente información, no antes.`;
+No uses otras variaciones de esta frase — el sistema la detecta para saber cuándo activar el siguiente paso.`;
 
 function initChat(){
   if(chatHistory.length>0)return;
@@ -1506,18 +1544,27 @@ async function avanzarAlMatch(){
     var txtM=dataM.content.map(function(b){return b.text||''}).join('');
     var moduloInfo=JSON.parse(txtM.replace(/```json|```/g,'').trim());
 
-    // 4. Ir a módulos
-    setTimeout(function(){
-      ir('4b');
-      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales);
-    },1500);
+    // Guardar info para cuando elija qué hacer
+    window.perfilRecienExtraido=perfil;
+    window.moduloInfoGuardada=moduloInfo;
 
-    // 5. Calcular matches en paralelo
+    // 4. Actualizar etapa_actual en la base
+    if(usuarioId){
+      fetch('/api/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tabla:'usuarios',datos:{etapa_actual:'modulos'}})}).catch(function(){});
+    }
+
+    // 5. Calcular matches en paralelo mientras la persona elige
     calcularMatches();
+
+    // 6. Mostrar elección de sesión en vez de ir directo a módulos
+    setTimeout(function(){
+      document.getElementById('sesionSaludo').textContent='Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.';
+      ir('EleccionSesion');
+    },1500);
 
   }catch(e){
     console.error('Error en pipeline:',e);
-    ir(5);
+    addMsg('soul','Perdón, algo se complicó de mi lado. ¿Podés escribir "seguimos" para que lo intente de nuevo?');
   }
 }
 
@@ -1525,6 +1572,7 @@ var COMPARE_PROMPT=`Sos el motor de compatibilidad de Soul. Comparás dos perfil
 
 async function calcularMatches(){
   if(!usuarioId)return;
+  window.matchEncontrado=false;
   try{
     // Leer todos los perfiles existentes excepto el propio
     var res=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=neq.'+usuarioId);
@@ -1566,7 +1614,8 @@ async function calcularMatches(){
             activado_por: 'sistema'
           }})
         });
-        // Mostrar en pantalla de match
+        window.matchEncontrado=true;
+        window.matchData=comp;
         document.getElementById('scoreHoy').textContent=comp.compatibilidad_hoy+'%';
         document.getElementById('scorePot').textContent=comp.potencial_construccion+'%';
         document.getElementById('matchMsg').textContent=comp.mensaje_dupla;
