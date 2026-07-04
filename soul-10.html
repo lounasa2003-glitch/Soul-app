@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soul</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-serif;overflow-x:hidden}
+
+/* ── ETAPAS ── */
+.etapa{display:none;min-height:100vh}
+.etapa.activa{display:flex;flex-direction:column}
+
+/* ── ESTRELLAS ── */
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.star{position:absolute;background:white;border-radius:50%;opacity:0;animation:twinkle 4s infinite ease-in-out}
+@keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--op,.4)}}
+
+/* ══════════════════════════════════
+   ETAPA 0 — LOGIN / REGISTRO
+══════════════════════════════════ */
+#e0{align-items:center;justify-content:center;padding:2rem 1.5rem}
+.auth-wrap{max-width:380px;width:100%;position:relative;z-index:1}
+.auth-orb{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite}
+.auth-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.4rem;color:#c9a84c;text-align:center;margin-bottom:.4rem}
+.auth-sub{font-family:'Inter',sans-serif;font-size:.76rem;color:#7a6e78;text-align:center;margin-bottom:2rem}
+.auth-input{width:100%;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:1rem;padding:.8rem 1rem;outline:none;margin-bottom:.8rem;box-sizing:border-box}
+.auth-input:focus{border-color:rgba(201,168,76,.5)}
+.auth-input::placeholder{color:#5a5058}
+.auth-err{color:#d98a9e;font-family:'Inter',sans-serif;font-size:.78rem;text-align:center;margin-bottom:.8rem;display:none}
+.auth-toggle{text-align:center;margin-top:1.2rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#7a6e78}
+.auth-toggle span{color:#c9a84c;cursor:pointer;text-decoration:underline}
+.auth-loading{text-align:center;color:#7a6e78;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;display:none;margin-top:.5rem}
+
+/* ══════════════════════════════════
+   ETAPA 1 — ONBOARDING
+══════════════════════════════════ */
+#e1{align-items:center;justify-content:center;position:relative;text-align:center;padding:2rem}
+
+.orbital{position:relative;width:140px;height:140px;margin:0 auto 2.5rem}
+.sun{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 24px 8px rgba(201,168,76,.5);animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.12)}}
+.orbit{position:absolute;top:50%;left:50%;border:1px solid rgba(201,168,76,.15);border-radius:50%;transform:translate(-50%,-50%)}
+.orbit1{width:70px;height:70px;animation:spin1 8s linear infinite}
+.orbit2{width:110px;height:110px;animation:spin2 14s linear infinite}
+.orbit3{width:140px;height:140px;animation:spin3 22s linear infinite}
+@keyframes spin1{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes spin2{to{transform:translate(-50%,-50%) rotate(-360deg)}}
+@keyframes spin3{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.planet{position:absolute;border-radius:50%;top:-4px;left:50%;transform:translateX(-50%)}
+.p1{width:7px;height:7px;background:radial-gradient(#d8cdd2,#9a8e96);box-shadow:0 0 6px rgba(210,200,210,.4)}
+.p2{width:9px;height:9px;background:radial-gradient(#c9a84c,#8a6e2f);box-shadow:0 0 8px rgba(201,168,76,.5)}
+.p3{width:6px;height:6px;background:radial-gradient(#d98a9e,#a06070);box-shadow:0 0 5px rgba(217,138,158,.4)}
+
+.soul-name{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;letter-spacing:.4em;color:rgba(201,168,76,.6);text-transform:uppercase;margin-bottom:2.5rem}
+.typing-wrap{max-width:560px;min-height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:2rem;gap:.6rem}
+.typing-line{font-family:'Cormorant Garamond',Georgia,serif!important;font-style:italic;font-weight:300;font-size:clamp(1.15rem,3.8vw,1.7rem);color:#c9a84c!important;line-height:1.5;opacity:0;transform:translateY(8px);transition:opacity 1.1s ease,transform 1.1s ease}
+.typing-line.show{opacity:1;transform:translateY(0)}
+.onb-welcome{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.1rem,3.2vw,1.4rem);color:#7a6e78;margin-bottom:2.5rem;opacity:0;transition:opacity 1s ease}
+.onb-welcome.show{opacity:1}
+.btn-gold{padding:.9rem 2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:transform .2s,box-shadow .2s}
+#onbBtn{opacity:0}
+#onbBtn.show{opacity:1}
+.btn-gold:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,168,76,.3)}
+.btn-gold:disabled{opacity:.35;cursor:default;transform:none;box-shadow:none}
+
+.sound-toggle{position:fixed;top:1.2rem;right:1.2rem;width:38px;height:38px;border-radius:50%;background:rgba(36,26,32,.5);border:1px solid rgba(201,168,76,.25);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:all .2s}
+.sound-toggle:hover{border-color:rgba(201,168,76,.5)}
+.sound-toggle svg{width:16px;height:16px;stroke:#c9a84c;opacity:.7}
+.sound-toggle.muted svg .wave{display:none}
+.sound-toggle.muted svg .mute-line{display:block!important}
+
+/* ══════════════════════════════════
+   ETAPA 2 — CONSENTIMIENTO
+══════════════════════════════════ */
+#e2{padding:2rem 1.5rem 4rem;align-items:center}
+.con-wrap{max-width:480px;width:100%;margin:0 auto;position:relative;z-index:1}
+.con-orb{width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 14px 4px rgba(201,168,76,.4);margin:2rem auto 1.2rem;animation:pulse 3s ease-in-out infinite}
+.con-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;text-align:center;margin-bottom:1.2rem}
+.con-card{background:rgba(36,26,32,.4);border:1px solid #2a1f28;border-radius:8px;padding:1.2rem;margin-bottom:1.2rem}
+.con-card p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.92rem;color:#d8cdd2;line-height:1.8}
+.con-card p+p{margin-top:.7rem}
+.legal-box{background:#f5f5f0;border-radius:6px;height:300px;overflow-y:auto;padding:1rem;margin-bottom:.7rem}
+.legal-box h3{font-family:Georgia,serif;font-size:.9rem;color:#1a1015;margin:.7rem 0 .4rem}
+.legal-box h3:first-child{margin-top:0}
+.legal-box p,.legal-box li{font-family:Arial,sans-serif;font-size:.74rem;color:#2a1f28;line-height:1.6;margin-bottom:.4rem}
+.legal-box ul{padding-left:1rem;margin-bottom:.4rem}
+.legal-box hr{border:none;border-top:1px solid #ddd;margin:.6rem 0}
+.legal-hl{background:#fff8e6;border-left:3px solid #c9a84c;padding:.5rem .7rem;margin:.5rem 0;border-radius:0 4px 4px 0}
+.legal-end{text-align:center;padding:.7rem 0;color:#9a9090;font-family:Georgia,serif;font-style:italic;font-size:.78rem}
+.scroll-notice{font-family:'Inter',sans-serif;font-size:.7rem;color:#7a6e78;text-align:center;margin-bottom:.6rem}
+.scroll-notice.ok{color:#4ecb71}
+.check-row{display:flex;align-items:flex-start;gap:.7rem;padding:.8rem;background:rgba(36,26,32,.4);border:1px solid #2a1f28;border-radius:6px;margin-bottom:.6rem;cursor:pointer}
+.check-row.locked{cursor:default;opacity:.4}
+.cbox{width:20px;height:20px;border-radius:4px;border:2px solid #2a1f28;flex-shrink:0;margin-top:.1rem;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.check-row.on .cbox{background:#c9a84c;border-color:#c9a84c}
+.cbox-icon{color:#07050a;font-size:.72rem;display:none}
+.check-row.on .cbox-icon{display:block}
+.cbox-text strong{display:block;font-family:'Cormorant Garamond',serif;font-size:.88rem;color:#f2ece4;margin-bottom:.15rem}
+.cbox-text span{font-family:'Inter',sans-serif;font-size:.7rem;color:#7a6e78;line-height:1.4}
+.carta-box{background:rgba(201,168,76,.05);border:1px solid rgba(201,168,76,.2);border-radius:6px;padding:.9rem;margin-bottom:.9rem}
+.carta-box p{font-family:'Inter',sans-serif;font-size:.74rem;color:#d8cdd2;line-height:1.5;padding:.3rem 0;border-bottom:1px solid rgba(42,31,40,.4)}
+.carta-box p:last-child{border-bottom:none}
+.carta-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;color:#c9a84c;margin-bottom:.6rem}
+.btn-full{width:100%;padding:.9rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:.6rem}
+.btn-full:disabled{opacity:.35;cursor:default}
+.btn-back{width:100%;padding:.5rem;background:none;border:none;color:#5a5058;font-family:'Cormorant Garamond',serif;font-size:.78rem;font-style:italic;cursor:pointer}
+
+/* ══════════════════════════════════
+   ETAPA 3 — CONSTELACIÓN
+══════════════════════════════════ */
+#e3{padding:0;overflow:hidden}
+.con-stage{position:relative;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.const-zone{position:relative;width:100%;padding:3vh 0 .5rem;display:flex;align-items:center;justify-content:center;z-index:1}
+.constellation{position:relative;width:280px;height:150px}
+.const-svg{position:absolute;inset:0;width:100%;height:100%}
+.const-line{fill:none;stroke:rgba(201,168,76,.3);stroke-width:1;stroke-dasharray:4 4;opacity:0;transition:opacity .8s}
+.cpt{position:absolute;width:9px;height:9px;border-radius:50%;background:rgba(122,110,120,.3);transform:translate(-50%,-50%) scale(.7);transition:all .7s cubic-bezier(.34,1.56,.64,1)}
+.cpt.lit{background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 14px 4px rgba(201,168,76,.5);transform:translate(-50%,-50%) scale(1)}
+.q-zone{position:relative;z-index:1;width:100%;max-width:460px;padding:0 1.2rem 4rem}
+.step{display:none;padding:.5rem 0}
+.step.act{display:block}
+.step-lbl{font-size:.66rem;letter-spacing:.15em;text-transform:uppercase;color:#7a6e78;margin-bottom:.6rem}
+.step-q{font-family:'Cormorant Garamond',serif;font-size:clamp(1.3rem,4vw,1.6rem);color:#f2ece4;margin-bottom:1.3rem;line-height:1.4}
+.step-in{width:100%;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:1.05rem;padding:.75rem 1rem;outline:none;margin-bottom:.7rem;color-scheme:dark;box-sizing:border-box}
+.step-in:focus{border-color:rgba(201,168,76,.5)}
+.step-in::placeholder{color:#5a5058}
+.step-sub{font-size:.8rem;color:#9a8e96;margin-bottom:.35rem;margin-top:.15rem}
+.chips{display:flex;flex-wrap:wrap;gap:.45rem;margin-bottom:.8rem}
+.chip{padding:.45rem .9rem;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:20px;color:#d8cdd2;font-family:'Cormorant Garamond',serif;font-size:.95rem;cursor:pointer;transition:all .2s}
+.chip.sel{background:rgba(201,168,76,.12);border-color:rgba(201,168,76,.6);color:#c9a84c}
+.step-ta{width:100%;min-height:75px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:.9rem;padding:.75rem 1rem;outline:none;resize:vertical;line-height:1.6;margin-bottom:.7rem;box-sizing:border-box}
+.step-ta:focus{border-color:rgba(201,168,76,.5)}
+.step-ta::placeholder{color:#5a5058}
+.photo-pair{display:flex;gap:1rem;justify-content:center;margin:1rem 0 1.2rem}
+.photo-slot{display:flex;flex-direction:column;align-items:center}
+.photo-slot-lbl{font-size:.7rem;color:#9a8e96;margin-top:.4rem}
+.photo-up{width:100px;height:100px;border-radius:50%;border:2px dashed #2a1f28;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;transition:border-color .2s}
+.photo-up:hover{border-color:rgba(201,168,76,.5)}
+.photo-up img{width:100%;height:100%;object-fit:cover}
+.photo-icon{font-size:1.5rem;color:#5a5058}
+.step-final{text-align:center;padding:2rem 0}
+.step-final-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.4rem;color:#c9a84c;margin-bottom:.5rem}
+
+/* ══════════════════════════════════
+   ETAPA 4 — CHAT CON SOUL
+══════════════════════════════════ */
+#e4{overflow:hidden;height:100vh;height:100dvh}
+.chat-wrap{display:flex;flex-direction:column;height:100vh;height:100dvh}
+.chat-header{display:flex;align-items:center;gap:.8rem;padding:.7rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(7,5,10,.95);flex-shrink:0;z-index:2}
+.chat-orb{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 10px 3px rgba(201,168,76,.4);animation:pulse 3s ease-in-out infinite;flex-shrink:0}
+.chat-nm{font-family:'Cormorant Garamond',serif;font-style:italic;color:#f5d98a;font-size:.95rem}
+.chat-st{font-size:.62rem;color:#7a6e78}
+.chat-area{flex:1;overflow-y:auto;padding:.8rem;display:flex;flex-direction:column;gap:.7rem;min-height:0}
+.msg{max-width:85%;padding:.7rem .95rem;border-radius:4px;font-family:'Cormorant Garamond',serif;font-size:1.05rem;line-height:1.55;animation:msgIn .3s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.msg.soul{align-self:flex-start;background:rgba(36,26,32,.6);border-left:2px solid rgba(201,168,76,.5);color:#f2ece4;font-style:italic}
+.msg.user{align-self:flex-end;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:#f2ece4}
+.typing{align-self:flex-start;padding:.7rem .95rem;display:flex;gap:4px;align-items:center}
+.dot{width:5px;height:5px;border-radius:50%;background:rgba(201,168,76,.6);animation:bounce 1.2s infinite}
+.dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
+.chat-input-area{padding:.85rem 1rem;border-top:1px solid #2a1f28;background:rgba(7,5,10,.95);display:flex;gap:.6rem;flex-shrink:0}
+.chat-in{flex:1;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:20px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:.92rem;padding:.6rem 1rem;outline:none}
+.chat-in:focus{border-color:rgba(201,168,76,.4)}
+.chat-in::placeholder{color:#5a5058}
+.send-btn{background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:50%;width:36px;height:36px;color:#07050a;font-size:.9rem;cursor:pointer;flex-shrink:0}
+.send-btn:disabled{opacity:.3;cursor:default}
+
+/* ══════════════════════════════════
+   ETAPA 5 — MOMENTO DEL MATCH
+══════════════════════════════════ */
+#e5{align-items:center;justify-content:center;text-align:center;padding:2rem;position:relative}
+.match-canvas-wrap{position:relative;width:200px;height:200px;margin:0 auto 2rem}
+#matchCanvas{position:absolute;inset:0}
+.match-title{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1.4rem,4vw,2rem);color:#f2ece4;line-height:1.3;margin-bottom:.8rem}
+.match-sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(.9rem,2.5vw,1.1rem);color:rgba(242,236,228,.6);line-height:1.7;max-width:340px;margin:0 auto 2rem}
+.match-scores{display:flex;justify-content:center;gap:2.5rem;margin-bottom:2rem}
+.score-block{text-align:center}
+.score-num{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:2.4rem;line-height:1;margin-bottom:.2rem}
+.score-num.hoy{color:#a8b0c2}
+.score-num.pot{color:#c9a84c}
+.score-lbl{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#7a6e78}
+.match-msg{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;max-width:360px;margin:0 auto 2rem;line-height:1.6;padding:1rem;border:1px solid rgba(201,168,76,.2);border-radius:6px;background:rgba(201,168,76,.04)}
+
+/* ══════════════════════════════════
+   ETAPA 6 — PREPARACIÓN
+══════════════════════════════════ */
+#e6{align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center}
+.prep-wrap{max-width:420px;width:100%;z-index:1}
+.prep-orb{width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 14px 4px rgba(201,168,76,.4);margin:0 auto 1.2rem;animation:pulse 3s ease-in-out infinite}
+.prep-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem}
+.prep-card{background:rgba(36,26,32,.4);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:1.2rem;margin-bottom:1.2rem;text-align:left}
+.prep-card p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.95rem;color:#f2ece4;line-height:1.7}
+
+/* ══════════════════════════════════
+   ETAPA 7 — CITA VIRTUAL
+══════════════════════════════════ */
+#e7{overflow:hidden;height:100vh}
+.cita-wrap{display:flex;flex-direction:column;height:100vh}
+.cita-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(7,5,10,.95);flex-shrink:0}
+.cita-title{font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:.95rem}
+.cita-timer{font-family:'Inter',sans-serif;font-size:.75rem;color:#7a6e78}
+.cita-area{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
+.cita-soul{background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:.9rem 1rem;margin-bottom:.5rem}
+.cita-soul p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;color:#c9a84c;line-height:1.6}
+.cita-soul .soul-label{font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(201,168,76,.5);margin-bottom:.4rem}
+.ritmo-btn{display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.6rem 1rem;background:none;border:1px solid rgba(201,168,76,.25);border-radius:20px;color:#c9a84c;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.82rem;cursor:pointer;margin:0 auto;transition:all .2s}
+.ritmo-btn:hover{background:rgba(201,168,76,.08);border-color:rgba(201,168,76,.5)}
+.ritmo-opts{display:none;background:rgba(36,26,32,.95);border:1px solid rgba(201,168,76,.2);border-radius:8px;padding:.8rem;margin-top:.5rem}
+.ritmo-opts.vis{display:block}
+.ritmo-opt{padding:.6rem .8rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.88rem;color:#d8cdd2;cursor:pointer;border-radius:4px;transition:background .2s}
+.ritmo-opt:hover{background:rgba(201,168,76,.08);color:#c9a84c}
+.cita-msg{max-width:82%;padding:.7rem .95rem;border-radius:4px;font-family:'Cormorant Garamond',serif;font-size:.92rem;line-height:1.55}
+.cita-msg.yo{align-self:flex-end;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:#f2ece4}
+.cita-msg.otro{align-self:flex-start;background:rgba(36,26,32,.6);border-left:2px solid #2a1f28;color:#f2ece4;font-style:italic}
+.cita-input-area{padding:.85rem 1rem;border-top:1px solid #2a1f28;background:rgba(7,5,10,.95);display:flex;gap:.6rem;flex-shrink:0}
+
+/* ══════════════════════════════════
+   ETAPA 8 — ELECCIÓN MUTUA
+══════════════════════════════════ */
+#e8{align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center}
+.eleccion-wrap{max-width:400px;width:100%;z-index:1}
+.eleccion-orb{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 18px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite}
+.eleccion-title{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.5rem;color:#f2ece4;margin-bottom:.6rem;line-height:1.3}
+.eleccion-sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.92rem;color:rgba(242,236,228,.6);line-height:1.7;margin-bottom:2rem}
+.eleccion-pregunta{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#c9a84c;margin-bottom:2rem;line-height:1.6;padding:1rem;border:1px solid rgba(201,168,76,.2);border-radius:6px;background:rgba(201,168,76,.04)}
+.eleccion-btns{display:flex;flex-direction:column;gap:.8rem}
+.btn-si{padding:1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.btn-no{padding:.9rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.88rem;cursor:pointer}
+.eleccion-final{display:none;text-align:center;padding:1rem 0}
+.eleccion-final p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#f2ece4;line-height:1.7}
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div class="sound-toggle" id="soundToggle" onclick="toggleSound()">
+  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+    <path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
+    <path class="wave" d="M18.5 6a9 9 0 0 1 0 12"/>
+    <line class="mute-line" x1="2" y1="2" x2="22" y2="22" style="display:none"/>
+  </svg>
+</div>
+
+<!-- ══ ETAPA 0 — LOGIN / REGISTRO ══ -->
+<div class="etapa activa" id="e0">
+  <div class="auth-wrap">
+    <div class="auth-orb"></div>
+    <p class="auth-title" id="authTitle">Bienvenida a Soul</p>
+    <p class="auth-sub" id="authSub">Creá tu cuenta para empezar</p>
+
+    <div class="auth-err" id="authErr"></div>
+
+    <input type="text" class="auth-input" id="authNombre" placeholder="Tu nombre">
+    <input type="email" class="auth-input" id="authEmail" placeholder="tu@mail.com">
+    <input type="password" class="auth-input" id="authPass" placeholder="Contraseña (mínimo 6 caracteres)">
+
+    <button class="btn-gold" id="authBtn" onclick="hacerAuth()" style="width:100%;opacity:1">Crear mi cuenta →</button>
+    <p class="auth-loading" id="authLoading">Un momento...</p>
+
+    <p class="auth-toggle" id="authToggle">¿Ya tenés cuenta? <span onclick="toggleAuthMode()">Iniciá sesión</span></p>
+  </div>
+</div>
+
+<!-- ══ ETAPA 1 — ONBOARDING ══ -->
+<div class="etapa" id="e1">
+  <div class="orbital">
+    <div class="sun"></div>
+    <div class="orbit orbit1"><div class="planet p1"></div></div>
+    <div class="orbit orbit2"><div class="planet p2"></div></div>
+    <div class="orbit orbit3"><div class="planet p3"></div></div>
+  </div>
+  <p class="soul-name">Soul</p>
+  <div class="typing-wrap">
+    <p class="typing-line" id="line1">Toda historia comienza con un encuentro.</p>
+    <p class="typing-line" id="line2">Muy pocas comienzan con alguien que primero se tomó el tiempo de conocerte.</p>
+  </div>
+  <p class="onb-welcome" id="onbWelcome">Bienvenidos a Soul</p>
+  <button class="btn-gold" id="onbBtn" onclick="ir(2)">Empezar →</button>
+</div>
+
+<!-- ══ ETAPA 2 — CONSENTIMIENTO ══ -->
+<div class="etapa" id="e2">
+  <div class="con-wrap">
+    <div id="con-c1">
+      <div class="con-orb"></div>
+      <p class="con-title">Antes de empezar</p>
+      <div class="con-card">
+        <p>Soul va a escucharte y construir un perfil que intenta reflejar cómo te vinculás.</p>
+        <p>Todo lo que hagamos con esa información depende de vos.</p>
+        <p>Tomáte un momento para leer lo que sigue.</p>
+      </div>
+      <button class="btn-full" onclick="document.getElementById('con-c1').style.display='none';document.getElementById('con-c2').style.display='block'">Continuar →</button>
+    </div>
+    <div id="con-c2" style="display:none">
+      <p class="con-title" style="text-align:center;margin-bottom:.8rem">Términos y condiciones</p>
+      <p style="font-family:'Inter',sans-serif;font-size:.72rem;color:#7a6e78;text-align:center;margin-bottom:.7rem">Leé el documento completo antes de aceptar.</p>
+      <div class="legal-box" id="legalBox" onscroll="chkScroll()">
+        <h3>1. Qué analiza Soul</h3>
+        <p>Soul analiza el contenido de tus respuestas, la forma en que te expresás y los patrones conversacionales que emergen durante la interacción para construir un perfil vincular.</p>
+        <div class="legal-hl"><p><strong>Soul genera inferencias, no diagnósticos.</strong> Sus análisis son probabilísticos y pueden ser incompletos o equivocados. Siempre podés cuestionar sus conclusiones.</p></div>
+        <hr>
+        <h3>2. Funciones indispensables</h3>
+        <p>Sin estas funciones Soul no puede operar. Al aceptar, autorizás:</p>
+        <ul><li>Que Soul analice tu conversación para construir un perfil vincular.</li><li>Que use inferencias para el proceso de matching.</li><li>Que guarde tu perfil mientras uses la plataforma.</li><li>El tratamiento de datos personales necesarios, de acuerdo con nuestra Política de Privacidad.</li></ul>
+        <hr>
+        <h3>3. Funciones opcionales</h3>
+        <ul><li>Contribuir con datos anonimizados al entrenamiento del sistema.</li><li>Recibir comunicaciones fuera de la plataforma.</li></ul>
+        <hr>
+        <h3>4. Qué ve un match de vos</h3>
+        <ul><li><strong>Sí:</strong> compatibilidad actual y potencial, dos fortalezas, un desafío posible.</li><li><strong>No:</strong> perfil psicológico, módulos, puntajes individuales.</li></ul>
+        <hr>
+        <h3>5. Tus datos</h3>
+        <p>Tus datos se borran dentro de los 30 días posteriores a eliminar tu cuenta. Soul puede modificar sus modelos de análisis para mejorar el servicio.</p>
+        <hr>
+        <h3>6. Limitaciones</h3>
+        <p>Soul no realiza diagnósticos psicológicos ni reemplaza a un profesional de salud mental. No garantiza compatibilidad ni éxito en ningún vínculo. <strong>No recomendamos basar decisiones importantes exclusivamente en las inferencias de Soul.</strong></p>
+        <hr>
+        <h3>7. Tus derechos</h3>
+        <ul><li>Podés pedir la eliminación de tu perfil y datos en cualquier momento.</li><li>Podés cuestionar o solicitar revisión de cualquier inferencia.</li><li>Podés pedir explicación de cualquier compatibilidad que recibas.</li></ul>
+        <div class="legal-end">— Fin del documento —</div>
+      </div>
+      <p class="scroll-notice" id="scrollNotice">↓ Scrolleá hasta el final para aceptar</p>
+      <div class="check-row locked" id="chkMain" onclick="toggleChk()">
+        <div class="cbox"><span class="cbox-icon">✓</span></div>
+        <div class="cbox-text"><strong>Acepto los términos y condiciones</strong><span>Incluye las funciones indispensables necesarias para usar Soul.</span></div>
+      </div>
+      <div class="check-row" id="chkOpt" onclick="this.classList.toggle('on')">
+        <div class="cbox"><span class="cbox-icon">✓</span></div>
+        <div class="cbox-text"><strong>Acepto contribuir con datos anonimizados (opcional)</strong><span>Podés cambiar esto desde tu perfil.</span></div>
+      </div>
+      <div class="carta-box">
+        <p class="carta-title">✦ Carta de Derechos de Soul</p>
+        <p>✦ Tenés derecho a saber cómo se usa tu información.</p>
+        <p>✦ Tenés derecho a decidir qué compartís y con quién.</p>
+        <p>✦ Tenés derecho a cuestionar las inferencias de Soul.</p>
+        <p>✦ Tenés derecho a eliminar tu perfil en cualquier momento.</p>
+        <p>✦ Tenés derecho a pedir explicación de cualquier compatibilidad.</p>
+      </div>
+      <button class="btn-full" id="btnAceptar" disabled onclick="ir(3)">Entiendo cómo funciona Soul y elijo comenzar →</button>
+      <button class="btn-back" onclick="document.getElementById('con-c2').style.display='none';document.getElementById('con-c1').style.display='block'">← Volver</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ETAPA 3 — CONSTELACIÓN ══ -->
+<div class="etapa" id="e3">
+  <div class="con-stage">
+    <div class="const-zone">
+      <div class="constellation">
+        <svg class="const-svg" viewBox="0 0 280 150">
+          <path class="const-line" id="cl01" d="M 18,38 L 65,18"/>
+          <path class="const-line" id="cl12" d="M 65,18 L 125,32"/>
+          <path class="const-line" id="cl23" d="M 125,32 L 178,22"/>
+          <path class="const-line" id="cl34" d="M 178,22 L 230,46"/>
+          <path class="const-line" id="cl45" d="M 230,46 L 255,95"/>
+          <path class="const-line" id="cl56" d="M 255,95 L 195,130"/>
+        </svg>
+        <div class="cpt" id="cp0" style="left:18px;top:38px"></div>
+        <div class="cpt" id="cp1" style="left:65px;top:18px"></div>
+        <div class="cpt" id="cp2" style="left:125px;top:32px"></div>
+        <div class="cpt" id="cp3" style="left:178px;top:22px"></div>
+        <div class="cpt" id="cp4" style="left:230px;top:46px"></div>
+        <div class="cpt" id="cp5" style="left:255px;top:95px"></div>
+        <div class="cpt" id="cp6" style="left:195px;top:130px"></div>
+      </div>
+    </div>
+    <div class="q-zone">
+      <div class="step act" id="st0">
+        <p class="step-lbl">Paso 1 de 7</p>
+        <p class="step-q">¿Cuándo naciste?</p>
+        <input class="step-in" type="date" id="fnac" onchange="chkStep(0)" oninput="chkStep(0)">
+        <p class="step-sub">Hora de nacimiento (opcional)</p>
+        <input class="step-in" type="time" id="hnac">
+        <button class="btn-gold" id="btn0" onclick="nextStep(0)" style="width:100%;margin-top:.5rem">Continuar →</button>
+      </div>
+      <div class="step" id="st1">
+        <p class="step-lbl">Paso 2 de 7</p>
+        <p class="step-q">¿Dónde vivís?</p>
+        <input class="step-in" type="text" id="ciudad" placeholder="Ciudad o zona" oninput="chkStep(1)">
+        <p class="step-sub">¿Hasta qué distancia para un encuentro?</p>
+        <div class="chips" id="distChips">
+          <div class="chip" onclick="selChip(this,'dist')">Mi ciudad</div>
+          <div class="chip" onclick="selChip(this,'dist')">Hasta 50 km</div>
+          <div class="chip" onclick="selChip(this,'dist')">Mismo país</div>
+          <div class="chip" onclick="selChip(this,'dist')">Cualquier lugar</div>
+        </div>
+        <button class="btn-gold" id="btn1" disabled onclick="nextStep(1)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st2">
+        <p class="step-lbl">Paso 3 de 7</p>
+        <p class="step-q">¿Cómo te identificás?</p>
+        <div class="chips" id="genChips">
+          <div class="chip" onclick="selChip(this,'gen')">Mujer</div>
+          <div class="chip" onclick="selChip(this,'gen')">Hombre</div>
+          <div class="chip" onclick="selChip(this,'gen')">No binario/a</div>
+          <div class="chip" onclick="selChip(this,'gen')">Prefiero no decir</div>
+        </div>
+        <p class="step-sub">¿Con quién querés conectar?</p>
+        <div class="chips" id="prefChips">
+          <div class="chip" onclick="selChip(this,'pref')">Mujeres</div>
+          <div class="chip" onclick="selChip(this,'pref')">Hombres</div>
+          <div class="chip" onclick="selChip(this,'pref')">Cualquier género</div>
+          <div class="chip" onclick="selChip(this,'pref')">Todavía lo estoy definiendo</div>
+        </div>
+        <button class="btn-gold" id="btn2" disabled onclick="nextStep(2)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st3">
+        <p class="step-lbl">Paso 4 de 7</p>
+        <p class="step-q">¿Qué tipo de vínculo buscás?</p>
+        <div class="chips" id="vincChips">
+          <div class="chip" onclick="selChipM(this,'vinc')">Romántico</div>
+          <div class="chip" onclick="selChipM(this,'vinc')">Amistad profunda</div>
+          <div class="chip" onclick="selChipM(this,'vinc')">Compañía</div>
+          <div class="chip" onclick="selChipM(this,'vinc')">Todavía no lo sé</div>
+        </div>
+        <p class="step-sub">¿Tenés hijos?</p>
+        <div class="chips" id="hijosChips">
+          <div class="chip" onclick="selChip(this,'hijos')">No tengo</div>
+          <div class="chip" onclick="selChip(this,'hijos')">Sí, pequeños</div>
+          <div class="chip" onclick="selChip(this,'hijos')">Sí, adolescentes</div>
+          <div class="chip" onclick="selChip(this,'hijos')">Sí, adultos</div>
+        </div>
+        <button class="btn-gold" id="btn3" disabled onclick="nextStep(3)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st4">
+        <p class="step-lbl">Paso 5 de 7</p>
+        <p class="step-q">Un poco más sobre vos</p>
+        <p class="step-sub">Estado civil</p>
+        <div class="chips" id="civilChips">
+          <div class="chip" onclick="selChip(this,'civil')">Soltero/a</div>
+          <div class="chip" onclick="selChip(this,'civil')">Separado/a</div>
+          <div class="chip" onclick="selChip(this,'civil')">Divorciado/a</div>
+          <div class="chip" onclick="selChip(this,'civil')">Viudo/a</div>
+        </div>
+        <p class="step-sub">¿A qué te dedicás?</p>
+        <input class="step-in" type="text" id="ocup" placeholder="Tu ocupación" oninput="chkStep(4)">
+        <button class="btn-gold" id="btn4" disabled onclick="nextStep(4)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st5">
+        <p class="step-lbl">Paso 6 de 7</p>
+        <p class="step-q">Tus límites vinculares</p>
+        <p class="step-sub">Lo que no estás dispuesto/a a negociar</p>
+        <textarea class="step-ta" id="noNeg" placeholder="Lo que es innegociable para vos..." oninput="chkStep(5)"></textarea>
+        <p class="step-sub">Lo que podrías negociar</p>
+        <textarea class="step-ta" id="neg" placeholder="Lo que podrías dejar pasar..." oninput="chkStep(5)"></textarea>
+        <button class="btn-gold" id="btn5" disabled onclick="nextStep(5)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st6">
+        <p class="step-lbl">Paso 7 de 7</p>
+        <p class="step-q">Mostranos cómo sos</p>
+        <div class="photo-pair">
+          <div class="photo-slot">
+            <div class="photo-up" id="upCara" onclick="document.getElementById('inCara').click()">
+              <span class="photo-icon">+</span>
+              <input type="file" id="inCara" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCara',true)">
+            </div>
+            <p class="photo-slot-lbl">Tu cara</p>
+          </div>
+          <div class="photo-slot">
+            <div class="photo-up" id="upCuerpo" onclick="document.getElementById('inCuerpo').click()">
+              <span class="photo-icon">+</span>
+              <input type="file" id="inCuerpo" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCuerpo',false)">
+            </div>
+            <p class="photo-slot-lbl">Tu cuerpo</p>
+          </div>
+        </div>
+        <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%">Completar mi constelación →</button>
+      </div>
+      <div class="step" id="stFinal">
+        <div class="step-final">
+          <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.4rem;color:#c9a84c;margin-bottom:.5rem">Tu constelación está completa ✦</p>
+          <p style="font-family:'Inter',sans-serif;font-size:.78rem;color:#7a6e78;margin-bottom:2rem;line-height:1.6">Ya tenemos lo que necesitamos para empezar a conocerte.</p>
+          <button class="btn-gold" onclick="guardarUsuarioYContinuar()">Hablar con Soul →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ETAPA 4 — CHAT CON SOUL ══ -->
+<div class="etapa" id="e4">
+  <div class="chat-wrap">
+    <div class="chat-header">
+      <div class="chat-orb"></div>
+      <div><div class="chat-nm">Soul</div><div class="chat-st">conversando con vos</div></div>
+    </div>
+    <div class="chat-area" id="chatArea"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-in" id="chatIn" placeholder="Escribí lo que pensás...">
+      <button class="send-btn" id="sendBtn" onclick="sendMsg()">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ETAPA 4b — MÓDULOS ══ -->
+<div class="etapa" id="e4b">
+  <div class="chat-wrap">
+    <div class="chat-header">
+      <div class="chat-orb"></div>
+      <div>
+        <div class="chat-nm">Soul</div>
+        <div class="chat-st" id="moduloLabel">preparándote para el encuentro</div>
+      </div>
+    </div>
+    <div class="chat-area" id="moduloArea"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-in" id="moduloIn" placeholder="Escribí lo que pensás...">
+      <button class="send-btn" id="moduloBtn" onclick="sendModulo()">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ETAPA 4c — ANTES DEL MATCH ══ -->
+<div class="etapa" id="e4c">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
+    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 2rem;animation:pulse 3s ease-in-out infinite"></div>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.8rem;letter-spacing:.3em;color:rgba(201,168,76,.5);text-transform:uppercase;margin-bottom:1.8rem">Antes de mostrarte algo</p>
+    <div style="max-width:420px;display:flex;flex-direction:column;gap:1.2rem;margin-bottom:2.5rem">
+      <p class="antes-line" id="al1" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1.15rem,3.5vw,1.5rem);color:#f2ece4;line-height:1.6;opacity:0;transition:opacity 1s ease">En Soul no buscamos la pareja perfecta.</p>
+      <p class="antes-line" id="al2" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.15rem,3.5vw,1.5rem);color:#c9a84c;line-height:1.6;opacity:0;transition:opacity 1s ease">Buscamos dos personas que puedan convertirse en una gran pareja.</p>
+      <p class="antes-line" id="al3" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.25rem);color:#d8cdd2;line-height:1.7;opacity:0;transition:opacity 1s ease">Vas a ver dos números: lo que son hoy, y lo que pueden llegar a construir juntos.</p>
+      <p class="antes-line" id="al4" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.25rem);color:#d8cdd2;line-height:1.7;opacity:0;transition:opacity 1s ease">Un 60% hoy con alto potencial vale infinitamente más que un 90% sin capacidad de construir nada.</p>
+      <p class="antes-line" id="al5" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.5rem);color:#c9a84c;line-height:1.6;opacity:0;transition:opacity 1s ease">Lo perfecto no existe. Se construye.</p>
+    </div>
+    <button id="btnVerMatch" style="opacity:0;transition:opacity .8s ease;padding:.9rem 2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer" onclick="ir(5)">Ver mi compatibilidad →</button>
+  </div>
+</div>
+
+<!-- ══ ETAPA 5 — MOMENTO DEL MATCH ══ -->
+<div class="etapa" id="e5">
+  <div class="match-canvas-wrap">
+    <canvas id="matchCanvas" width="200" height="200"></canvas>
+  </div>
+  <p class="match-title">Los planetas<br>se alinearon.</p>
+  <div class="match-scores">
+    <div class="score-block"><div class="score-num hoy" id="scoreHoy">68%</div><div class="score-lbl">Compatibilidad hoy</div></div>
+    <div class="score-block"><div class="score-num pot" id="scorePot">91%</div><div class="score-lbl">Potencial de construcción</div></div>
+  </div>
+  <p class="match-sub">Ahora empieza la parte que ningún algoritmo puede hacer por ustedes.</p>
+  <div class="match-msg" id="matchMsg">Si se encuentran con curiosidad, tienen muchas posibilidades de sorprenderse mutuamente.</div>
+  <button class="btn-gold" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
+</div>
+
+<!-- ══ ETAPA 6 — PREPARACIÓN ══ -->
+<div class="etapa" id="e6">
+  <div class="prep-wrap">
+    <div class="prep-orb"></div>
+    <p class="prep-title">Antes de encontrarte</p>
+    <div class="prep-card">
+      <p id="prepMsg">Soul tiene algo para decirte antes de que empiece la cita.</p>
+    </div>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.88rem;color:#7a6e78;text-align:center;margin-bottom:1.5rem;line-height:1.6">Tomáte un momento con esto antes de seguir.</p>
+    <button class="btn-gold" onclick="ir(7)" style="width:100%">Estoy lista/o →</button>
+  </div>
+</div>
+
+<!-- ══ ETAPA 7 — CITA VIRTUAL ══ -->
+<div class="etapa" id="e7">
+  <div class="cita-wrap">
+    <div class="cita-header">
+      <p class="cita-title">La cita ✦</p>
+      <p class="cita-timer" id="citaTimer">00:00</p>
+    </div>
+    <div class="cita-area" id="citaArea">
+      <div class="cita-soul">
+        <p class="soul-label">Soul</p>
+        <p>Hoy no intenten decidir nada. Solo intenten descubrir algo del otro que no esperaban encontrar.</p>
+      </div>
+      <div style="text-align:center;margin:.5rem 0">
+        <button class="ritmo-btn" onclick="toggleRitmo()">✦ ¿Quieren cambiar el ritmo?</button>
+        <div class="ritmo-opts" id="ritmoOpts">
+          <div class="ritmo-opt" onclick="usarRitmo('explorar')">Explorar — una pregunta de Soul</div>
+          <div class="ritmo-opt" onclick="usarRitmo('jugar')">Jugar — un desafío</div>
+          <div class="ritmo-opt" onclick="usarRitmo('compartir')">Compartir — algo en común</div>
+          <div class="ritmo-opt" onclick="usarRitmo('descubrir')">Descubrir — tres palabras</div>
+        </div>
+      </div>
+    </div>
+    <div class="cita-input-area">
+      <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en la cita...">
+      <button class="send-btn" onclick="sendCita()">→</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ETAPA 8 — ELECCIÓN MUTUA ══ -->
+<div class="etapa" id="e8">
+  <div class="eleccion-wrap">
+    <div class="eleccion-orb"></div>
+    <h2 class="eleccion-title">Tomáte un minuto.</h2>
+    <p class="eleccion-sub">No respondas desde la emoción del momento.</p>
+    <div class="eleccion-pregunta">¿Cómo te sentiste siendo vos mismo/a con esta persona?</div>
+    <div class="eleccion-btns" id="eleccionBtns">
+      <button class="btn-si" onclick="elegir(true)">Quiero seguir construyendo →</button>
+      <button class="btn-no" onclick="elegir(false)">Necesito pensarlo más</button>
+    </div>
+    <div class="eleccion-final" id="eleccionFinal">
+      <p id="eleccionMsg"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── SONIDO AMBIENTAL ──
+var audioCtx=null,soundOn=true,oscillators=[],masterGain=null,audioReady=false;
+
+function initAmbientSound(){
+  if(audioReady)return;
+  audioReady=true;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=0;
+  masterGain.connect(audioCtx.destination);
+
+  var freqs=[130.81,164.81,196.00,246.94];
+  freqs.forEach(function(freq,i){
+    var osc=audioCtx.createOscillator();
+    osc.type='sine';
+    osc.frequency.value=freq;
+
+    var oscGain=audioCtx.createGain();
+    oscGain.gain.value=0.18/freqs.length;
+
+    var lfo=audioCtx.createOscillator();
+    lfo.type='sine';
+    lfo.frequency.value=0.05+i*0.02;
+    var lfoGain=audioCtx.createGain();
+    lfoGain.gain.value=0.04;
+    lfo.connect(lfoGain);
+    lfoGain.connect(oscGain.gain);
+    lfo.start();
+
+    osc.connect(oscGain);
+    oscGain.connect(masterGain);
+    osc.start();
+    oscillators.push(osc);
+  });
+
+  // Arranca sonando automáticamente
+  masterGain.gain.linearRampToValueAtTime(0.06,audioCtx.currentTime+2);
+}
+
+function toggleSound(){
+  if(!audioReady){initAmbientSound();return;}
+  soundOn=!soundOn;
+  var btn=document.getElementById('soundToggle');
+  btn.classList.toggle('muted',!soundOn);
+  var target=soundOn?0.06:0;
+  masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+  masterGain.gain.setValueAtTime(masterGain.gain.value,audioCtx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(target,audioCtx.currentTime+1.2);
+}
+
+// Inicia automáticamente con la primera interacción del usuario (requerido por navegadores)
+document.addEventListener('click',function autoStart(){
+  if(!audioReady) initAmbientSound();
+}, {once:true});
+document.addEventListener('touchstart',function autoStartTouch(){
+  if(!audioReady) initAmbientSound();
+}, {once:true});
+// ── ESTRELLAS ──
+var sc=document.getElementById('stars');
+for(var i=0;i<60;i++){
+  var s=document.createElement('div');s.className='star';
+  var sz=Math.random()*1.8+.5;s.style.width=sz+'px';s.style.height=sz+'px';
+  s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';
+  s.style.setProperty('--op',(Math.random()*.4+.1).toFixed(2));
+  s.style.animationDelay=(Math.random()*5)+'s';
+  s.style.animationDuration=(Math.random()*3+3)+'s';
+  sc.appendChild(s);
+}
+
+// ── APARICIÓN ELEGANTE LÍNEA POR LÍNEA ──
+setTimeout(function(){
+  document.getElementById('line1').classList.add('show');
+},600);
+setTimeout(function(){
+  document.getElementById('line2').classList.add('show');
+},2200);
+setTimeout(function(){
+  document.getElementById('onbWelcome').classList.add('show');
+  setTimeout(function(){
+    document.getElementById('onbBtn').classList.add('show');
+  },800);
+},3800);
+
+// ── MÓDULOS ──
+var moduloHistory=[];
+var moduloData=null;
+
+var MODULOS_INFO={
+  'Apertura al compromiso':{
+    descripcion:'trabaja la tensión entre libertad y vínculo',
+    herramienta:'Antes de salir corriendo, una sola pregunta: ¿Estoy huyendo de algo real o de algo que imagino que va a pasar?'
+  },
+  'Autonomía emocional':{
+    descripcion:'trabaja la dependencia del vínculo para el bienestar',
+    herramienta:'¿Qué haría hoy si no necesitara la aprobación de nadie para sentirme bien?'
+  },
+  'Poder personal':{
+    descripcion:'trabaja la tendencia a verse como receptor de lo que pasa en los vínculos',
+    herramienta:'¿Qué parte de lo que pase en este encuentro depende de mí?'
+  },
+  'Coherencia interna':{
+    descripcion:'trabaja la distancia entre valores declarados y conducta real',
+    herramienta:'¿Actué desde lo que digo que valoro, o desde el miedo?'
+  },
+  'Capacidad de volver a elegir':{
+    descripcion:'trabaja la apertura a exponerse sabiendo que puede doler',
+    herramienta:'¿Puedo acercarme sin intentar controlar el resultado?'
+  }
+};
+
+function buildModuloPrompt(perfilData, moduloEsencial, referencias){
+  var info=MODULOS_INFO[moduloEsencial]||MODULOS_INFO['Capacidad de volver a elegir'];
+  return `Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
+
+CONTEXTO
+Estás en la etapa de preparación para el encuentro. Ya conociste bien a esta persona en la conversación anterior. Ahora vas a trabajar con ella una capacidad específica que detectaste que le puede ayudar: ${info.descripcion}.
+
+IMPORTANTE: Nunca nombrás este módulo directamente ni decís que estás "trabajando" algo. La persona no sabe que estás siguiendo un plan — solo siente que están teniendo una conversación significativa.
+
+REFERENCIAS CULTURALES DE ESTA PERSONA
+${referencias||'No se detectaron referencias específicas — usá recursos universales y describílos brevemente.'}
+
+CÓMO ARRANCAR
+Traé algo del universo cultural de esta persona como puerta de entrada. Si no mencionó referencias, usá una historia universal y describila en dos líneas. El tema tiene que conectar naturalmente con ${info.descripcion}.
+
+ESTRUCTURA DEL MÓDULO
+1. Entrás con la referencia cultural como disparador
+2. Conversás libremente, siguiendo lo que emerge
+3. En algún momento natural introducís la idea que querías trabajar — no como lección sino como algo que surgió de la charla
+4. Chequeás qué le generó
+5. Cerrás con una pregunta abierta que se lleve
+
+CIERRES DE SEGMENTO — MUY IMPORTANTE
+Cada vez que terminás un momento significativo de la conversación — cuando algo se procesó, cuando la persona compartió algo que le costó, o cuando sentís que ese hilo llegó a un punto natural — hacés un cierre así:
+1. Reconocimiento genuino y específico de lo que pasó en esa parte de la charla
+2. Agradecimiento cálido pero no obsecuente
+3. Chequeás cómo está: "¿Cómo te quedás con esto?"
+4. Le preguntás si quiere seguir o prefiere dejar acá por hoy: "¿Seguimos un poco más o preferís dejarlo acá y mañana continuamos?"
+
+Si dice que prefiere pausar, cerrás con calidez y le decís que cuando vuelva van a seguir desde donde quedaron.
+
+LA HERRAMIENTA
+En algún momento natural del módulo, sin forzarlo, le dejás esta herramienta: "${info.herramienta}"
+
+REGLAS DE ORO
+Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
+}
+
+function initModulo(perfilExtraido, moduloEsencial, referencias){
+  moduloData={modulo:moduloEsencial, perfil:perfilExtraido};
+  moduloHistory=[];
+  document.getElementById('moduloArea').innerHTML='';
+  document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
+
+  var prompt=buildModuloPrompt(perfilExtraido, moduloEsencial, referencias);
+
+  // Primer mensaje de Soul
+  fetch('/api/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens:350,
+      system:prompt,
+      messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}]
+    })
+  }).then(function(r){return r.json()}).then(function(data){
+    var reply=data.content.map(function(b){return b.text||''}).join('');
+    addModuloMsg('soul',reply);
+    moduloHistory.push({role:'assistant',content:reply});
+    moduloData.prompt=prompt;
+  }).catch(function(e){
+    addModuloMsg('soul','Hay algo que me gustaría explorar con vos antes de seguir. ¿Estás?');
+  });
+
+  document.getElementById('moduloIn').addEventListener('keydown',function(e){
+    if(e.key==='Enter')sendModulo();
+  });
+}
+
+function addModuloMsg(tipo,txt){
+  var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
+  document.getElementById('moduloArea').appendChild(div);
+  document.getElementById('moduloArea').scrollTop=9999;
+
+  // Detectar si Soul propone pausar o terminar el módulo
+  if(tipo==='soul'&&(txt.indexOf('preferís dejarlo acá')>-1||txt.indexOf('mañana continuamos')>-1)){
+    setTimeout(function(){addModuloBtns()},600);
+  }
+  // Detectar fin del módulo para ir al match
+  if(tipo==='soul'&&(txt.indexOf('estás lista')>-1||txt.indexOf('estás listo')>-1||txt.indexOf('ya tenés algo')>-1)){
+    setTimeout(function(){addBotonMatch()},800);
+  }
+}
+
+function addModuloBtns(){
+  var div=document.createElement('div');
+  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.4rem 0';
+  div.id='moduloBtns';
+  div.innerHTML='<button onclick="continuarModulo()" style="padding:.55rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;cursor:pointer">Seguimos →</button><button onclick="pausarModulo()" style="padding:.55rem .9rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">Dejemos para mañana</button>';
+  document.getElementById('moduloArea').appendChild(div);
+  document.getElementById('moduloArea').scrollTop=9999;
+}
+
+function addBotonMatch(){
+  var div=document.createElement('div');
+  div.style.cssText='text-align:center;padding:.8rem 0';
+  div.innerHTML='<button onclick="irAntesMatch()" style="padding:.8rem 1.8rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Continuar →</button>';
+  document.getElementById('moduloArea').appendChild(div);
+  document.getElementById('moduloArea').scrollTop=9999;
+}
+
+function irAntesMatch(){
+  ir('4c');
+  // Animación de líneas
+  var delays=[600,1800,3200,4600,6000];
+  ['al1','al2','al3','al4','al5'].forEach(function(id,i){
+    setTimeout(function(){
+      document.getElementById(id).style.opacity='1';
+    },delays[i]);
+  });
+  setTimeout(function(){
+    document.getElementById('btnVerMatch').style.opacity='1';
+  },7500);
+}
+
+function continuarModulo(){
+  var b=document.getElementById('moduloBtns');if(b)b.remove();
+  addModuloMsg('user','Seguimos.');
+  moduloHistory.push({role:'user',content:'Seguimos.'});
+  sendModuloMsg();
+}
+
+function pausarModulo(){
+  var b=document.getElementById('moduloBtns');if(b)b.remove();
+  addModuloMsg('user','Prefiero dejarlo para mañana.');
+  moduloHistory.push({role:'user',content:'Prefiero dejarlo para mañana.'});
+  addModuloMsg('soul','Perfecto. Lo que trabajamos hoy ya quedó. Cuando volvás seguimos desde acá. Cuídate. 🌙');
+}
+
+async function sendModulo(){
+  var inp=document.getElementById('moduloIn');
+  var txt=inp.value.trim();if(!txt)return;
+  addModuloMsg('user',txt);
+  moduloHistory.push({role:'user',content:txt});
+  inp.value='';
+  document.getElementById('moduloBtn').disabled=true;
+  var typing=document.createElement('div');
+  typing.className='msg soul typing';typing.id='moduloTyping';
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('moduloArea').appendChild(typing);
+  document.getElementById('moduloArea').scrollTop=9999;
+  await sendModuloMsg();
+}
+
+async function sendModuloMsg(){
+  var typing=document.getElementById('moduloTyping');
+  try{
+    var res=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:350,
+        system:moduloData.prompt,
+        messages:moduloHistory
+      })
+    });
+    var data=await res.json();
+    var reply=data.content.map(function(b){return b.text||''}).join('');
+    if(typing)typing.remove();
+    addModuloMsg('soul',reply);
+    moduloHistory.push({role:'assistant',content:reply});
+  }catch(e){
+    if(typing)typing.remove();
+    addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
+  }finally{
+    document.getElementById('moduloBtn').disabled=false;
+  }
+}
+var usuarioId=null;
+
+async function guardarUsuarioYContinuar(){
+  var datos={
+    nombre: window.userNombre||null,
+    email: userEmail||null,
+    fecha_nacimiento: document.getElementById('fnac').value||null,
+    hora_nacimiento: document.getElementById('hnac').value||null,
+    ciudad: document.getElementById('ciudad').value||null,
+    distancia_max: chipSels['dist']||null,
+    genero: chipSels['gen']||null,
+    preferencia_genero: chipSels['pref']||null,
+    tipo_vinculo: chipSels['vinc']||null,
+    hijos: chipSels['hijos']||null,
+    estado_civil: chipSels['civil']||null,
+    ocupacion: document.getElementById('ocup').value||null,
+    no_negociables: document.getElementById('noNeg').value||null,
+    negociables: document.getElementById('neg').value||null,
+    consentimiento_aceptado: true,
+    etapa_actual: 'chat'
+  };
+  try{
+    var res=await fetch('/api/guardar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tabla:'usuarios',datos:datos})
+    });
+    var data=await res.json();
+    if(data&&data[0]&&data[0].id) usuarioId=data[0].id;
+  }catch(e){console.error('Error guardando usuario:',e);}
+  ir(4);
+}
+
+async function guardarPerfil(perfil){
+  if(!usuarioId)return;
+  try{
+    await fetch('/api/guardar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tabla:'perfiles',datos:{
+        usuario_id: usuarioId,
+        grupo1: perfil.grupo1,
+        grupo2: perfil.grupo2,
+        grupo3: perfil.grupo3,
+        grupo4: perfil.grupo4,
+        indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
+      }})
+    });
+  }catch(e){console.error('Error guardando perfil:',e);}
+}
+
+async function guardarConversacion(){
+  if(!usuarioId||chatHistory.length===0)return;
+  try{
+    await fetch('/api/guardar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tabla:'conversaciones',datos:{
+        usuario_id: usuarioId,
+        historial: chatHistory,
+        completada: true
+      }})
+    });
+  }catch(e){console.error('Error guardando conversación:',e);}
+}
+
+// ── AUTENTICACIÓN ──
+var authMode='registro';
+var accessToken=null;
+var userEmail=null;
+
+function toggleAuthMode(){
+  authMode=authMode==='registro'?'login':'registro';
+  if(authMode==='login'){
+    document.getElementById('authTitle').textContent='Bienvenida de nuevo';
+    document.getElementById('authSub').textContent='Ingresá para continuar donde quedaste';
+    document.getElementById('authNombre').style.display='none';
+    document.getElementById('authBtn').textContent='Ingresar →';
+    document.getElementById('authToggle').innerHTML='¿No tenés cuenta? <span onclick="toggleAuthMode()">Creá una</span>';
+  }else{
+    document.getElementById('authTitle').textContent='Bienvenida a Soul';
+    document.getElementById('authSub').textContent='Creá tu cuenta para empezar';
+    document.getElementById('authNombre').style.display='block';
+    document.getElementById('authBtn').textContent='Crear mi cuenta →';
+    document.getElementById('authToggle').innerHTML='¿Ya tenés cuenta? <span onclick="toggleAuthMode()">Iniciá sesión</span>';
+  }
+  document.getElementById('authErr').style.display='none';
+}
+
+async function hacerAuth(){
+  var email=document.getElementById('authEmail').value.trim();
+  var pass=document.getElementById('authPass').value;
+  var nombre=document.getElementById('authNombre').value.trim();
+  var errEl=document.getElementById('authErr');
+  errEl.style.display='none';
+
+  if(!email||!pass||pass.length<6){
+    errEl.textContent='Completá un email válido y una contraseña de al menos 6 caracteres.';
+    errEl.style.display='block';
+    return;
+  }
+  if(authMode==='registro'&&!nombre){
+    errEl.textContent='Contanos tu nombre para empezar.';
+    errEl.style.display='block';
+    return;
+  }
+
+  document.getElementById('authBtn').style.display='none';
+  document.getElementById('authLoading').style.display='block';
+
+  try{
+    var res=await fetch('/api/auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:authMode,email:email,password:pass})
+    });
+    var data=await res.json();
+
+    if(!res.ok){
+      errEl.textContent=data.msg||data.error_description||'Algo salió mal. Revisá tus datos.';
+      errEl.style.display='block';
+      document.getElementById('authBtn').style.display='block';
+      document.getElementById('authLoading').style.display='none';
+      return;
+    }
+
+    accessToken=data.access_token;
+    userEmail=email;
+    localStorage.setItem('soul_email',email);
+    localStorage.setItem('soul_token',accessToken);
+
+    if(authMode==='registro'){
+      // Verificar si ya existe usuario en tabla usuarios (por si reintenta registro)
+      window.userNombre=nombre;
+      ir(1);
+    }else{
+      // Login: buscar progreso guardado
+      await cargarProgreso(email);
+    }
+
+  }catch(e){
+    errEl.textContent='No pudimos conectar. Intentá de nuevo.';
+    errEl.style.display='block';
+    document.getElementById('authBtn').style.display='block';
+    document.getElementById('authLoading').style.display='none';
+  }
+}
+
+async function cargarProgreso(email){
+  try{
+    var res=await fetch('/api/leer?tabla=usuarios&filtro=email=eq.'+encodeURIComponent(email));
+    var usuarios=await res.json();
+    if(usuarios&&usuarios.length>0){
+      var u=usuarios[0];
+      usuarioId=u.id;
+      // Retomar según el progreso
+      if(u.etapa_actual==='completado'||u.etapa_actual==='modulos'||u.etapa_actual==='chat'){
+        // Cargar conversación si existe
+        var resC=await fetch('/api/leer?tabla=conversaciones&filtro=usuario_id=eq.'+u.id);
+        var convs=await resC.json();
+        if(convs&&convs.length>0){
+          chatHistory=convs[convs.length-1].historial||[];
+          chatHistory.forEach(function(m){
+            addMsg(m.role==='assistant'?'soul':'user',m.content);
+          });
+        }
+        ir(4);
+      }else{
+        ir(1);
+      }
+    }else{
+      ir(1);
+    }
+  }catch(e){
+    ir(1);
+  }
+}
+
+// Autologin si hay sesión guardada
+window.addEventListener('load',function(){
+  var savedEmail=localStorage.getItem('soul_email');
+  var savedToken=localStorage.getItem('soul_token');
+  if(savedEmail&&savedToken){
+    accessToken=savedToken;
+    userEmail=savedEmail;
+    cargarProgreso(savedEmail);
+  }
+});
+
+// ── NAVEGACIÓN ──
+var etapaActual=0;
+function ir(n){
+  document.getElementById('e'+etapaActual).classList.remove('activa');
+  document.getElementById('e'+n).classList.add('activa');
+  etapaActual=n;
+  window.scrollTo(0,0);
+  if(n===4) initChat();
+  if(n===5){initMatch();extraerYGuardarPerfil();}
+  if(n===7) initCita();
+}
+
+// ── CONSENTIMIENTO ──
+var scrollOk=false,mainOk=false;
+function chkScroll(){
+  if(scrollOk)return;
+  var b=document.getElementById('legalBox');
+  if(b.scrollTop+b.clientHeight>=b.scrollHeight-8){
+    scrollOk=true;
+    var n=document.getElementById('scrollNotice');
+    n.textContent='✓ Documento leído';n.classList.add('ok');
+    var c=document.getElementById('chkMain');
+    c.classList.remove('locked');c.style.cursor='pointer';
+  }
+}
+function toggleChk(){
+  if(!scrollOk)return;
+  mainOk=!mainOk;
+  document.getElementById('chkMain').classList.toggle('on',mainOk);
+  document.getElementById('btnAceptar').disabled=!mainOk;
+}
+
+// ── CONSTELACIÓN ──
+var chipSels={};var caraOk=false,cuerpoOk=false;var stepActual=0;
+function selChip(el,g){document.querySelectorAll('#'+g+'Chips .chip').forEach(function(c){c.classList.remove('sel')});el.classList.add('sel');chipSels[g]=el.textContent;chkStep(stepActual)}
+function selChipM(el,g){el.classList.toggle('sel');var s=[];document.querySelectorAll('#'+g+'Chips .chip.sel').forEach(function(c){s.push(c.textContent)});chipSels[g]=s;chkStep(stepActual)}
+function chkStep(s){
+  var ok=false;
+  if(s===0)ok=!!document.getElementById('fnac').value;
+  if(s===1)ok=document.getElementById('ciudad').value.trim().length>0&&chipSels['dist'];
+  if(s===2)ok=chipSels['gen']&&chipSels['pref'];
+  if(s===3)ok=(chipSels['vinc']&&chipSels['vinc'].length>0)&&chipSels['hijos'];
+  if(s===4)ok=chipSels['civil']&&document.getElementById('ocup').value.trim().length>0;
+  if(s===5)ok=document.getElementById('noNeg').value.trim().length>2&&document.getElementById('neg').value.trim().length>2;
+  if(s===6)ok=caraOk&&cuerpoOk;
+  var b=document.getElementById('btn'+s);if(b)b.disabled=!ok;
+}
+function nextStep(s){
+  if(s===0&&!document.getElementById('fnac').value){
+    document.getElementById('fnac').style.borderColor='rgba(217,138,158,.6)';
+    return;
+  }
+  litPoint(s);
+  document.getElementById('st'+s).classList.remove('act');
+  stepActual=s+1;
+  var next=s+1<7?'st'+(s+1):'stFinal';
+  setTimeout(function(){document.getElementById(next).classList.add('act');window.scrollTo(0,0);chkStep(s+1)},250);
+}
+function litPoint(i){
+  document.getElementById('cp'+i).classList.add('lit');
+  if(i>0){var l=document.getElementById('cl'+(i-1)+''+i);if(l)l.style.opacity='1';}
+}
+function loadPhoto(inp,upId,isCara){
+  var file=inp.files[0];if(!file)return;
+  var url=URL.createObjectURL(file);
+  var up=document.getElementById(upId);
+  up.innerHTML='<img src="'+url+'" alt="foto">';
+  if(isCara)caraOk=true;else cuerpoOk=true;
+  chkStep(6);
+}
+
+// ── CHAT CON SOUL ──
+var chatHistory=[];
+var SOUL_PROMPT=`Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
+
+PRINCIPIO CENTRAL
+Tu objetivo no es generar matches. Tu objetivo es ayudar a cada persona a desarrollar mayor conciencia sobre sí misma, sus patrones vinculares y sus necesidades relacionales. No preguntás edad, profesión, estado civil ni qué busca en los primeros intercambios.
+
+LAS TRES PREGUNTAS INVISIBLES
+En toda conversación intentás responder: 1) ¿Cómo es esta persona cuando se siente cómoda? 2) ¿Qué es importante para esta persona, aunque todavía no lo sepa? 3) ¿Cómo se vincula con los demás?
+
+CÓMO AVANZAR — RESONANCIA, NO TEMAS
+No avanzás por temas predefinidos. Avanzás por resonancia. Cuando algo aparece vivo en lo que dice la persona, lo seguís.
+
+HERRAMIENTA PRINCIPAL — EL ESPEJO
+Le devolvés sus propias palabras para que sea ella quien encuentre el sentido. Nunca interpretás ni diagnosticás.
+Incorrecto: "Tenés miedo al compromiso."
+Correcto: "Escucho que valorás mucho la cercanía y también la independencia. ¿Cómo conviven esas dos necesidades para vos?"
+
+CÓMO ARRANCA
+1. "Hola. ¿Cómo estás?"
+2. "¿Cómo te llamás?"
+3. "[Nombre], antes de arrancar te quiero preguntar algo — ¿preferís que charlemos de manera más liviana o más profunda?"
+
+DATOS CULTURALES
+Naturalmente vas sacando: películas, música, libros, comidas, viajes, deporte, baile, hobbies, curiosidades. Son para el matching y para la cita virtual.
+
+FLUJO NATURAL
+Después de la apertura: "Contame un poco de [nombre]" en tercera persona. Más adelante: "¿Cómo sería la persona que buscás?"
+
+CIERRES Y DEVOLUCIONES
+Siempre: primero reconocimiento genuino y específico, después agradecimiento cálido pero no obsecuente. Nunca al revés.
+
+CALIDEZ
+Reconocé gestos cálidos. De vez en cuando: "gracias por abrirte así", "la estás haciendo bien". Solo cuando el momento lo pida. Podés usar emojis como excepción puntual de calidez.
+
+CUÁNDO CERRAR LA CONVERSACIÓN
+Cuando tengas suficiente información — el identikit de la persona en tercera persona, el identikit de quien busca, al menos algunas referencias culturales, y una idea clara de sus valores y estilo vincular — proponés avanzar con esta frase exacta, sin variaciones:
+
+"[Nombre], creo que ya tengo una imagen bastante clara de quién sos. Hiciste un buen trabajo hoy. ¿Querés que avancemos al siguiente paso?"
+
+No uses otras variaciones de esta frase — el sistema la detecta para saber cuándo activar el siguiente paso. Solo la usás cuando realmente tenés suficiente información, no antes.`;
+
+function initChat(){
+  if(chatHistory.length>0)return;
+  addMsg('soul','Hola. ¿Cómo estás?');
+  chatHistory.push({role:'assistant',content:'Hola. ¿Cómo estás?'});
+  // Listeners para inputs
+document.getElementById('fnac').addEventListener('change',function(){chkStep(0)});
+document.getElementById('fnac').addEventListener('blur',function(){chkStep(0)});
+document.getElementById('ciudad').addEventListener('input',function(){chkStep(1)});
+document.getElementById('ocup').addEventListener('input',function(){chkStep(4)});
+document.getElementById('noNeg').addEventListener('input',function(){chkStep(5)});
+document.getElementById('neg').addEventListener('input',function(){chkStep(5)});
+}
+function addMsg(tipo,txt){
+  var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
+  document.getElementById('chatArea').appendChild(div);
+  document.getElementById('chatArea').scrollTop=9999;
+}
+function showTyping(){
+  var d=document.createElement('div');d.className='msg soul typing';d.id='typing';
+  d.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('chatArea').appendChild(d);
+  document.getElementById('chatArea').scrollTop=9999;
+}
+function hideTyping(){var t=document.getElementById('typing');if(t)t.remove()}
+async function sendMsg(){
+  var inp=document.getElementById('chatIn');
+  var txt=inp.value.trim();if(!txt)return;
+  addMsg('user',txt);chatHistory.push({role:'user',content:txt});
+  inp.value='';document.getElementById('sendBtn').disabled=true;showTyping();
+  try{
+    var res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory})});
+    var data=await res.json();
+    var reply=data.content.map(function(b){return b.text||""}).join("");
+    hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
+    // Detectar frase de cierre de Soul
+    if(reply.indexOf('¿Querés que avancemos al siguiente paso?')>-1){
+      setTimeout(function(){
+        addMsgConBoton();
+      },800);
+    }
+  }catch(e){hideTyping();addMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');}
+  finally{document.getElementById('sendBtn').disabled=false;}
+}
+
+var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
+
+function addMsgConBoton(){
+  var div=document.createElement('div');
+  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
+  div.innerHTML='<button onclick="avanzarAlMatch()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, avancemos →</button><button onclick="seguirConversando()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Quiero seguir un poco más</button>';
+  document.getElementById('chatArea').appendChild(div);
+  document.getElementById('chatArea').scrollTop=9999;
+}
+
+function seguirConversando(){
+  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
+  bots.forEach(function(b){b.remove()});
+  chatHistory.push({role:'user',content:'Quiero seguir un poco más.'});
+  addMsg('user','Quiero seguir un poco más.');
+  sendMsg();
+}
+
+async function avanzarAlMatch(){
+  // Mostrar loading
+  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
+  bots.forEach(function(b){b.remove()});
+  addMsg('soul','Dame un momento para preparar algo especial para vos...');
+
+  try{
+    // 1. Extraer perfil
+    var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+    var res=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]})
+    });
+    var data=await res.json();
+    var text=data.content.map(function(b){return b.text||''}).join('');
+    var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
+
+    // 2. Guardar perfil y conversación
+    await guardarPerfil(perfil);
+    await guardarConversacion();
+
+    // 3. Detectar módulo esencial con sistema de módulos
+    var resM=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-6',
+        max_tokens:200,
+        system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
+        messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
+      })
+    });
+    var dataM=await resM.json();
+    var txtM=dataM.content.map(function(b){return b.text||''}).join('');
+    var moduloInfo=JSON.parse(txtM.replace(/```json|```/g,'').trim());
+
+    // 4. Ir a módulos
+    setTimeout(function(){
+      ir('4b');
+      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales);
+    },1500);
+
+    // 5. Calcular matches en paralelo
+    calcularMatches();
+
+  }catch(e){
+    console.error('Error en pipeline:',e);
+    ir(5);
+  }
+}
+
+var COMPARE_PROMPT=`Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
+
+async function calcularMatches(){
+  if(!usuarioId)return;
+  try{
+    // Leer todos los perfiles existentes excepto el propio
+    var res=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=neq.'+usuarioId);
+    var otrosPerfiles=await res.json();
+    if(!otrosPerfiles||otrosPerfiles.length===0)return;
+
+    // Leer mi perfil
+    var resP=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
+    var misPer=await resP.json();
+    if(!misPer||misPer.length===0)return;
+    var miPerfil=misPer[0];
+
+    // Comparar con cada perfil
+    for(var i=0;i<otrosPerfiles.length;i++){
+      var otro=otrosPerfiles[i];
+      var resC=await fetch('/api/chat',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,system:COMPARE_PROMPT,messages:[{role:'user',content:'Perfil A:\n'+JSON.stringify(miPerfil)+'\n\nPerfil B:\n'+JSON.stringify(otro)}]})
+      });
+      var dataC=await resC.json();
+      var txtC=dataC.content.map(function(b){return b.text||''}).join('');
+      var comp=JSON.parse(txtC.replace(/```json|```/g,'').trim());
+
+      // Guardar match si supera umbral mínimo
+      if(comp.compatibilidad_hoy>=50||comp.potencial_construccion>=65){
+        await fetch('/api/guardar',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({tabla:'matches',datos:{
+            usuario_a: usuarioId,
+            usuario_b: otro.usuario_id,
+            compatibilidad_hoy: comp.compatibilidad_hoy,
+            potencial_construccion: comp.potencial_construccion,
+            fortalezas: comp.fortalezas,
+            desafio: comp.desafio,
+            mensaje_dupla: comp.mensaje_dupla,
+            estado: 'pendiente',
+            activado_por: 'sistema'
+          }})
+        });
+        // Mostrar en pantalla de match
+        document.getElementById('scoreHoy').textContent=comp.compatibilidad_hoy+'%';
+        document.getElementById('scorePot').textContent=comp.potencial_construccion+'%';
+        document.getElementById('matchMsg').textContent=comp.mensaje_dupla;
+      }
+    }
+  }catch(e){console.error('Error calculando matches:',e);}
+}
+
+async function extraerYGuardarPerfil(){
+  if(chatHistory.length<4)return;
+  try{
+    var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+    var res=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]})
+    });
+    var data=await res.json();
+    var text=data.content.map(function(b){return b.text||''}).join('');
+    var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
+    await guardarPerfil(perfil);
+    await guardarConversacion();
+  }catch(e){console.error('Error extrayendo perfil:',e);}
+}
+function initMatch(){
+  var c=document.getElementById('matchCanvas');
+  var ctx=c.getContext('2d');
+  var t=0;
+  var anim=setInterval(function(){
+    ctx.clearRect(0,0,200,200);
+    t+=0.03;
+    var prog=Math.min(t/3,1);
+    var dist=80*(1-prog);
+    var x1=100-dist,x2=100+dist;
+    // Glow
+    var g1=ctx.createRadialGradient(x1,100,0,x1,100,30);
+    g1.addColorStop(0,'rgba(168,176,194,0.6)');g1.addColorStop(1,'rgba(168,176,194,0)');
+    ctx.beginPath();ctx.arc(x1,100,30,0,Math.PI*2);ctx.fillStyle=g1;ctx.fill();
+    var g2=ctx.createRadialGradient(x2,100,0,x2,100,30);
+    g2.addColorStop(0,'rgba(201,168,76,0.6)');g2.addColorStop(1,'rgba(201,168,76,0)');
+    ctx.beginPath();ctx.arc(x2,100,30,0,Math.PI*2);ctx.fillStyle=g2;ctx.fill();
+    // Puntos
+    ctx.beginPath();ctx.arc(x1,100,6,0,Math.PI*2);ctx.fillStyle='rgba(168,176,194,0.9)';ctx.fill();
+    ctx.beginPath();ctx.arc(x2,100,6,0,Math.PI*2);ctx.fillStyle='rgba(201,168,76,0.9)';ctx.fill();
+    if(prog>=1){clearInterval(anim);
+      ctx.beginPath();ctx.arc(100,100,12,0,Math.PI*2);
+      var gf=ctx.createRadialGradient(100,100,0,100,100,12);
+      gf.addColorStop(0,'rgba(245,217,138,1)');gf.addColorStop(1,'rgba(201,168,76,0.6)');
+      ctx.fillStyle=gf;ctx.fill();
+      ctx.beginPath();ctx.arc(100,100,24,0,Math.PI*2);
+      var gg=ctx.createRadialGradient(100,100,0,100,100,24);
+      gg.addColorStop(0,'rgba(201,168,76,0.3)');gg.addColorStop(1,'rgba(201,168,76,0)');
+      ctx.fillStyle=gg;ctx.fill();
+    }
+  },16);
+}
+
+// ── CITA VIRTUAL ──
+var citaTimer=null;var citaSeg=0;
+function initCita(){
+  citaSeg=0;
+  if(citaTimer)clearInterval(citaTimer);
+  citaTimer=setInterval(function(){
+    citaSeg++;
+    var m=Math.floor(citaSeg/60),s=citaSeg%60;
+    document.getElementById('citaTimer').textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  },1000);
+  document.getElementById('citaIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendCita()});
+  // Intervención automática a los 5 minutos
+  setTimeout(function(){
+    if(etapaActual===7) addCitaSoul('Tengo una pregunta que preparé para ustedes. ¿Cuál fue el momento en tu vida donde más claramente fuiste vos mismo/a?');
+  },300000);
+}
+function addCitaMsg(tipo,txt){
+  var div=document.createElement('div');div.className='cita-msg '+tipo;div.textContent=txt;
+  document.getElementById('citaArea').appendChild(div);
+  document.getElementById('citaArea').scrollTop=9999;
+}
+function addCitaSoul(txt){
+  var div=document.createElement('div');
+  div.className='cita-soul';div.style.marginTop='.5rem';
+  div.innerHTML='<p class="soul-label">Soul</p><p>'+txt+'</p>';
+  document.getElementById('citaArea').appendChild(div);
+  document.getElementById('citaArea').scrollTop=9999;
+}
+function sendCita(){
+  var inp=document.getElementById('citaIn');
+  var txt=inp.value.trim();if(!txt)return;
+  addCitaMsg('yo',txt);inp.value='';
+}
+function toggleRitmo(){document.getElementById('ritmoOpts').classList.toggle('vis')}
+var ritmoMsgs={
+  explorar:'¿Qué es lo que más valorás en una conversación?',
+  jugar:'Cada uno escriba tres palabras que crea que describen al otro después de este rato. Después las comparan.',
+  compartir:'¿Hay una canción, película o libro que sientas que dice algo de vos que cuesta explicar con palabras?',
+  descubrir:'¿Cuál fue la decisión que más cambió tu vida?'
+};
+function usarRitmo(tipo){
+  document.getElementById('ritmoOpts').classList.remove('vis');
+  addCitaSoul(ritmoMsgs[tipo]);
+}
+
+// ── ELECCIÓN MUTUA ──
+function elegir(si){
+  document.getElementById('eleccionBtns').style.display='none';
+  var msg=document.getElementById('eleccionMsg');
+  if(si){
+    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7">Que puedas querer seguir después de todo lo que sintiste — eso no es poco.<br><br>Soul va a acompañar lo que viene.</span>';
+  }else{
+    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#d8cdd2;line-height:1.7">Está bien. Lo que viviste hoy tiene valor aunque no continúe.<br><br>Soul va a estar cuando estés lista/o para seguir.</span>';
+  }
+  document.getElementById('eleccionFinal').style.display='block';
+}
+</script>
+</body>
+</html>
