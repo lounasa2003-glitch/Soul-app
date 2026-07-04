@@ -305,14 +305,14 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div class="sesion-wrap">
     <div class="sesion-orb"></div>
     <p class="sesion-title" id="sesionSaludo">Hola de nuevo</p>
-    <p class="sesion-sub">¿Qué querés hacer hoy?</p>
+    <p class="sesion-sub" id="sesionSub">¿Qué querés hacer hoy?</p>
 
     <div class="sesion-opt" onclick="elegirSesion('soul')">
       <p class="sesion-opt-title">Seguir con Soul</p>
       <p class="sesion-opt-desc">Continuá tu proceso — los módulos que te van a preparar mejor para el encuentro.</p>
     </div>
 
-    <div class="sesion-opt" onclick="elegirSesion('analisis')">
+    <div class="sesion-opt" id="sesionOptAnalisis" onclick="elegirSesion('analisis')">
       <p class="sesion-opt-title">Analizar una conversación</p>
       <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
@@ -1032,21 +1032,60 @@ async function guardarUsuarioYContinuar(){
   ir(4);
 }
 
+// ── % DE PERFIL COMPLETO ──
+var UMBRAL_PERFIL=70;
+var CAMPOS_FORMULARIO=['fecha_nacimiento','ciudad','distancia_max','genero','preferencia_genero','tipo_vinculo','hijos','estado_civil','ocupacion','no_negociables','negociables'];
+var CAMPOS_GRUPOS={
+  grupo1:['valores','estilo_comunicacion','ritmo_emocional','mascara_vs_autentico','momento_evolutivo'],
+  grupo2:['tipo_vinculo','proyecto_vida','necesidades_intimidad','no_puede_faltar','no_puede_estar'],
+  grupo3:['modo_conflictos','capacidad_reparacion','reciprocidad','flexibilidad','patrones_vinculares'],
+  grupo4:['apertura','consistencia','estabilidad_emocional','revision_creencias','metalenguaje','indice_disponibilidad']
+};
+function campoLleno(v){
+  if(v===null||v===undefined)return false;
+  if(Array.isArray(v))return v.length>0;
+  if(typeof v==='string')return v.trim().length>0;
+  return true;
+}
+function calcularPorcentajePerfil(usuario,perfil){
+  var total=CAMPOS_FORMULARIO.length;
+  var completos=0;
+  CAMPOS_FORMULARIO.forEach(function(c){if(usuario&&campoLleno(usuario[c]))completos++});
+  Object.keys(CAMPOS_GRUPOS).forEach(function(g){
+    var sub=CAMPOS_GRUPOS[g];
+    total+=sub.length;
+    var grupoVal=perfil&&perfil[g];
+    sub.forEach(function(c){if(grupoVal&&campoLleno(grupoVal[c]))completos++});
+  });
+  return Math.round(completos/total*100);
+}
+
 async function guardarPerfil(perfil){
   if(!usuarioId)return;
+  var datos={
+    usuario_id: usuarioId,
+    grupo1: perfil.grupo1,
+    grupo2: perfil.grupo2,
+    grupo3: perfil.grupo3,
+    grupo4: perfil.grupo4,
+    indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
+  };
   try{
-    await fetch('/api/guardar',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tabla:'perfiles',datos:{
-        usuario_id: usuarioId,
-        grupo1: perfil.grupo1,
-        grupo2: perfil.grupo2,
-        grupo3: perfil.grupo3,
-        grupo4: perfil.grupo4,
-        indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
-      }})
-    });
+    var resExist=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
+    var existentes=await resExist.json();
+    if(existentes&&existentes.length>0){
+      await fetch('/api/guardar',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tabla:'perfiles',datos:datos,filtro:'usuario_id=eq.'+usuarioId})
+      });
+    }else{
+      await fetch('/api/guardar',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tabla:'perfiles',datos:datos})
+      });
+    }
   }catch(e){console.error('Error guardando perfil:',e);}
 }
 
@@ -1172,8 +1211,6 @@ async function hacerAuth(){
 
     accessToken=data.access_token;
     userEmail=email;
-    localStorage.setItem('soul_email',email);
-    localStorage.setItem('soul_token',accessToken);
 
     if(authMode==='registro'){
       // Verificar si ya existe usuario en tabla usuarios (por si reintenta registro)
@@ -1200,19 +1237,36 @@ async function cargarProgreso(email){
       var u=usuarios[0];
       usuarioId=u.id;
       window.userNombre=u.nombre;
-      if(u.etapa_actual==='completado'||u.etapa_actual==='modulos'||u.etapa_actual==='chat'){
-        // Ya tiene perfil base — mostrar elección de sesión
-        document.getElementById('sesionSaludo').textContent='Hola de nuevo'+(u.nombre?', '+u.nombre:'');
-        ir('EleccionSesion');
-      }else{
-        ir(1);
-      }
+
+      var perfil=null;
+      try{
+        var resP=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
+        var perfiles=await resP.json();
+        if(perfiles&&perfiles.length>0)perfil=perfiles[perfiles.length-1];
+      }catch(e){}
+
+      var pct=calcularPorcentajePerfil(u,perfil);
+      mostrarEleccionSesion(u,pct);
     }else{
       ir(1);
     }
   }catch(e){
     ir(1);
   }
+}
+
+function mostrarEleccionSesion(u,pct,saludo){
+  document.getElementById('sesionSaludo').textContent=saludo||('Hola de nuevo'+(u.nombre?', '+u.nombre:''));
+  var opcAnalisis=document.getElementById('sesionOptAnalisis');
+  var sub=document.getElementById('sesionSub');
+  if(pct<UMBRAL_PERFIL){
+    sub.textContent='Todavía te falta terminar de contarle a Soul quién sos.';
+    opcAnalisis.style.display='none';
+  }else{
+    sub.textContent='¿Qué querés hacer hoy?';
+    opcAnalisis.style.display='block';
+  }
+  ir('EleccionSesion');
 }
 
 function elegirSesion(tipo){
@@ -1310,17 +1364,6 @@ async function analizarConversacionExterna(){
     document.getElementById('analisisLoading').style.display='none';
   }
 }
-
-// Autologin si hay sesión guardada
-window.addEventListener('load',function(){
-  var savedEmail=localStorage.getItem('soul_email');
-  var savedToken=localStorage.getItem('soul_token');
-  if(savedEmail&&savedToken){
-    accessToken=savedToken;
-    userEmail=savedEmail;
-    cargarProgreso(savedEmail);
-  }
-});
 
 // ── NAVEGACIÓN ──
 var etapaActual=0;
@@ -1550,16 +1593,22 @@ async function avanzarAlMatch(){
 
     // 4. Actualizar etapa_actual en la base
     if(usuarioId){
-      fetch('/api/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tabla:'usuarios',datos:{etapa_actual:'modulos'}})}).catch(function(){});
+      fetch('/api/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tabla:'usuarios',datos:{etapa_actual:'modulos'},filtro:'id=eq.'+usuarioId})}).catch(function(){});
     }
 
     // 5. Calcular matches en paralelo mientras la persona elige
     calcularMatches();
 
-    // 6. Mostrar elección de sesión en vez de ir directo a módulos
+    // 6. Mostrar elección de sesión (o seguir completando perfil) según el % alcanzado
+    var uActual=null;
+    try{
+      var resU=await fetch('/api/leer?tabla=usuarios&filtro=id=eq.'+usuarioId);
+      var usuariosActual=await resU.json();
+      if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
+    }catch(e){}
+    var pctActual=calcularPorcentajePerfil(uActual,perfil);
     setTimeout(function(){
-      document.getElementById('sesionSaludo').textContent='Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.';
-      ir('EleccionSesion');
+      mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
     },1500);
 
   }catch(e){

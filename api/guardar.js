@@ -11,10 +11,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { tabla, datos } = req.body;
+    const { tabla, datos, filtro } = req.body;
 
-    const response = await fetch(`${supabaseUrl}/rest/v1/${tabla}`, {
-      method: 'POST',
+    const url = filtro
+      ? `${supabaseUrl}/rest/v1/${tabla}?${filtro}`
+      : `${supabaseUrl}/rest/v1/${tabla}`;
+
+    const response = await fetch(url, {
+      method: filtro ? 'PATCH' : 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
