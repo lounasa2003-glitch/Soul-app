@@ -1,7 +1,11 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaudeJSON } from '../lib/anthropicClient.js';
+import { chequearLimite } from '../lib/rateLimit.js';
 
 const COMPARE_PROMPT = `Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
+
+const LIMITE_MATCHES = 5;
+const VENTANA_MATCHES_SEGUNDOS = 3600;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -21,6 +25,14 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
     const usuarioId = usuario.usuarioId;
+
+    const dentroDelLimite = await chequearLimite(usuario.email, 'calcularMatches', LIMITE_MATCHES, VENTANA_MATCHES_SEGUNDOS);
+    if (!dentroDelLimite) {
+      return res.status(429).json({
+        error: 'limite_alcanzado',
+        mensaje: 'Ya calculaste tus matches varias veces en poco tiempo. Probá de nuevo más tarde.'
+      });
+    }
 
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 

@@ -1,8 +1,11 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
+import { chequearLimite } from '../lib/rateLimit.js';
 
 const MODELO_FIJO = 'claude-sonnet-4-6';
 const MAX_TOKENS_TOPE = 1500;
+const LIMITE_CHAT = 30;
+const VENTANA_CHAT_SEGUNDOS = 300;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -17,6 +20,14 @@ export default async function handler(req, res) {
     const usuario = await verificarUsuario(req);
     if (!usuario) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
+    }
+
+    const dentroDelLimite = await chequearLimite(usuario.email, 'chat', LIMITE_CHAT, VENTANA_CHAT_SEGUNDOS);
+    if (!dentroDelLimite) {
+      return res.status(429).json({
+        error: 'limite_alcanzado',
+        mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.'
+      });
     }
 
     const { max_tokens, system, messages } = req.body;
