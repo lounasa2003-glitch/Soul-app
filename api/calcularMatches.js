@@ -1,5 +1,5 @@
 import { verificarUsuario } from '../lib/authUtil.js';
-import { llamarClaude } from '../lib/anthropicClient.js';
+import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 
 const COMPARE_PROMPT = `Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
 
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     let matchData = null;
 
     for (const otro of otrosPerfiles) {
-      const dataC = await llamarClaude({
+      const comp = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
         max_tokens: 600,
         system: COMPARE_PROMPT,
@@ -53,8 +53,6 @@ export default async function handler(req, res) {
           content: 'Perfil A:\n' + JSON.stringify(miPerfil) + '\n\nPerfil B:\n' + JSON.stringify(otro)
         }]
       });
-      const txtC = dataC.content.map(b => b.text || '').join('');
-      const comp = JSON.parse(txtC.replace(/```json|```/g, '').trim());
 
       if (comp.compatibilidad_hoy >= 50 || comp.potencial_construccion >= 65) {
         await fetch(`${supabaseUrl}/rest/v1/matches`, {

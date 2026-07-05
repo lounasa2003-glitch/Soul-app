@@ -1,5 +1,5 @@
 import { verificarUsuario } from '../lib/authUtil.js';
-import { llamarClaude } from '../lib/anthropicClient.js';
+import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 
 const LIMITE_ANALISIS = 2;
 
@@ -49,16 +49,14 @@ export default async function handler(req, res) {
     }
     const miPerfil = misPer[misPer.length - 1];
 
-    const dataE = await llamarClaude({
+    const perfilExterno = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       system: EXTRACT_PROMPT,
       messages: [{ role: 'user', content: 'Analizá esta conversación:\n\n' + conversacion }]
     });
-    const txtE = dataE.content.map(b => b.text || '').join('');
-    const perfilExterno = JSON.parse(txtE.replace(/```json|```/g, '').trim());
 
-    const dataC = await llamarClaude({
+    const resultado = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: COMPARE_EXTERNO_PROMPT,
@@ -68,8 +66,6 @@ export default async function handler(req, res) {
           '\n\nPerfil de ' + (nombre || 'esta persona') + ' (basado en conversación externa):\n' + JSON.stringify(perfilExterno)
       }]
     });
-    const txtC = dataC.content.map(b => b.text || '').join('');
-    const resultado = JSON.parse(txtC.replace(/```json|```/g, '').trim());
 
     await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
       method: 'PATCH',

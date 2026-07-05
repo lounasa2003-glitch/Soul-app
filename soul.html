@@ -1040,6 +1040,35 @@ async function llamarChat(datos){
   return res.json();
 }
 
+function extraerJSON(texto){
+  var limpio=texto.replace(/```json|```/g,'').trim();
+  try{
+    return JSON.parse(limpio);
+  }catch(e){
+    var inicio=limpio.indexOf('{'),fin=limpio.lastIndexOf('}');
+    if(inicio!==-1&&fin>inicio){
+      return JSON.parse(limpio.slice(inicio,fin+1));
+    }
+    throw e;
+  }
+}
+
+// Le pide a Claude un JSON y lo parsea con salvataje (recorta texto de mas
+// alrededor del JSON); si aun asi no parsea, reintenta la llamada una sola
+// vez antes de tirar el error — evita repetir todo el pipeline por un JSON
+// mal formado en un solo paso puntual.
+async function pedirJSON(datosLlamada){
+  for(var intento=1;intento<=2;intento++){
+    var data=await llamarChat(datosLlamada);
+    var texto=data.content.map(function(b){return b.text||''}).join('');
+    try{
+      return extraerJSON(texto);
+    }catch(e){
+      if(intento===2) throw new Error('json_invalido');
+    }
+  }
+}
+
 async function guardarUsuarioYContinuar(){
   var datos={
     nombre: window.userNombre||null,
@@ -1639,23 +1668,19 @@ async function avanzarAlMatch(){
   try{
     // 1. Extraer perfil
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
-    var text=data.content.map(function(b){return b.text||''}).join('');
-    var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
+    var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
 
     // 2. Guardar perfil y conversación
     await guardarPerfil(perfil);
     await guardarConversacion();
 
     // 3. Detectar módulo esencial con sistema de módulos
-    var dataM=await llamarChat({
+    var moduloInfo=await pedirJSON({
       model:'claude-sonnet-4-6',
       max_tokens:200,
       system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
       messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
     });
-    var txtM=dataM.content.map(function(b){return b.text||''}).join('');
-    var moduloInfo=JSON.parse(txtM.replace(/```json|```/g,'').trim());
 
     // Guardar info para cuando elija qué hacer
     window.perfilRecienExtraido=perfil;
@@ -1719,9 +1744,7 @@ async function extraerYGuardarPerfil(){
   if(chatHistory.length<4)return;
   try{
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
-    var text=data.content.map(function(b){return b.text||''}).join('');
-    var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
+    var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
     await guardarPerfil(perfil);
     await guardarConversacion();
   }catch(e){console.error('Error extrayendo perfil:',e);}
