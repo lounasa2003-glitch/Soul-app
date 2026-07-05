@@ -1155,12 +1155,9 @@ async function guardarPerfil(perfil){
     grupo4: perfil.grupo4,
     indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
   };
-  var existentes=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
-  if(existentes&&existentes.length>0){
-    await guardarTabla('perfiles',datos,'usuario_id=eq.'+usuarioId);
-  }else{
-    await guardarTabla('perfiles',datos);
-  }
+  // El servidor resuelve insert-o-actualiza de forma atomica (on_conflict
+  // en usuario_id), asi que no hace falta chequear antes si ya existe.
+  await guardarTabla('perfiles',datos);
 }
 
 async function guardarConversacion(completada){
