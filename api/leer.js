@@ -1,3 +1,5 @@
+import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeLecturaValido } from '../lib/authUtil.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -11,9 +13,29 @@ export default async function handler(req, res) {
   }
 
   try {
+    const usuario = await verificarUsuario(req);
+    if (!usuario) {
+      return res.status(401).json({ error: 'Sesión inválida o expirada' });
+    }
+
     const { tabla, filtro } = req.query;
-    let url = `${supabaseUrl}/rest/v1/${tabla}?select=*`;
-    if (filtro) url += `&${filtro}`;
+    if (!Object.prototype.hasOwnProperty.call(TABLAS_PERMITIDAS, tabla)) {
+      return res.status(403).json({ error: 'Tabla no permitida' });
+    }
+
+    let filtroFinal = filtro;
+    if (!filtroFinal && tabla !== 'usuarios') {
+      filtroFinal = 'usuario_id=eq.' + usuario.usuarioId;
+    }
+    if (tabla === 'usuarios' && !usuario.usuarioId && !filtroFinal) {
+      filtroFinal = 'email=eq.' + usuario.email;
+    }
+
+    if (!filtroDeLecturaValido(tabla, filtroFinal, usuario)) {
+      return res.status(403).json({ error: 'No autorizado para leer estos datos' });
+    }
+
+    const url = `${supabaseUrl}/rest/v1/${tabla}?select=*&${filtroFinal}`;
 
     const response = await fetch(url, {
       headers: {

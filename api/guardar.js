@@ -1,3 +1,5 @@
+import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido } from '../lib/authUtil.js';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -11,7 +13,28 @@ export default async function handler(req, res) {
   }
 
   try {
+    const usuario = await verificarUsuario(req);
+    if (!usuario) {
+      return res.status(401).json({ error: 'Sesión inválida o expirada' });
+    }
+
     const { tabla, datos, filtro } = req.body;
+    if (!Object.prototype.hasOwnProperty.call(TABLAS_PERMITIDAS, tabla)) {
+      return res.status(403).json({ error: 'Tabla no permitida' });
+    }
+    if (tabla !== 'usuarios' && !usuario.usuarioId) {
+      return res.status(403).json({ error: 'Todavía no existe tu fila de usuario' });
+    }
+
+    let datosFinales = datos;
+    if (!filtro) {
+      // INSERT: el dueño de la fila lo decide el servidor, no el cliente.
+      if (tabla === 'usuarios') datosFinales = { ...datos, email: usuario.email };
+      else if (tabla === 'matches') datosFinales = { ...datos, usuario_a: usuario.usuarioId };
+      else datosFinales = { ...datos, usuario_id: usuario.usuarioId };
+    } else if (!(await filtroDeEscrituraValido(tabla, filtro, usuario))) {
+      return res.status(403).json({ error: 'No autorizado para modificar estos datos' });
+    }
 
     const url = filtro
       ? `${supabaseUrl}/rest/v1/${tabla}?${filtro}`
@@ -25,7 +48,7 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${supabaseKey}`,
         'Prefer': 'return=representation'
       },
-      body: JSON.stringify(datos)
+      body: JSON.stringify(datosFinales)
     });
 
     const data = await response.json();
