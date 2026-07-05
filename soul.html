@@ -1647,52 +1647,22 @@ async function avanzarAlMatch(){
   }
 }
 
-var COMPARE_PROMPT=`Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
-
 async function calcularMatches(){
   if(!usuarioId)return;
   window.matchEncontrado=false;
   try{
-    // Leer todos los perfiles existentes excepto el propio
-    var otrosPerfiles=await leerTabla('perfiles','usuario_id=neq.'+usuarioId);
-    if(!otrosPerfiles||otrosPerfiles.length===0)return;
-
-    // Leer mi perfil
-    var misPer=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
-    if(!misPer||misPer.length===0)return;
-    var miPerfil=misPer[0];
-
-    // Comparar con cada perfil
-    for(var i=0;i<otrosPerfiles.length;i++){
-      var otro=otrosPerfiles[i];
-      var resC=await fetch('/api/chat',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,system:COMPARE_PROMPT,messages:[{role:'user',content:'Perfil A:\n'+JSON.stringify(miPerfil)+'\n\nPerfil B:\n'+JSON.stringify(otro)}]})
-      });
-      var dataC=await resC.json();
-      var txtC=dataC.content.map(function(b){return b.text||''}).join('');
-      var comp=JSON.parse(txtC.replace(/```json|```/g,'').trim());
-
-      // Guardar match si supera umbral mínimo
-      if(comp.compatibilidad_hoy>=50||comp.potencial_construccion>=65){
-        await guardarTabla('matches',{
-          usuario_a: usuarioId,
-          usuario_b: otro.usuario_id,
-          compatibilidad_hoy: comp.compatibilidad_hoy,
-          potencial_construccion: comp.potencial_construccion,
-          fortalezas: comp.fortalezas,
-          desafio: comp.desafio,
-          mensaje_dupla: comp.mensaje_dupla,
-          estado: 'pendiente',
-          activado_por: 'sistema'
-        });
-        window.matchEncontrado=true;
-        window.matchData=comp;
-        document.getElementById('scoreHoy').textContent=comp.compatibilidad_hoy+'%';
-        document.getElementById('scorePot').textContent=comp.potencial_construccion+'%';
-        document.getElementById('matchMsg').textContent=comp.mensaje_dupla;
-      }
+    var res=await fetch('/api/calcularMatches',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken}
+    });
+    if(res.status===401){avisarSesionExpirada();return;}
+    var data=await res.json();
+    if(data&&data.matchEncontrado){
+      window.matchEncontrado=true;
+      window.matchData=data.matchData;
+      document.getElementById('scoreHoy').textContent=data.matchData.compatibilidad_hoy+'%';
+      document.getElementById('scorePot').textContent=data.matchData.potencial_construccion+'%';
+      document.getElementById('matchMsg').textContent=data.matchData.mensaje_dupla;
     }
   }catch(e){console.error('Error calculando matches:',e);}
 }
