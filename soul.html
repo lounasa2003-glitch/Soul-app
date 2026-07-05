@@ -865,16 +865,12 @@ function initModulo(perfilExtraido, moduloEsencial, referencias){
   var prompt=buildModuloPrompt(perfilExtraido, moduloEsencial, referencias);
 
   // Primer mensaje de Soul
-  fetch('/api/chat',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens:350,
-      system:prompt,
-      messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}]
-    })
-  }).then(function(r){return r.json()}).then(function(data){
+  llamarChat({
+    model:'claude-sonnet-4-6',
+    max_tokens:350,
+    system:prompt,
+    messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}]
+  }).then(function(data){
     var reply=data.content.map(function(b){return b.text||''}).join('');
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
@@ -977,17 +973,12 @@ async function sendModulo(){
 async function sendModuloMsg(){
   var typing=document.getElementById('moduloTyping');
   try{
-    var res=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:350,
-        system:moduloData.prompt,
-        messages:moduloHistory
-      })
+    var data=await llamarChat({
+      model:'claude-sonnet-4-6',
+      max_tokens:350,
+      system:moduloData.prompt,
+      messages:moduloHistory
     });
-    var data=await res.json();
     var reply=data.content.map(function(b){return b.text||''}).join('');
     if(typing)typing.remove();
     addModuloMsg('soul',reply);
@@ -1027,6 +1018,16 @@ async function guardarTabla(tabla,datos,filtro){
     body:JSON.stringify(body)
   });
   if(res.status===401){avisarSesionExpirada();return [];}
+  return res.json();
+}
+
+async function llamarChat(datos){
+  var res=await fetch('/api/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+    body:JSON.stringify(datos)
+  });
+  if(res.status===401){avisarSesionExpirada();return {content:[]};}
   return res.json();
 }
 
@@ -1348,22 +1349,12 @@ async function analizarConversacionExterna(){
     var miPerfil=misPer[misPer.length-1];
 
     // 2. Extraer perfil de la conversación externa
-    var resE=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]})
-    });
-    var dataE=await resE.json();
+    var dataE=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
     var txtE=dataE.content.map(function(b){return b.text||''}).join('');
     var perfilExterno=JSON.parse(txtE.replace(/```json|```/g,'').trim());
 
     // 3. Comparar
-    var resC=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:600,system:COMPARE_EXTERNO_PROMPT,messages:[{role:'user',content:'Mi perfil:\n'+JSON.stringify(miPerfil)+'\n\nPerfil de '+nombre+' (basado en conversación externa):\n'+JSON.stringify(perfilExterno)}]})
-    });
-    var dataC=await resC.json();
+    var dataC=await llamarChat({model:'claude-sonnet-4-6',max_tokens:600,system:COMPARE_EXTERNO_PROMPT,messages:[{role:'user',content:'Mi perfil:\n'+JSON.stringify(miPerfil)+'\n\nPerfil de '+nombre+' (basado en conversación externa):\n'+JSON.stringify(perfilExterno)}]});
     var txtC=dataC.content.map(function(b){return b.text||''}).join('');
     var resultado=JSON.parse(txtC.replace(/```json|```/g,'').trim());
 
@@ -1545,8 +1536,7 @@ async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
   showTyping();
   try{
-    var res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory})});
-    var data=await res.json();
+    var data=await llamarChat({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory});
     var reply=data.content.map(function(b){return b.text||""}).join("");
     hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
 
@@ -1590,12 +1580,7 @@ async function avanzarAlMatch(){
   try{
     // 1. Extraer perfil
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var res=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]})
-    });
-    var data=await res.json();
+    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
     var text=data.content.map(function(b){return b.text||''}).join('');
     var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
 
@@ -1604,17 +1589,12 @@ async function avanzarAlMatch(){
     await guardarConversacion();
 
     // 3. Detectar módulo esencial con sistema de módulos
-    var resM=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:200,
-        system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
-        messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
-      })
+    var dataM=await llamarChat({
+      model:'claude-sonnet-4-6',
+      max_tokens:200,
+      system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
+      messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
     });
-    var dataM=await resM.json();
     var txtM=dataM.content.map(function(b){return b.text||''}).join('');
     var moduloInfo=JSON.parse(txtM.replace(/```json|```/g,'').trim());
 
@@ -1671,12 +1651,7 @@ async function extraerYGuardarPerfil(){
   if(chatHistory.length<4)return;
   try{
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var res=await fetch('/api/chat',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]})
-    });
-    var data=await res.json();
+    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
     var text=data.content.map(function(b){return b.text||''}).join('');
     var perfil=JSON.parse(text.replace(/```json|```/g,'').trim());
     await guardarPerfil(perfil);
