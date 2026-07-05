@@ -1056,6 +1056,8 @@ async function guardarUsuarioYContinuar(){
     ocupacion: document.getElementById('ocup').value||null,
     no_negociables: document.getElementById('noNeg').value||null,
     negociables: document.getElementById('neg').value||null,
+    foto_cara: window.fotoCaraB64||null,
+    foto_cuerpo: window.fotoCuerpoB64||null,
     consentimiento_aceptado: true,
     etapa_actual: 'chat'
   };
@@ -1453,11 +1455,31 @@ function litPoint(i){
   document.getElementById('cp'+i).classList.add('lit');
   if(i>0){var l=document.getElementById('cl'+(i-1)+''+i);if(l)l.style.opacity='1';}
 }
+window.fotoCaraB64=null;
+window.fotoCuerpoB64=null;
+
 function loadPhoto(inp,upId,isCara){
   var file=inp.files[0];if(!file)return;
   var url=URL.createObjectURL(file);
   var up=document.getElementById(upId);
   up.innerHTML='<img src="'+url+'" alt="foto">';
+
+  // Redimensiona a max 800px por lado y comprime a JPEG antes de guardar en base64
+  // (una foto de celular sin comprimir puede pesar varios MB).
+  var img=new Image();
+  img.onload=function(){
+    var MAX=800;
+    var w=img.width,h=img.height;
+    if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+    else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+    var canvas=document.createElement('canvas');
+    canvas.width=w;canvas.height=h;
+    canvas.getContext('2d').drawImage(img,0,0,w,h);
+    var b64=canvas.toDataURL('image/jpeg',0.75);
+    if(isCara)window.fotoCaraB64=b64;else window.fotoCuerpoB64=b64;
+  };
+  img.src=url;
+
   if(isCara)caraOk=true;else cuerpoOk=true;
   chkStep(6);
 }
