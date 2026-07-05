@@ -852,6 +852,9 @@ Si dice que prefiere pausar, cerrás con calidez y le decís que cuando vuelva v
 LA HERRAMIENTA
 En algún momento natural del módulo, sin forzarlo, le dejás esta herramienta: "${info.herramienta}"
 
+CUANDO SE VA DEL EJE
+Este espacio es para autoconocimiento y vínculos — no para resolver tareas, dudas técnicas, matemática, código, trivia u otros temas sin relación con eso. Si la persona trae algo así, no lo sigas como si nada: reconocelo en una frase breve y con calidez, y traé la charla de vuelta a lo que estaban hablando. No resuelvas el pedido ajeno, no te disculpes de más, y no lo repitas como una regla cada vez — que suene natural.
+
 REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
@@ -1313,8 +1316,6 @@ function volverAEleccion(){
   document.getElementById('analisisNombre').value='';
 }
 
-var COMPARE_EXTERNO_PROMPT=`Sos el motor de compatibilidad de Soul. Vas a comparar el perfil real de una persona (construido a través de una conversación profunda con Soul) contra una conversación externa con alguien que conoció fuera de la plataforma. Esta segunda fuente es información parcial — sé honesto sobre esa limitación en el veredicto. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":60,"potencial_construccion":75,"veredicto":"frase honesta que mencione que es un análisis probabilístico basado en información parcial"}`;
-
 async function analizarConversacionExterna(){
   var conv=document.getElementById('analisisConv').value.trim();
   var nombre=document.getElementById('analisisNombre').value.trim()||'esta persona';
@@ -1337,26 +1338,19 @@ async function analizarConversacionExterna(){
   document.getElementById('analisisResultado').style.display='none';
 
   try{
-    // 1. Traer mi perfil real
-    var misPer=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
-    if(!misPer||misPer.length===0){
-      errEl.textContent='Todavía no completaste tu perfil con Soul.';
+    var res=await fetch('/api/analisisExterno',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      body:JSON.stringify({conversacion:conv,nombre:nombre})
+    });
+    if(res.status===401){avisarSesionExpirada();return;}
+    var resultado=await res.json();
+
+    if(!res.ok){
+      errEl.textContent=resultado.mensaje||'Algo salió mal. Revisá que la conversación tenga suficiente texto e intentá de nuevo.';
       errEl.style.display='block';
-      document.getElementById('analisisBtn').style.display='block';
-      document.getElementById('analisisLoading').style.display='none';
       return;
     }
-    var miPerfil=misPer[misPer.length-1];
-
-    // 2. Extraer perfil de la conversación externa
-    var dataE=await llamarChat({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
-    var txtE=dataE.content.map(function(b){return b.text||''}).join('');
-    var perfilExterno=JSON.parse(txtE.replace(/```json|```/g,'').trim());
-
-    // 3. Comparar
-    var dataC=await llamarChat({model:'claude-sonnet-4-6',max_tokens:600,system:COMPARE_EXTERNO_PROMPT,messages:[{role:'user',content:'Mi perfil:\n'+JSON.stringify(miPerfil)+'\n\nPerfil de '+nombre+' (basado en conversación externa):\n'+JSON.stringify(perfilExterno)}]});
-    var txtC=dataC.content.map(function(b){return b.text||''}).join('');
-    var resultado=JSON.parse(txtC.replace(/```json|```/g,'').trim());
 
     document.getElementById('anaHoy').textContent=resultado.compatibilidad_hoy+'%';
     document.getElementById('anaPot').textContent=resultado.potencial_construccion+'%';
@@ -1483,6 +1477,9 @@ Siempre: primero reconocimiento genuino y específico, después agradecimiento c
 
 CALIDEZ
 Reconocé gestos cálidos. De vez en cuando: "gracias por abrirte así", "la estás haciendo bien". Solo cuando el momento lo pida. Podés usar emojis como excepción puntual de calidez.
+
+CUANDO SE VA DEL EJE
+Este espacio es para autoconocimiento y vínculos — no para resolver tareas, dudas técnicas, matemática, código, trivia u otros temas sin relación con eso. Si la persona trae algo así, no lo sigas como si nada: reconocelo en una frase breve y con calidez, y traé la charla de vuelta a lo que estaban hablando. Por ejemplo: "Eso se escapa un poco de lo que hacemos acá — este es tu espacio para conocerte mejor. ¿Seguimos con [lo último de lo que hablaban]?" No resuelvas el pedido ajeno, no te disculpes de más, y no lo repitas como una regla cada vez — que suene natural, como lo haría cualquier persona real redirigiendo una charla.
 
 CUÁNDO CERRAR LA CONVERSACIÓN
 No propongas cerrar hasta haber reunido TODO esto:
