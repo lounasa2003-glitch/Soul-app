@@ -80,6 +80,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    return res.status(500).json({ error: 'Error al analizar', details: error.message });
+    console.error('Error en /api/analisisExterno:', error);
+    return res.status(500).json({ error: 'Error al analizar' });
   }
 }

@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     if (error.status) {
       return res.status(error.status).json(error.data);
     }
-    return res.status(500).json({ error: 'Error al conectar con Soul', details: error.message });
+    console.error('Error en /api/chat:', error);
+    return res.status(500).json({ error: 'Error al conectar con Soul' });
   }
 }
