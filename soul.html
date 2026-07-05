@@ -1001,6 +1001,16 @@ async function sendModuloMsg(){
 }
 var usuarioId=null;
 
+// vercel dev trunca el query string en el segundo "=" de un valor sin encodear
+// (ej. ?filtro=email=eq.x llega a la funcion como filtro="email"), asi que el
+// filtro completo va siempre encodeado como un solo bloque.
+async function leerTabla(tabla,filtro){
+  var url='/api/leer?tabla='+encodeURIComponent(tabla);
+  if(filtro) url+='&filtro='+encodeURIComponent(filtro);
+  var res=await fetch(url);
+  return res.json();
+}
+
 async function guardarUsuarioYContinuar(){
   var datos={
     nombre: window.userNombre||null,
@@ -1071,8 +1081,7 @@ async function guardarPerfil(perfil){
     indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
   };
   try{
-    var resExist=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
-    var existentes=await resExist.json();
+    var existentes=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
     if(existentes&&existentes.length>0){
       await fetch('/api/guardar',{
         method:'POST',
@@ -1089,18 +1098,32 @@ async function guardarPerfil(perfil){
   }catch(e){console.error('Error guardando perfil:',e);}
 }
 
-async function guardarConversacion(){
+async function guardarConversacion(completada){
+  if(completada===undefined)completada=true;
   if(!usuarioId||chatHistory.length===0)return;
   try{
-    await fetch('/api/guardar',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tabla:'conversaciones',datos:{
-        usuario_id: usuarioId,
-        historial: chatHistory,
-        completada: true
-      }})
-    });
+    if(conversacionId){
+      await fetch('/api/guardar',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tabla:'conversaciones',datos:{
+          historial: chatHistory,
+          completada: completada
+        },filtro:'id=eq.'+conversacionId})
+      });
+    }else{
+      var res=await fetch('/api/guardar',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tabla:'conversaciones',datos:{
+          usuario_id: usuarioId,
+          historial: chatHistory,
+          completada: completada
+        }})
+      });
+      var data=await res.json();
+      if(data&&data[0]&&data[0].id) conversacionId=data[0].id;
+    }
   }catch(e){console.error('Error guardando conversación:',e);}
 }
 
@@ -1231,8 +1254,7 @@ async function hacerAuth(){
 
 async function cargarProgreso(email){
   try{
-    var res=await fetch('/api/leer?tabla=usuarios&filtro=email=eq.'+encodeURIComponent(email));
-    var usuarios=await res.json();
+    var usuarios=await leerTabla('usuarios','email=eq.'+email);
     if(usuarios&&usuarios.length>0){
       var u=usuarios[0];
       usuarioId=u.id;
@@ -1240,8 +1262,7 @@ async function cargarProgreso(email){
 
       var perfil=null;
       try{
-        var resP=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
-        var perfiles=await resP.json();
+        var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
         if(perfiles&&perfiles.length>0)perfil=perfiles[perfiles.length-1];
       }catch(e){}
 
@@ -1319,8 +1340,7 @@ async function analizarConversacionExterna(){
 
   try{
     // 1. Traer mi perfil real
-    var resP=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
-    var misPer=await resP.json();
+    var misPer=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
     if(!misPer||misPer.length===0){
       errEl.textContent='Todavía no completaste tu perfil con Soul.';
       errEl.style.display='block';
@@ -1440,6 +1460,9 @@ function loadPhoto(inp,upId,isCara){
 
 // ── CHAT CON SOUL ──
 var chatHistory=[];
+var conversacionId=null;
+var intercambiosDesdeGuardado=0;
+var INTERCAMBIOS_AUTOSAVE=4;
 var SOUL_PROMPT=`Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
 PRINCIPIO CENTRAL
@@ -1515,13 +1538,27 @@ function hideTyping(){var t=document.getElementById('typing');if(t)t.remove()}
 async function sendMsg(){
   var inp=document.getElementById('chatIn');
   var txt=inp.value.trim();if(!txt)return;
+  inp.value='';document.getElementById('sendBtn').disabled=true;
+  try{
+    await enviarAlChat(txt);
+  }finally{document.getElementById('sendBtn').disabled=false;}
+}
+
+async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
-  inp.value='';document.getElementById('sendBtn').disabled=true;showTyping();
+  showTyping();
   try{
     var res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory})});
     var data=await res.json();
     var reply=data.content.map(function(b){return b.text||""}).join("");
     hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
+
+    intercambiosDesdeGuardado++;
+    if(intercambiosDesdeGuardado>=INTERCAMBIOS_AUTOSAVE){
+      intercambiosDesdeGuardado=0;
+      guardarConversacion(false).catch(function(){});
+    }
+
     // Detectar frase de cierre de Soul
     if(reply.indexOf('¿Querés que avancemos al siguiente paso?')>-1){
       setTimeout(function(){
@@ -1529,7 +1566,6 @@ async function sendMsg(){
       },800);
     }
   }catch(e){hideTyping();addMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');}
-  finally{document.getElementById('sendBtn').disabled=false;}
 }
 
 var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
@@ -1545,9 +1581,7 @@ function addMsgConBoton(){
 function seguirConversando(){
   var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
   bots.forEach(function(b){b.remove()});
-  chatHistory.push({role:'user',content:'Quiero seguir un poco más.'});
-  addMsg('user','Quiero seguir un poco más.');
-  sendMsg();
+  enviarAlChat('Quiero seguir un poco más.');
 }
 
 async function avanzarAlMatch(){
@@ -1602,8 +1636,7 @@ async function avanzarAlMatch(){
     // 6. Mostrar elección de sesión (o seguir completando perfil) según el % alcanzado
     var uActual=null;
     try{
-      var resU=await fetch('/api/leer?tabla=usuarios&filtro=id=eq.'+usuarioId);
-      var usuariosActual=await resU.json();
+      var usuariosActual=await leerTabla('usuarios','id=eq.'+usuarioId);
       if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
     }catch(e){}
     var pctActual=calcularPorcentajePerfil(uActual,perfil);
@@ -1624,13 +1657,11 @@ async function calcularMatches(){
   window.matchEncontrado=false;
   try{
     // Leer todos los perfiles existentes excepto el propio
-    var res=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=neq.'+usuarioId);
-    var otrosPerfiles=await res.json();
+    var otrosPerfiles=await leerTabla('perfiles','usuario_id=neq.'+usuarioId);
     if(!otrosPerfiles||otrosPerfiles.length===0)return;
 
     // Leer mi perfil
-    var resP=await fetch('/api/leer?tabla=perfiles&filtro=usuario_id=eq.'+usuarioId);
-    var misPer=await resP.json();
+    var misPer=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
     if(!misPer||misPer.length===0)return;
     var miPerfil=misPer[0];
 
