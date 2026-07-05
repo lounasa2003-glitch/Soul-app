@@ -567,7 +567,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="step-final">
           <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.4rem;color:#c9a84c;margin-bottom:.5rem">Tu constelación está completa ✦</p>
           <p style="font-family:'Inter',sans-serif;font-size:.78rem;color:#7a6e78;margin-bottom:2rem;line-height:1.6">Ya tenemos lo que necesitamos para empezar a conocerte.</p>
-          <button class="btn-gold" onclick="guardarUsuarioYContinuar()">Hablar con Soul →</button>
+          <div class="auth-err" id="guardarUsuarioErr"></div>
+          <button class="btn-gold" id="btnHablarSoul" onclick="guardarUsuarioYContinuar()">Hablar con Soul →</button>
         </div>
       </div>
     </div>
@@ -1011,7 +1012,8 @@ async function leerTabla(tabla,filtro){
   var url='/api/leer?tabla='+encodeURIComponent(tabla);
   if(filtro) url+='&filtro='+encodeURIComponent(filtro);
   var res=await fetch(url,{headers:{'Authorization':'Bearer '+accessToken}});
-  if(res.status===401){avisarSesionExpirada();return [];}
+  if(res.status===401){avisarSesionExpirada();throw new Error('sesion_expirada');}
+  if(!res.ok){throw new Error('error_leyendo_'+tabla);}
   return res.json();
 }
 
@@ -1023,7 +1025,8 @@ async function guardarTabla(tabla,datos,filtro){
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
     body:JSON.stringify(body)
   });
-  if(res.status===401){avisarSesionExpirada();return [];}
+  if(res.status===401){avisarSesionExpirada();throw new Error('sesion_expirada');}
+  if(!res.ok){throw new Error('error_guardando_'+tabla);}
   return res.json();
 }
 
@@ -1056,11 +1059,31 @@ async function guardarUsuarioYContinuar(){
     consentimiento_aceptado: true,
     etapa_actual: 'chat'
   };
-  try{
-    var data=await guardarTabla('usuarios',datos);
-    if(data&&data[0]&&data[0].id) usuarioId=data[0].id;
-  }catch(e){console.error('Error guardando usuario:',e);}
-  ir(4);
+
+  var errEl=document.getElementById('guardarUsuarioErr');
+  var btn=document.getElementById('btnHablarSoul');
+  errEl.style.display='none';
+  btn.disabled=true;
+  btn.textContent='Guardando...';
+
+  for(var intento=1;intento<=2;intento++){
+    try{
+      var data=await guardarTabla('usuarios',datos);
+      if(data&&data[0]&&data[0].id){
+        usuarioId=data[0].id;
+        ir(4);
+        return;
+      }
+    }catch(e){
+      console.error('Error guardando usuario (intento '+intento+'):',e);
+    }
+    if(intento===1) await new Promise(function(r){setTimeout(r,1000);});
+  }
+
+  btn.disabled=false;
+  btn.textContent='Hablar con Soul →';
+  errEl.textContent='No pudimos guardar tu información. Revisá tu conexión e intentá de nuevo.';
+  errEl.style.display='block';
 }
 
 // ── % DE PERFIL COMPLETO ──
@@ -1101,34 +1124,30 @@ async function guardarPerfil(perfil){
     grupo4: perfil.grupo4,
     indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
   };
-  try{
-    var existentes=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
-    if(existentes&&existentes.length>0){
-      await guardarTabla('perfiles',datos,'usuario_id=eq.'+usuarioId);
-    }else{
-      await guardarTabla('perfiles',datos);
-    }
-  }catch(e){console.error('Error guardando perfil:',e);}
+  var existentes=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
+  if(existentes&&existentes.length>0){
+    await guardarTabla('perfiles',datos,'usuario_id=eq.'+usuarioId);
+  }else{
+    await guardarTabla('perfiles',datos);
+  }
 }
 
 async function guardarConversacion(completada){
   if(completada===undefined)completada=true;
   if(!usuarioId||chatHistory.length===0)return;
-  try{
-    if(conversacionId){
-      await guardarTabla('conversaciones',{
-        historial: chatHistory,
-        completada: completada
-      },'id=eq.'+conversacionId);
-    }else{
-      var data=await guardarTabla('conversaciones',{
-        usuario_id: usuarioId,
-        historial: chatHistory,
-        completada: completada
-      });
-      if(data&&data[0]&&data[0].id) conversacionId=data[0].id;
-    }
-  }catch(e){console.error('Error guardando conversación:',e);}
+  if(conversacionId){
+    await guardarTabla('conversaciones',{
+      historial: chatHistory,
+      completada: completada
+    },'id=eq.'+conversacionId);
+  }else{
+    var data=await guardarTabla('conversaciones',{
+      usuario_id: usuarioId,
+      historial: chatHistory,
+      completada: completada
+    });
+    if(data&&data[0]&&data[0].id) conversacionId=data[0].id;
+  }
 }
 
 // ── AUTENTICACIÓN ──
@@ -1641,8 +1660,17 @@ async function avanzarAlMatch(){
 
   }catch(e){
     console.error('Error en pipeline:',e);
-    addMsg('soul','Perdón, algo se complicó de mi lado. ¿Podés escribir "seguimos" para que lo intente de nuevo?');
+    addMsg('soul','Perdón, algo se complicó de mi lado guardando todo esto.');
+    addBotonReintentarMatch();
   }
+}
+
+function addBotonReintentarMatch(){
+  var div=document.createElement('div');
+  div.style.cssText='text-align:center;padding:.4rem 0';
+  div.innerHTML='<button onclick="this.parentElement.remove();avanzarAlMatch()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Reintentar →</button>';
+  document.getElementById('chatArea').appendChild(div);
+  document.getElementById('chatArea').scrollTop=9999;
 }
 
 async function calcularMatches(){
