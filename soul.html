@@ -855,6 +855,9 @@ En algún momento natural del módulo, sin forzarlo, le dejás esta herramienta:
 CUANDO SE VA DEL EJE
 Este espacio es para autoconocimiento y vínculos — no para resolver tareas, dudas técnicas, matemática, código, trivia u otros temas sin relación con eso. Si la persona trae algo así, no lo sigas como si nada: reconocelo en una frase breve y con calidez, y traé la charla de vuelta a lo que estaban hablando. No resuelvas el pedido ajeno, no te disculpes de más, y no lo repitas como una regla cada vez — que suene natural.
 
+LÍMITES DE CONTENIDO
+No participás de pedidos sexuales explícitos, contenido violento o instrucciones para dañar a alguien — reconocelo con calidez en una frase y traé la charla de vuelta, sin markdown. Si la persona muestra señales de riesgo real (autolesión, querer dañar a otra persona), no lo minimices: mostrate presente, preguntale cómo está, y sugerile buscar ayuda profesional o contactar servicios de emergencia si siente que está en peligro.
+
 REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
@@ -874,7 +877,7 @@ function initModulo(perfilExtraido, moduloEsencial, referencias){
     system:prompt,
     messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}]
   }).then(function(data){
-    var reply=data.content.map(function(b){return b.text||''}).join('');
+    var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
     moduloData.prompt=prompt;
@@ -982,7 +985,7 @@ async function sendModuloMsg(){
       system:moduloData.prompt,
       messages:moduloHistory
     });
-    var reply=data.content.map(function(b){return b.text||''}).join('');
+    var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     if(typing)typing.remove();
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
@@ -1481,6 +1484,11 @@ Reconocé gestos cálidos. De vez en cuando: "gracias por abrirte así", "la est
 CUANDO SE VA DEL EJE
 Este espacio es para autoconocimiento y vínculos — no para resolver tareas, dudas técnicas, matemática, código, trivia u otros temas sin relación con eso. Si la persona trae algo así, no lo sigas como si nada: reconocelo en una frase breve y con calidez, y traé la charla de vuelta a lo que estaban hablando. Por ejemplo: "Eso se escapa un poco de lo que hacemos acá — este es tu espacio para conocerte mejor. ¿Seguimos con [lo último de lo que hablaban]?" No resuelvas el pedido ajeno, no te disculpes de más, y no lo repitas como una regla cada vez — que suene natural, como lo haría cualquier persona real redirigiendo una charla.
 
+LÍMITES DE CONTENIDO
+No participás de pedidos sexuales explícitos, contenido violento o instrucciones para dañar a alguien. Si aparece algo así, no lo sigas ni lo detalles — reconocelo con calidez en una frase, sin sonar clínica ni robótica, y traé la charla de vuelta a los vínculos y el autoconocimiento. Nunca uses formato markdown (negritas, títulos, guiones separadores) — solo texto plano, como en el resto de la charla.
+
+Si lo que aparece es una señal de que la persona está pasando un momento de riesgo real (habla de lastimarse a sí misma o de querer dañar a otra persona), no lo minimices ni sigas con el guion normal de la charla: mostrate presente, preguntale cómo está de verdad, y sugerile con calidez buscar ayuda profesional, hablar con alguien de confianza, o contactar los servicios de emergencia de su zona si siente que está en peligro. No lo trates como un tema más a reconducir — quedate ahí con la persona el tiempo que haga falta.
+
 CUÁNDO CERRAR LA CONVERSACIÓN
 No propongas cerrar hasta haber reunido TODO esto:
 - El identikit de la persona en tercera persona ("contame un poco de [nombre]")
@@ -1508,6 +1516,19 @@ document.getElementById('ocup').addEventListener('input',function(){chkStep(4)})
 document.getElementById('noNeg').addEventListener('input',function(){chkStep(5)});
 document.getElementById('neg').addEventListener('input',function(){chkStep(5)});
 }
+// El chat pinta con textContent (texto plano); si el modelo devuelve markdown
+// (mas comun cuando esquiva un pedido fuera de tono) se ven asteriscos/guiones
+// literales en la burbuja, asi que se limpia antes de mostrar u guardar.
+function limpiarMarkdown(texto){
+  return texto
+    .replace(/\*\*(.*?)\*\*/g,'$1')
+    .replace(/__(.*?)__/g,'$1')
+    .replace(/^\s*[-*_]{3,}\s*$/gm,'')
+    .replace(/^#{1,6}\s*/gm,'')
+    .replace(/\n{3,}/g,'\n\n')
+    .trim();
+}
+
 function addMsg(tipo,txt){
   var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
   document.getElementById('chatArea').appendChild(div);
@@ -1534,7 +1555,7 @@ async function enviarAlChat(txt){
   showTyping();
   try{
     var data=await llamarChat({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory});
-    var reply=data.content.map(function(b){return b.text||""}).join("");
+    var reply=limpiarMarkdown(data.content.map(function(b){return b.text||""}).join(""));
     hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
 
     intercambiosDesdeGuardado++;
