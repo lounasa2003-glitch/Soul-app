@@ -882,8 +882,12 @@ REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
 
-function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades){
-  var transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla){
+  // Si no viene un transcripto ya armado (ej. reconstruido desde la BD tras
+  // una recarga), se arma a partir de la charla viva en esta pestana.
+  if(!transcriptoCharla){
+    transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+  }
   moduloData={
     modulo:moduloEsencial, perfil:perfilExtraido, referencias:referencias,
     transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades
@@ -1480,7 +1484,7 @@ function mostrarEleccionSesion(u,pct,saludo){
   ir('EleccionSesion');
 }
 
-function elegirSesion(tipo){
+async function elegirSesion(tipo){
   if(tipo==='soul'){
     if(window.perfilRecienExtraido&&window.moduloInfoGuardada){
       var perfil=window.perfilRecienExtraido;
@@ -1489,9 +1493,41 @@ function elegirSesion(tipo){
       window.moduloInfoGuardada=null;
       ir('4b');
       initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales, moduloInfo.fortalezas, moduloInfo.oportunidades);
-    }else{
-      ir(4);
+      return;
     }
+    // perfilRecienExtraido/moduloInfoGuardada viven solo en memoria de esta
+    // pestana -- si se perdieron (recarga, login nuevo en otra pestana), se
+    // reconstruye lo mismo desde lo que ya se guardó en la BD en su momento,
+    // en vez de tirar directo al chat viejo sin espejo ni módulo.
+    if(usuarioId){
+      try{
+        var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
+        var perfilGuardado=perfiles&&perfiles.length>0?perfiles[perfiles.length-1]:null;
+        if(perfilGuardado&&perfilGuardado.modulo_esencial){
+          var referenciasGuardadas=null,fortalezasGuardadas=[],oportunidadesGuardadas=[];
+          try{
+            var sintesis=perfilGuardado.sintesis_espejo?JSON.parse(perfilGuardado.sintesis_espejo):null;
+            if(sintesis){fortalezasGuardadas=sintesis.fortalezas||[];oportunidadesGuardadas=sintesis.oportunidades||[];}
+            var refs=perfilGuardado.referencias_culturales?JSON.parse(perfilGuardado.referencias_culturales):null;
+            if(refs)referenciasGuardadas=refs.detectado_en_charla||null;
+          }catch(e){}
+
+          var transcriptoGuardado='';
+          try{
+            var convs=await leerTabla('conversaciones','usuario_id=eq.'+usuarioId);
+            var convGuardada=convs&&convs.length>0?convs[convs.length-1]:null;
+            if(convGuardada&&convGuardada.historial){
+              transcriptoGuardado=convGuardada.historial.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+            }
+          }catch(e){}
+
+          ir('4b');
+          initModulo(perfilGuardado, perfilGuardado.modulo_esencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado);
+          return;
+        }
+      }catch(e){}
+    }
+    ir(4);
   }else{
     ir('AnalisisExterno');
   }
@@ -1931,7 +1967,12 @@ async function hacerAvanzar(){
     sintesis_espejo: JSON.stringify({
       fortalezas: moduloInfo.fortalezas||[],
       oportunidades: moduloInfo.oportunidades||[]
-    })
+    }),
+    // Se persiste el modulo asignado para poder retomar el espejo/modulo si
+    // se pierde perfilRecienExtraido/moduloInfoGuardada (recarga, login en
+    // otra pestana, etc.) -- son variables de memoria, no sobreviven eso.
+    modulo_esencial: moduloInfo.modulo_esencial||null,
+    modulo_recomendado: moduloInfo.modulo_recomendado||null
   }).catch(function(){});
 
   // 5. Calcular matches en paralelo mientras la persona elige
