@@ -451,6 +451,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
           <path class="const-line" id="cl34" d="M 178,22 L 230,46"/>
           <path class="const-line" id="cl45" d="M 230,46 L 255,95"/>
           <path class="const-line" id="cl56" d="M 255,95 L 195,130"/>
+          <path class="const-line" id="cl67" d="M 195,130 L 130,110"/>
         </svg>
         <div class="cpt" id="cp0" style="left:18px;top:38px"></div>
         <div class="cpt" id="cp1" style="left:65px;top:18px"></div>
@@ -459,11 +460,12 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="cpt" id="cp4" style="left:230px;top:46px"></div>
         <div class="cpt" id="cp5" style="left:255px;top:95px"></div>
         <div class="cpt" id="cp6" style="left:195px;top:130px"></div>
+        <div class="cpt" id="cp7" style="left:130px;top:110px"></div>
       </div>
     </div>
     <div class="q-zone">
       <div class="step act" id="st0">
-        <p class="step-lbl">Paso 1 de 7</p>
+        <p class="step-lbl">Paso 1 de 8</p>
         <p class="step-q">¿Cuándo naciste?</p>
         <input class="step-in" type="date" id="fnac" onchange="chkStep(0)" oninput="chkStep(0)">
         <p class="step-sub">Hora de nacimiento (opcional)</p>
@@ -471,7 +473,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn0" onclick="nextStep(0)" style="width:100%;margin-top:.5rem">Continuar →</button>
       </div>
       <div class="step" id="st1">
-        <p class="step-lbl">Paso 2 de 7</p>
+        <p class="step-lbl">Paso 2 de 8</p>
         <p class="step-q">¿Dónde vivís?</p>
         <input class="step-in" type="text" id="ciudad" placeholder="Ciudad o zona" oninput="chkStep(1)">
         <p class="step-sub">¿Hasta qué distancia para un encuentro?</p>
@@ -484,7 +486,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn1" disabled onclick="nextStep(1)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st2">
-        <p class="step-lbl">Paso 3 de 7</p>
+        <p class="step-lbl">Paso 3 de 8</p>
         <p class="step-q">¿Cómo te identificás?</p>
         <div class="chips" id="genChips">
           <div class="chip" onclick="selChip(this,'gen')">Mujer</div>
@@ -502,7 +504,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn2" disabled onclick="nextStep(2)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st3">
-        <p class="step-lbl">Paso 4 de 7</p>
+        <p class="step-lbl">Paso 4 de 8</p>
         <p class="step-q">¿Qué tipo de vínculo buscás?</p>
         <div class="chips" id="vincChips">
           <div class="chip" onclick="selChipM(this,'vinc')">Romántico</div>
@@ -520,7 +522,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn3" disabled onclick="nextStep(3)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st4">
-        <p class="step-lbl">Paso 5 de 7</p>
+        <p class="step-lbl">Paso 5 de 8</p>
         <p class="step-q">Un poco más sobre vos</p>
         <p class="step-sub">Estado civil</p>
         <div class="chips" id="civilChips">
@@ -534,7 +536,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn4" disabled onclick="nextStep(4)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st5">
-        <p class="step-lbl">Paso 6 de 7</p>
+        <p class="step-lbl">Paso 6 de 8</p>
         <p class="step-q">Tus límites vinculares</p>
         <p class="step-sub">Lo que no estás dispuesto/a a negociar</p>
         <textarea class="step-ta" id="noNeg" placeholder="Lo que es innegociable para vos..." oninput="chkStep(5)"></textarea>
@@ -543,7 +545,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <button class="btn-gold" id="btn5" disabled onclick="nextStep(5)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st6">
-        <p class="step-lbl">Paso 7 de 7</p>
+        <p class="step-lbl">Paso 7 de 8</p>
         <p class="step-q">Mostranos cómo sos</p>
         <div class="photo-pair">
           <div class="photo-slot">
@@ -561,7 +563,16 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <p class="photo-slot-lbl">Tu cuerpo</p>
           </div>
         </div>
-        <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%">Completar mi constelación →</button>
+        <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%">Continuar →</button>
+      </div>
+      <div class="step" id="st7">
+        <p class="step-lbl">Paso 8 de 8</p>
+        <p class="step-q">Tu banco cultural</p>
+        <p class="step-sub">Esto Soul lo va a usar para conocerte mejor</p>
+        <input class="step-in" type="text" id="refPelicula" placeholder="Una película que te represente" oninput="chkStep(7)">
+        <input class="step-in" type="text" id="refCancion" placeholder="Una canción que no puede faltar" oninput="chkStep(7)" style="margin-top:.5rem">
+        <input class="step-in" type="text" id="refLibro" placeholder="Un libro que te haya marcado" oninput="chkStep(7)" style="margin-top:.5rem">
+        <button class="btn-gold" id="btn7" disabled onclick="nextStep(7)" style="width:100%;margin-top:.5rem">Completar mi constelación →</button>
       </div>
       <div class="step" id="stFinal">
         <div class="step-final">
@@ -1471,6 +1482,7 @@ function chkStep(s){
   if(s===4)ok=chipSels['civil']&&document.getElementById('ocup').value.trim().length>0;
   if(s===5)ok=document.getElementById('noNeg').value.trim().length>2&&document.getElementById('neg').value.trim().length>2;
   if(s===6)ok=caraOk&&cuerpoOk;
+  if(s===7)ok=document.getElementById('refPelicula').value.trim().length>0||document.getElementById('refCancion').value.trim().length>0||document.getElementById('refLibro').value.trim().length>0;
   var b=document.getElementById('btn'+s);if(b)b.disabled=!ok;
 }
 function nextStep(s){
@@ -1481,7 +1493,7 @@ function nextStep(s){
   litPoint(s);
   document.getElementById('st'+s).classList.remove('act');
   stepActual=s+1;
-  var next=s+1<7?'st'+(s+1):'stFinal';
+  var next=s+1<8?'st'+(s+1):'stFinal';
   setTimeout(function(){document.getElementById(next).classList.add('act');window.scrollTo(0,0);chkStep(s+1)},250);
 }
 function litPoint(i){
@@ -1695,6 +1707,19 @@ async function avanzarAlMatch(){
     if(usuarioId){
       guardarTabla('usuarios',{etapa_actual:'modulos'},'id=eq.'+usuarioId).catch(function(){});
     }
+
+    // Guardar el banco cultural: lo que respondió directo en el wizard +
+    // lo que Soul detectó espontáneamente en la charla. Los inputs del
+    // wizard siguen vivos en el DOM aunque ya se haya navegado al chat.
+    guardarTabla('perfiles',{
+      usuario_id: usuarioId,
+      referencias_culturales: JSON.stringify({
+        pelicula: document.getElementById('refPelicula').value.trim()||null,
+        cancion: document.getElementById('refCancion').value.trim()||null,
+        libro: document.getElementById('refLibro').value.trim()||null,
+        detectado_en_charla: moduloInfo.referencias_culturales||null
+      })
+    }).catch(function(){});
 
     // 5. Calcular matches en paralelo mientras la persona elige
     calcularMatches();
