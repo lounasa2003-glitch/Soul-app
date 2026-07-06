@@ -168,6 +168,13 @@ footer p{font-family:'Inter',sans-serif;font-size:.7rem;color:#3a2f38;letter-spa
 </footer>
 
 <script>
+// Bypass de la waitlist para testing (?beta=off). No es control de acceso real
+// -- el parametro queda visible en la URL/historial -- solo para saltar
+// directo a la app mientras dura el desarrollo.
+if (new URLSearchParams(location.search).get('beta') === 'off') {
+  location.href = '/soul.html';
+}
+
 // ── UNIVERSO CON CONSTELACIONES ──
 const canvas = document.getElementById('universe');
 const ctx = canvas.getContext('2d');
