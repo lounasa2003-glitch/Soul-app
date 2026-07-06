@@ -161,13 +161,13 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
    ETAPA 4 — CHAT CON SOUL
 ══════════════════════════════════ */
 #e4{overflow:hidden;height:100vh;height:100dvh}
-.chat-wrap{display:flex;flex-direction:column;height:100vh;height:100dvh}
+.chat-wrap{display:flex;flex-direction:column;max-height:100vh;max-height:100dvh}
 .chat-header{display:flex;align-items:center;gap:.8rem;padding:.7rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(7,5,10,.95);flex-shrink:0;z-index:2}
 .chat-orb{width:26px;height:26px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 10px 3px rgba(201,168,76,.4);animation:pulse 3s ease-in-out infinite;flex-shrink:0}
 .chat-nm{font-family:'Cormorant Garamond',serif;font-style:italic;color:#f5d98a;font-size:.95rem}
 .chat-st{font-size:.62rem;color:#7a6e78}
-.chat-area{flex:1;overflow-y:auto;padding:.8rem;display:flex;flex-direction:column;gap:.7rem;min-height:0}
-.msg{max-width:85%;padding:.7rem .95rem;border-radius:4px;font-family:'Cormorant Garamond',serif;font-size:1.05rem;line-height:1.55;animation:msgIn .3s ease}
+.chat-area{flex:0 1 auto;overflow-y:auto;padding:.8rem;display:flex;flex-direction:column;gap:.7rem;min-height:0}
+.msg{max-width:85%;padding:.7rem .95rem;border-radius:4px;font-family:'Cormorant Garamond',serif;font-size:1.25rem;line-height:1.55;animation:msgIn .3s ease}
 @keyframes msgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .msg.soul{align-self:flex-start;background:rgba(36,26,32,.6);border-left:2px solid rgba(201,168,76,.5);color:#f2ece4;font-style:italic}
 .msg.user{align-self:flex-end;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:#f2ece4}
@@ -176,10 +176,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 .dot:nth-child(2){animation-delay:.15s}.dot:nth-child(3){animation-delay:.3s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-4px);opacity:1}}
 .chat-input-area{padding:.85rem 1rem;border-top:1px solid #2a1f28;background:rgba(7,5,10,.95);display:flex;gap:.6rem;flex-shrink:0}
-.chat-in{flex:1;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:20px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:.92rem;padding:.6rem 1rem;outline:none}
+.chat-in{flex:1;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:20px;color:#f2ece4;font-family:'Cormorant Garamond',serif;font-size:1.1rem;padding:.6rem 1rem;outline:none}
 .chat-in:focus{border-color:rgba(201,168,76,.4)}
 .chat-in::placeholder{color:#5a5058}
-.send-btn{background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:50%;width:36px;height:36px;color:#07050a;font-size:.9rem;cursor:pointer;flex-shrink:0}
+.send-btn{background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:50%;width:2.5rem;height:2.5rem;color:#07050a;font-size:1.1rem;cursor:pointer;flex-shrink:0}
 .send-btn:disabled{opacity:.3;cursor:default}
 
 /* ══════════════════════════════════
@@ -995,6 +995,7 @@ async function sendModuloMsg(){
     addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
   }finally{
     document.getElementById('moduloBtn').disabled=false;
+    document.getElementById('moduloIn').focus();
   }
 }
 var usuarioId=null;
@@ -1581,6 +1582,7 @@ function initChat(){
   if(chatHistory.length>0)return;
   addMsg('soul','Hola. ¿Cómo estás?');
   chatHistory.push({role:'assistant',content:'Hola. ¿Cómo estás?'});
+  document.getElementById('chatIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
   // Listeners para inputs
 document.getElementById('fnac').addEventListener('change',function(){chkStep(0)});
 document.getElementById('fnac').addEventListener('blur',function(){chkStep(0)});
@@ -1620,7 +1622,7 @@ async function sendMsg(){
   inp.value='';document.getElementById('sendBtn').disabled=true;
   try{
     await enviarAlChat(txt);
-  }finally{document.getElementById('sendBtn').disabled=false;}
+  }finally{document.getElementById('sendBtn').disabled=false;inp.focus();}
 }
 
 async function enviarAlChat(txt){
