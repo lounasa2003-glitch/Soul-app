@@ -830,7 +830,7 @@ var MODULOS_INFO={
   }
 };
 
-function buildModuloPrompt(perfilData, moduloEsencial, referencias){
+function buildModuloPrompt(perfilData, moduloEsencial, referencias, transcriptoCharla){
   var info=MODULOS_INFO[moduloEsencial]||MODULOS_INFO['Capacidad de volver a elegir'];
   return `Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
@@ -839,11 +839,17 @@ Estás en la etapa de preparación para el encuentro. Ya conociste bien a esta p
 
 IMPORTANTE: Nunca nombrás este módulo directamente ni decís que estás "trabajando" algo. La persona no sabe que estás siguiendo un plan — solo siente que están teniendo una conversación significativa.
 
+CONVERSACIÓN ANTERIOR CON ESTA PERSONA
+${transcriptoCharla||'(no disponible)'}
+
 REFERENCIAS CULTURALES DE ESTA PERSONA
 ${referencias||'No se detectaron referencias específicas — usá recursos universales y describílos brevemente.'}
 
+MEMORIA — MUY IMPORTANTE
+Ya tenés arriba la conversación anterior completa. NO vuelvas a preguntar nada que ya se haya hablado ahí — ni el nombre, ni referencias culturales, ni nada de lo que ya contó. Si necesitás retomar algo de esa charla, hacelo mencionándolo como algo que ya sabés ("me quedé pensando en lo que me contaste de...", no "¿tenés alguna película que...?").
+
 CÓMO ARRANCAR
-Traé algo del universo cultural de esta persona como puerta de entrada. Si no mencionó referencias, usá una historia universal y describila en dos líneas. El tema tiene que conectar naturalmente con ${info.descripcion}.
+Traé algo del universo cultural de esta persona como puerta de entrada, tomado de la conversación anterior. Si no mencionó nada ahí, usá una historia universal y describila en dos líneas. El tema tiene que conectar naturalmente con ${info.descripcion}.
 
 ESTRUCTURA DEL MÓDULO
 1. Entrás con la referencia cultural como disparador
@@ -880,7 +886,8 @@ function initModulo(perfilExtraido, moduloEsencial, referencias){
   document.getElementById('moduloArea').innerHTML='';
   document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
 
-  var prompt=buildModuloPrompt(perfilExtraido, moduloEsencial, referencias);
+  var transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+  var prompt=buildModuloPrompt(perfilExtraido, moduloEsencial, referencias, transcriptoCharla);
 
   // Primer mensaje de Soul
   llamarChat({
@@ -1534,7 +1541,7 @@ var chatHistory=[];
 var conversacionId=null;
 var intercambiosDesdeGuardado=0;
 var INTERCAMBIOS_AUTOSAVE=4;
-var SOUL_PROMPT=`Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
+var SOUL_PROMPT_BASE=`Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
 PRINCIPIO CENTRAL
 Tu objetivo no es generar matches. Tu objetivo es ayudar a cada persona a desarrollar mayor conciencia sobre sí misma, sus patrones vinculares y sus necesidades relacionales. No preguntás edad, profesión, estado civil ni qué busca en los primeros intercambios.
@@ -1590,6 +1597,21 @@ Cuando tengas TODO lo anterior, proponés avanzar con esta frase exacta, sin var
 
 No uses otras variaciones de esta frase — el sistema la detecta para saber cuándo activar el siguiente paso.`;
 
+// El wizard (paso 8) ya pudo haber preguntado directamente pelicula/cancion/libro
+// antes de llegar a esta charla -- si Soul no se entera, los vuelve a preguntar
+// como si fuera nuevo. Se arma el prompt en el momento para incluir eso.
+function buildSoulPrompt(){
+  var refs=[];
+  var pelicula=document.getElementById('refPelicula').value.trim();
+  var cancion=document.getElementById('refCancion').value.trim();
+  var libro=document.getElementById('refLibro').value.trim();
+  if(pelicula)refs.push('película: '+pelicula);
+  if(cancion)refs.push('canción: '+cancion);
+  if(libro)refs.push('libro: '+libro);
+  if(refs.length===0)return SOUL_PROMPT_BASE;
+  return SOUL_PROMPT_BASE+'\n\nYA RESPONDIÓ ESTO ANTES (en un formulario previo, no en esta charla) — no se lo vuelvas a preguntar, dalo por sabido:\n'+refs.join('\n');
+}
+
 function initChat(){
   if(chatHistory.length>0)return;
   addMsg('soul','Hola. ¿Cómo estás?');
@@ -1621,6 +1643,21 @@ function addMsg(tipo,txt){
   document.getElementById('chatArea').appendChild(div);
   document.getElementById('chatArea').scrollTop=9999;
 }
+// En mobile, 100dvh no contempla el teclado virtual: cuando se abre o se
+// cierra, el scroll ya seteado queda desactualizado respecto al nuevo alto
+// visible. Se vuelve a pegar al fondo cada vez que cambia el viewport visual.
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',function(){
+    var e4=document.getElementById('e4');
+    if(e4&&e4.classList.contains('activa')){
+      document.getElementById('chatArea').scrollTop=9999;
+    }
+    var e4b=document.getElementById('e4b');
+    if(e4b&&e4b.classList.contains('activa')){
+      document.getElementById('moduloArea').scrollTop=9999;
+    }
+  });
+}
 function showTyping(){
   var d=document.createElement('div');d.className='msg soul typing';d.id='typing';
   d.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
@@ -1641,7 +1678,7 @@ async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
   showTyping();
   try{
-    var data=await llamarChat({model:"claude-sonnet-4-6",max_tokens:300,system:SOUL_PROMPT,messages:chatHistory});
+    var data=await llamarChat({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory});
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||""}).join(""));
     hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
 
@@ -1665,7 +1702,7 @@ var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basad
 function addMsgConBoton(){
   var div=document.createElement('div');
   div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
-  div.innerHTML='<button onclick="avanzarAlMatch()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, avancemos →</button><button onclick="seguirConversando()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Quiero seguir un poco más</button>';
+  div.innerHTML='<button onclick="avanzarAlMatch()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, avancemos al siguiente paso →</button><button onclick="seguirConversando()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Prefiero seguir charlando acá</button>';
   document.getElementById('chatArea').appendChild(div);
   document.getElementById('chatArea').scrollTop=9999;
 }
@@ -1673,7 +1710,13 @@ function addMsgConBoton(){
 function seguirConversando(){
   var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
   bots.forEach(function(b){b.remove()});
-  enviarAlChat('Quiero seguir un poco más.');
+  enviarAlChat('Prefiero seguir charlando un poco más.');
+}
+
+function timeoutTras(ms){
+  return new Promise(function(_,reject){
+    setTimeout(function(){reject(new Error('timeout_avanzar'))},ms);
+  });
 }
 
 async function avanzarAlMatch(){
@@ -1681,65 +1724,74 @@ async function avanzarAlMatch(){
   var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
   bots.forEach(function(b){b.remove()});
   addMsg('soul','Dame un momento para preparar algo especial para vos...');
+  showTyping();
 
   try{
-    // 1. Extraer perfil
-    var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
-
-    // 2. Guardar perfil y conversación
-    await guardarPerfil(perfil);
-    await guardarConversacion();
-
-    // 3. Detectar módulo esencial con sistema de módulos
-    var moduloInfo=await pedirJSON({
-      model:'claude-sonnet-4-6',
-      max_tokens:200,
-      system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
-      messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
-    });
-
-    // Guardar info para cuando elija qué hacer
-    window.perfilRecienExtraido=perfil;
-    window.moduloInfoGuardada=moduloInfo;
-
-    // 4. Actualizar etapa_actual en la base
-    if(usuarioId){
-      guardarTabla('usuarios',{etapa_actual:'modulos'},'id=eq.'+usuarioId).catch(function(){});
-    }
-
-    // Guardar el banco cultural: lo que respondió directo en el wizard +
-    // lo que Soul detectó espontáneamente en la charla. Los inputs del
-    // wizard siguen vivos en el DOM aunque ya se haya navegado al chat.
-    guardarTabla('perfiles',{
-      usuario_id: usuarioId,
-      referencias_culturales: JSON.stringify({
-        pelicula: document.getElementById('refPelicula').value.trim()||null,
-        cancion: document.getElementById('refCancion').value.trim()||null,
-        libro: document.getElementById('refLibro').value.trim()||null,
-        detectado_en_charla: moduloInfo.referencias_culturales||null
-      })
-    }).catch(function(){});
-
-    // 5. Calcular matches en paralelo mientras la persona elige
-    calcularMatches();
-
-    // 6. Mostrar elección de sesión (o seguir completando perfil) según el % alcanzado
-    var uActual=null;
-    try{
-      var usuariosActual=await leerTabla('usuarios','id=eq.'+usuarioId);
-      if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
-    }catch(e){}
-    var pctActual=calcularPorcentajePerfil(uActual,perfil);
-    setTimeout(function(){
-      mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
-    },1500);
-
+    // Si por lo que sea esto se cuelga de verdad (no solo tarda), a los 90s
+    // se corta y se muestra el error real en vez de dejar la pantalla así
+    // para siempre.
+    await Promise.race([hacerAvanzar(), timeoutTras(90000)]);
   }catch(e){
+    hideTyping();
     console.error('Error en pipeline:',e);
     addMsg('soul','Perdón, algo se complicó de mi lado guardando todo esto.');
     addBotonReintentarMatch();
   }
+}
+
+async function hacerAvanzar(){
+  // 1. Extraer perfil
+  var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+  var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
+
+  // 2. Guardar perfil y conversación
+  await guardarPerfil(perfil);
+  await guardarConversacion();
+
+  // 3. Detectar módulo esencial con sistema de módulos
+  var moduloInfo=await pedirJSON({
+    model:'claude-sonnet-4-6',
+    max_tokens:200,
+    system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
+    messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
+  });
+
+  // Guardar info para cuando elija qué hacer
+  window.perfilRecienExtraido=perfil;
+  window.moduloInfoGuardada=moduloInfo;
+
+  // 4. Actualizar etapa_actual en la base
+  if(usuarioId){
+    guardarTabla('usuarios',{etapa_actual:'modulos'},'id=eq.'+usuarioId).catch(function(){});
+  }
+
+  // Guardar el banco cultural: lo que respondió directo en el wizard +
+  // lo que Soul detectó espontáneamente en la charla. Los inputs del
+  // wizard siguen vivos en el DOM aunque ya se haya navegado al chat.
+  guardarTabla('perfiles',{
+    usuario_id: usuarioId,
+    referencias_culturales: JSON.stringify({
+      pelicula: document.getElementById('refPelicula').value.trim()||null,
+      cancion: document.getElementById('refCancion').value.trim()||null,
+      libro: document.getElementById('refLibro').value.trim()||null,
+      detectado_en_charla: moduloInfo.referencias_culturales||null
+    })
+  }).catch(function(){});
+
+  // 5. Calcular matches en paralelo mientras la persona elige
+  calcularMatches();
+
+  // 6. Mostrar elección de sesión (o seguir completando perfil) según el % alcanzado
+  var uActual=null;
+  try{
+    var usuariosActual=await leerTabla('usuarios','id=eq.'+usuarioId);
+    if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
+  }catch(e){}
+  var pctActual=calcularPorcentajePerfil(uActual,perfil);
+  hideTyping();
+  setTimeout(function(){
+    mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
+  },1500);
 }
 
 function addBotonReintentarMatch(){
