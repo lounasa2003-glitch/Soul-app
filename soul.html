@@ -592,6 +592,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <div class="chat-header">
       <div class="chat-orb"></div>
       <div><div class="chat-nm">Soul</div><div class="chat-st">conversando con vos</div></div>
+      <span onclick="pedirPausaChat()" style="margin-left:auto;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
     </div>
     <div class="chat-area" id="chatArea"></div>
     <div class="chat-input-area">
@@ -610,6 +611,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="chat-nm">Soul</div>
         <div class="chat-st" id="moduloLabel">preparándote para el encuentro</div>
       </div>
+      <span onclick="pedirPausaModulo()" style="margin-left:auto;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
     </div>
     <div class="chat-area" id="moduloArea"></div>
     <div class="chat-input-area">
@@ -867,7 +869,7 @@ Cada vez que terminás un momento significativo de la conversación — cuando a
 
 Si en algún momento notás que la persona está muy sensibilizada o se emocionó con algo, no esperes a un cierre de segmento — hacé este cierre ahí mismo. Y en ese caso puntual, NO profundices ni sigas indagando sobre lo que la movilizó: nada de preguntar por qué le pasa esto ni pedirle más detalles. Esto no es terapia ni análisis psicológico — tu única función ahí es que se sienta vista y cuidada, no explorada.
 
-Si dice que prefiere pausar, cerrás con calidez y le decís que cuando vuelva van a seguir desde donde quedaron.
+Si en cualquier momento la persona pide pausar o dejarlo por hoy directamente, sin que se lo hayas preguntado vos, no esperes al cierre de segmento — cerrá ahí mismo con calidez, reconociendo lo que compartió, y usá la misma pregunta de cierre ("¿preferís dejarlo acá y mañana continuamos?") para confirmarlo.
 
 LA HERRAMIENTA
 En algún momento natural del módulo, sin forzarlo, le dejás esta herramienta: "${info.herramienta}"
@@ -882,7 +884,7 @@ REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
 
-function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla){
+function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla, historialPrevio){
   // Si no viene un transcripto ya armado (ej. reconstruido desde la BD tras
   // una recarga), se arma a partir de la charla viva en esta pestana.
   if(!transcriptoCharla){
@@ -892,19 +894,31 @@ function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, opo
     modulo:moduloEsencial, perfil:perfilExtraido, referencias:referencias,
     transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades
   };
-  moduloHistory=[];
   document.getElementById('moduloArea').innerHTML='';
   document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
-
-  // Antes de entrar al módulo, se ofrece compartir una síntesis de cómo la
-  // ve Soul hasta ahora ("espejo") -- reemplaza la vieja apertura directa
-  // al módulo, que dejaba que el modelo improvisara la transición.
-  addModuloMsg('soul','Con todo lo que estuvimos conversando, puedo darte una mirada de cómo sos. ¿Te gustaría que te la comparta?');
-  addBotonesEspejo();
 
   document.getElementById('moduloIn').addEventListener('keydown',function(e){
     if(e.key==='Enter')sendModulo();
   });
+
+  // Si ya hay charla de módulo guardada de antes (se volvió a entrar después
+  // de haber arrancado el módulo en otra sesión), se retoma tal cual quedó
+  // en vez de volver a ofrecer el espejo desde cero.
+  if(historialPrevio&&historialPrevio.length>0){
+    moduloHistory=historialPrevio.slice();
+    moduloHistory.forEach(function(m){
+      addModuloMsg(m.role==='assistant'?'soul':'user', m.content);
+    });
+    moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+    return;
+  }
+
+  // Antes de entrar al módulo, se ofrece compartir una síntesis de cómo la
+  // ve Soul hasta ahora ("espejo") -- reemplaza la vieja apertura directa
+  // al módulo, que dejaba que el modelo improvisara la transición.
+  moduloHistory=[];
+  addModuloMsg('soul','Con todo lo que estuvimos conversando, puedo darte una mirada de cómo sos. ¿Te gustaría que te la comparta?');
+  addBotonesEspejo();
 }
 
 function addBotonesEspejo(){
@@ -956,10 +970,20 @@ async function mostrarEspejo(){
     var t=document.getElementById('moduloTyping');if(t)t.remove();
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
+    guardarModuloHistorial().catch(function(){});
   }catch(e){
     var t2=document.getElementById('moduloTyping');if(t2)t2.remove();
   }
   iniciarModuloReal();
+}
+
+// El módulo no tenía NINGÚN guardado propio -- si se cerraba la app en medio
+// de esta charla se perdía entera, a diferencia del chat principal que ya
+// tenía autosave periódico. Se guarda incondicionalmente (sin depender de
+// ningún click) cada vez que llega una respuesta nueva de Soul.
+async function guardarModuloHistorial(){
+  if(!usuarioId)return;
+  await guardarTabla('perfiles',{usuario_id:usuarioId,modulo_historial:JSON.stringify(moduloHistory)});
 }
 
 function saltearEspejo(){
@@ -982,6 +1006,7 @@ function iniciarModuloReal(){
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
     moduloData.prompt=prompt;
+    guardarModuloHistorial().catch(function(){});
   }).catch(function(e){
     addModuloMsg('soul','Hay algo que me gustaría explorar con vos antes de seguir. ¿Estás?');
   });
@@ -1055,16 +1080,32 @@ function pausarModulo(){
   var b=document.getElementById('moduloBtns');if(b)b.remove();
   addModuloMsg('user','Prefiero dejarlo para mañana.');
   moduloHistory.push({role:'user',content:'Prefiero dejarlo para mañana.'});
-  addModuloMsg('soul','Perfecto. Lo que trabajamos hoy ya quedó. Cuando volvás seguimos desde acá. Cuídate. 🌙');
+  var cierre='Perfecto. Lo que trabajamos hoy ya quedó. Cuando volvás seguimos desde acá. Cuídate. 🌙';
+  addModuloMsg('soul',cierre);
+  moduloHistory.push({role:'assistant',content:cierre});
+  guardarModuloHistorial().catch(function(){});
+}
+
+// Botón fijo de "Dejar por ahora" en el módulo: manda el mismo mensaje que
+// escribiría alguien directamente, por el mismo camino que un mensaje normal
+// (Soul es quien decide si ya es momento de cerrar o si prefiere acompañar
+// un poco más antes).
+function pedirPausaModulo(){
+  document.getElementById('moduloBtn').disabled=true;
+  enviarAlModulo('Prefiero dejar esto por ahora.');
 }
 
 async function sendModulo(){
   var inp=document.getElementById('moduloIn');
   var txt=inp.value.trim();if(!txt)return;
-  addModuloMsg('user',txt);
-  moduloHistory.push({role:'user',content:txt});
   inp.value='';
   document.getElementById('moduloBtn').disabled=true;
+  await enviarAlModulo(txt);
+}
+
+async function enviarAlModulo(txt){
+  addModuloMsg('user',txt);
+  moduloHistory.push({role:'user',content:txt});
   var typing=document.createElement('div');
   typing.className='msg soul typing';typing.id='moduloTyping';
   typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
@@ -1086,6 +1127,7 @@ async function sendModuloMsg(){
     if(typing)typing.remove();
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
+    guardarModuloHistorial().catch(function(){});
   }catch(e){
     if(typing)typing.remove();
     addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
@@ -1521,8 +1563,16 @@ async function elegirSesion(tipo){
             }
           }catch(e){}
 
+          // Si ya se había arrancado el módulo antes (y se guardó en el
+          // camino), se retoma esa charla en vez de volver a ofrecer el
+          // espejo desde cero.
+          var historialModuloGuardado=[];
+          try{
+            if(perfilGuardado.modulo_historial) historialModuloGuardado=JSON.parse(perfilGuardado.modulo_historial)||[];
+          }catch(e){}
+
           ir('4b');
-          initModulo(perfilGuardado, perfilGuardado.modulo_esencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado);
+          initModulo(perfilGuardado, perfilGuardado.modulo_esencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado, historialModuloGuardado);
           return;
         }
       }catch(e){}
@@ -1691,7 +1741,11 @@ function loadPhoto(inp,upId,isCara){
 var chatHistory=[];
 var conversacionId=null;
 var intercambiosDesdeGuardado=0;
-var INTERCAMBIOS_AUTOSAVE=4;
+var INTERCAMBIOS_AUTOSAVE=2;
+// Debajo de este largo de charla, pedir pausar todavía no es "viable" --
+// no hay material real para guardar como perfil parcial, así que Soul
+// prefiere invitar a seguir un poco más en vez de cerrar de una.
+var UMBRAL_VIABLE_PAUSA=6;
 var SOUL_PROMPT_BASE=`Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
 PRINCIPIO CENTRAL
@@ -1738,6 +1792,9 @@ Si la persona habla de algo vulnerable, se emociona, o el tema se pone pesado, n
 
 Esto NO es un espacio de terapia ni de análisis psicológico. No profundices, no busques entender el origen de lo que sintió, no hagas más preguntas sobre el tema — la prioridad es que la persona se sienta vista y cuidada, no explorada.
 
+PAUSAR CUANDO LO PIDE DIRECTAMENTE
+Si en cualquier momento la persona pide pausar, cortar o dejar la charla por ahora -- sin que vos se lo hayas preguntado y sin que haya nada vulnerable de por medio -- respetalo siempre. Reconocé con calidez lo que charlaron hasta ahora y cerrá con la misma pregunta que usás en la contención emocional: "¿Seguimos un poco más o preferís dejarlo acá y mañana continuamos?"
+
 CUÁNDO CERRAR LA CONVERSACIÓN
 No propongas cerrar hasta haber reunido TODO esto:
 - El identikit de la persona en tercera persona ("contame un poco de [nombre]")
@@ -1747,11 +1804,11 @@ No propongas cerrar hasta haber reunido TODO esto:
 
 Si todavía no tenés las referencias culturales, seguí conversando y buscá el espacio natural para preguntarlas — por ejemplo con algo como "¿hay alguna película o canción que sientas que te representa?" o "contame de algún viaje que te haya marcado". No cierres solo porque ya tenés el identikit — las referencias culturales son igual de importantes porque las vas a necesitar después.
 
-Cuando tengas TODO lo anterior, proponés avanzar con esta frase exacta, sin variaciones:
+Cuando tengas TODO lo anterior, vos misma decidís que es momento de cerrar esta etapa -- no se lo preguntás a la persona, se lo anunciás con esta frase exacta, sin variaciones:
 
-"[Nombre], creo que ya tengo una imagen bastante clara de quién sos. Hiciste un buen trabajo hoy. ¿Querés que avancemos al siguiente paso?"
+"[Nombre], siento que ya tenemos una buena base para seguir construyendo esto. Dejame preparar algo con todo lo que hablamos."
 
-No uses otras variaciones de esta frase — el sistema la detecta para saber cuándo activar el siguiente paso.`;
+No uses otras variaciones de esta frase, y no la formules como pregunta -- el sistema la detecta para saber cuándo avanzar automáticamente al siguiente paso.`;
 
 // El wizard (paso 8) ya pudo haber preguntado directamente pelicula/cancion/libro
 // antes de llegar a esta charla -- si Soul no se entera, los vuelve a preguntar
@@ -1764,8 +1821,17 @@ function buildSoulPrompt(){
   if(pelicula)refs.push('película: '+pelicula);
   if(cancion)refs.push('canción: '+cancion);
   if(libro)refs.push('libro: '+libro);
-  if(refs.length===0)return SOUL_PROMPT_BASE;
-  return SOUL_PROMPT_BASE+'\n\nYA RESPONDIÓ ESTO ANTES (en un formulario previo, no en esta charla) — no se lo vuelvas a preguntar, dalo por sabido:\n'+refs.join('\n');
+  var prompt=SOUL_PROMPT_BASE;
+  if(refs.length>0){
+    prompt+='\n\nYA RESPONDIÓ ESTO ANTES (en un formulario previo, no en esta charla) — no se lo vuelvas a preguntar, dalo por sabido:\n'+refs.join('\n');
+  }
+  // Recién arrancando la charla no hay material real para guardar si la
+  // persona pide pausar -- esta cláusula tiene prioridad sobre "PAUSAR CUANDO
+  // LO PIDE DIRECTAMENTE" mientras dure esta etapa temprana.
+  if(chatHistory.length<UMBRAL_VIABLE_PAUSA){
+    prompt+='\n\nTODAVÍA ES MUY PRONTO PARA PAUSAR\nRecién están arrancando a conocerse. Si en este punto la persona pide pausar, cerrar o dejarlo para después, no lo curses como un cierre real -- con calidez, decile que te gustaría charlar un poquito más antes, porque si corta ahora esto no queda guardado como avance. Invitala a seguir, sin sonar como una regla técnica ni repetirlo como excusa.';
+  }
+  return prompt;
 }
 
 function initChat(){
@@ -1830,6 +1896,17 @@ async function sendMsg(){
   }finally{document.getElementById('sendBtn').disabled=false;inp.focus();}
 }
 
+// Botón fijo de "Dejar por ahora": manda el mismo mensaje que escribiría
+// alguien directamente, por el mismo camino que un mensaje normal -- es
+// Soul (vía el prompt) quien decide si ya es momento de cerrar o si prefiere
+// acompañar un poco más antes (ver TODAVÍA ES MUY PRONTO PARA PAUSAR).
+function pedirPausaChat(){
+  document.getElementById('sendBtn').disabled=true;
+  enviarAlChat('Prefiero dejar esto por ahora.').finally(function(){
+    document.getElementById('sendBtn').disabled=false;
+  });
+}
+
 async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
   showTyping();
@@ -1844,11 +1921,14 @@ async function enviarAlChat(txt){
       guardarConversacion(false).catch(function(){});
     }
 
-    // Detectar frase de cierre de Soul
-    if(reply.indexOf('¿Querés que avancemos al siguiente paso?')>-1){
+    // Detectar frase de cierre de Soul -- ahora ella decide sola cuándo
+    // avanzar (no se le pregunta al usuario con dos botones "avanzar" vs
+    // "seguir charlando", que generaban confusión). El delay es solo para
+    // que se alcance a leer el mensaje antes de que arranque el pipeline.
+    if(reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1){
       setTimeout(function(){
-        addMsgConBoton();
-      },800);
+        avanzarAlMatch();
+      },1800);
     }
     // Detectar si Soul propone pausar por contención emocional
     if(reply.indexOf('preferís dejarlo acá')>-1||reply.indexOf('mañana continuamos')>-1){
@@ -1861,6 +1941,7 @@ async function enviarAlChat(txt){
 
 function addBotonesPausarChat(){
   var div=document.createElement('div');
+  div.id='pausarChatBtns';
   div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
   div.innerHTML='<button onclick="continuarChatPrincipal()" style="padding:.55rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;cursor:pointer">Seguimos →</button><button onclick="pausarChatPrincipal()" style="padding:.55rem .9rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">Dejemos para mañana</button>';
   document.getElementById('chatArea').appendChild(div);
@@ -1868,35 +1949,34 @@ function addBotonesPausarChat(){
 }
 
 function continuarChatPrincipal(){
-  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
-  bots.forEach(function(b){b.remove()});
+  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
   enviarAlChat('Seguimos.');
 }
 
 function pausarChatPrincipal(){
-  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
-  bots.forEach(function(b){b.remove()});
+  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
   addMsg('user','Prefiero dejarlo para mañana.');
   chatHistory.push({role:'user',content:'Prefiero dejarlo para mañana.'});
   var cierre='Perfecto. Lo que hablamos hoy ya quedó. Cuando vuelvas seguimos desde acá. Cuídate. 🌙';
   addMsg('soul',cierre);
   chatHistory.push({role:'assistant',content:cierre});
+  guardarProgresoAlPausar();
 }
 
 var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
 
-function addMsgConBoton(){
-  var div=document.createElement('div');
-  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
-  div.innerHTML='<button onclick="avanzarAlMatch()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, avancemos al siguiente paso →</button><button onclick="seguirConversando()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Prefiero seguir charlando acá</button>';
-  document.getElementById('chatArea').appendChild(div);
-  document.getElementById('chatArea').scrollTop=9999;
-}
-
-function seguirConversando(){
-  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
-  bots.forEach(function(b){b.remove()});
-  enviarAlChat('Prefiero seguir charlando un poco más.');
+// Guardado incondicional al pausar la charla principal: el transcript
+// completo se guarda siempre, y además se intenta extraer y persistir lo
+// que ya se pueda inferir del perfil (aunque venga incompleto) para no
+// depender de que la persona haya llegado al cierre elegido por Soul.
+async function guardarProgresoAlPausar(){
+  guardarConversacion(false).catch(function(){});
+  if(!usuarioId||chatHistory.length<UMBRAL_VIABLE_PAUSA)return;
+  try{
+    var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+    var perfilParcial=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación (puede estar incompleta -- extraé lo que se pueda, dejá en blanco lo que no):\n\n'+conv}]});
+    await guardarPerfil(perfilParcial);
+  }catch(e){}
 }
 
 function timeoutTras(ms){
@@ -1907,8 +1987,7 @@ function timeoutTras(ms){
 
 async function avanzarAlMatch(){
   // Mostrar loading
-  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
-  bots.forEach(function(b){b.remove()});
+  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
   addMsg('soul','Dame un momento para preparar algo especial para vos...');
   showTyping();
 
