@@ -1018,10 +1018,45 @@ async function sendModuloMsg(){
 }
 var usuarioId=null;
 
-function avisarSesionExpirada(){
-  if(window.sesionExpiradaAvisada)return;
-  window.sesionExpiradaAvisada=true;
-  alert('Tu sesión expiró. Actualizá la página para volver a entrar.');
+function mostrarSesionExpirada(){
+  if(window.sesionExpiradaMostrada)return;
+  window.sesionExpiradaMostrada=true;
+  var m=document.getElementById('sesionExpiradaModal');
+  if(m)m.style.display='flex';
+}
+
+// Intenta renovar el access_token con el refresh_token guardado al loguearse.
+// Devuelve true si consiguió uno nuevo (y ya quedó en accessToken/refreshToken).
+async function refrescarSesion(){
+  if(!refreshToken)return false;
+  try{
+    var res=await fetch('/api/auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'refrescar',refresh_token:refreshToken})
+    });
+    if(!res.ok)return false;
+    var data=await res.json();
+    if(!data.access_token)return false;
+    accessToken=data.access_token;
+    refreshToken=data.refresh_token||refreshToken;
+    return true;
+  }catch(e){return false;}
+}
+
+// Envoltorio compartido por leerTabla/guardarTabla/llamarChat: ante un 401,
+// intenta refrescar la sesión en silencio y reintenta una sola vez antes de
+// avisarle a la persona que tiene que volver a entrar.
+async function fetchConSesion(hacerFetch){
+  var res=await hacerFetch();
+  if(res.status===401&&await refrescarSesion()){
+    res=await hacerFetch();
+  }
+  if(res.status===401){
+    mostrarSesionExpirada();
+    throw new Error('sesion_expirada');
+  }
+  return res;
 }
 
 // vercel dev trunca el query string en el segundo "=" de un valor sin encodear
@@ -1030,8 +1065,9 @@ function avisarSesionExpirada(){
 async function leerTabla(tabla,filtro){
   var url='/api/leer?tabla='+encodeURIComponent(tabla);
   if(filtro) url+='&filtro='+encodeURIComponent(filtro);
-  var res=await fetch(url,{headers:{'Authorization':'Bearer '+accessToken}});
-  if(res.status===401){avisarSesionExpirada();throw new Error('sesion_expirada');}
+  var res=await fetchConSesion(function(){
+    return fetch(url,{headers:{'Authorization':'Bearer '+accessToken}});
+  });
   if(!res.ok){throw new Error('error_leyendo_'+tabla);}
   return res.json();
 }
@@ -1039,23 +1075,25 @@ async function leerTabla(tabla,filtro){
 async function guardarTabla(tabla,datos,filtro){
   var body={tabla:tabla,datos:datos};
   if(filtro) body.filtro=filtro;
-  var res=await fetch('/api/guardar',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
-    body:JSON.stringify(body)
+  var res=await fetchConSesion(function(){
+    return fetch('/api/guardar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      body:JSON.stringify(body)
+    });
   });
-  if(res.status===401){avisarSesionExpirada();throw new Error('sesion_expirada');}
   if(!res.ok){throw new Error('error_guardando_'+tabla);}
   return res.json();
 }
 
 async function llamarChat(datos){
-  var res=await fetch('/api/chat',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
-    body:JSON.stringify(datos)
+  var res=await fetchConSesion(function(){
+    return fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      body:JSON.stringify(datos)
+    });
   });
-  if(res.status===401){avisarSesionExpirada();return {content:[]};}
   if(res.status===429){
     var err=await res.json();
     var e=new Error(err.mensaje||'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.');
@@ -1206,6 +1244,7 @@ async function guardarConversacion(completada){
 // ── AUTENTICACIÓN ──
 var authMode='registro';
 var accessToken=null;
+var refreshToken=null;
 var userEmail=null;
 
 function toggleAuthMode(){
@@ -1309,6 +1348,7 @@ async function hacerAuth(){
     }
 
     accessToken=data.access_token;
+    refreshToken=data.refresh_token;
     userEmail=email;
 
     if(authMode==='registro'){
@@ -1413,12 +1453,13 @@ async function analizarConversacionExterna(){
   document.getElementById('analisisResultado').style.display='none';
 
   try{
-    var res=await fetch('/api/analisisExterno',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
-      body:JSON.stringify({conversacion:conv,nombre:nombre})
+    var res=await fetchConSesion(function(){
+      return fetch('/api/analisisExterno',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+        body:JSON.stringify({conversacion:conv,nombre:nombre})
+      });
     });
-    if(res.status===401){avisarSesionExpirada();return;}
     var resultado=await res.json();
 
     if(!res.ok){
@@ -1806,11 +1847,12 @@ async function calcularMatches(){
   if(!usuarioId)return;
   window.matchEncontrado=false;
   try{
-    var res=await fetch('/api/calcularMatches',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken}
+    var res=await fetchConSesion(function(){
+      return fetch('/api/calcularMatches',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken}
+      });
     });
-    if(res.status===401){avisarSesionExpirada();return;}
     var data=await res.json();
     if(data&&data.matchEncontrado){
       window.matchEncontrado=true;
@@ -1921,5 +1963,13 @@ function elegir(si){
   document.getElementById('eleccionFinal').style.display='block';
 }
 </script>
+
+<div id="sesionExpiradaModal" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem">
+  <div style="max-width:340px;text-align:center">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1rem">Tu sesión expiró</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.6;margin-bottom:1.5rem">Tranquilo/a — lo que ya charlaste está guardado. Solo hace falta que vuelvas a entrar para seguir.</p>
+    <button class="btn-gold" onclick="location.reload()" style="width:100%">Volver a entrar →</button>
+  </div>
+</div>
 </body>
 </html>

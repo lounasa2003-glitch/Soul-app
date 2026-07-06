@@ -11,20 +11,25 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { accion, email, password } = req.body;
+    const { accion, email, password, refresh_token } = req.body;
 
     let endpoint = '';
+    let bodyData;
     if (accion === 'registro') {
       endpoint = '/auth/v1/signup';
+      bodyData = { email, password };
     } else if (accion === 'login') {
       endpoint = '/auth/v1/token?grant_type=password';
+      bodyData = { email, password };
     } else if (accion === 'recuperar') {
       endpoint = '/auth/v1/recover';
+      bodyData = { email };
+    } else if (accion === 'refrescar') {
+      endpoint = '/auth/v1/token?grant_type=refresh_token';
+      bodyData = { refresh_token };
     } else {
       return res.status(400).json({ error: 'Acción no válida' });
     }
-
-    const bodyData = accion === 'recuperar' ? { email } : { email, password };
 
     const response = await fetch(`${supabaseUrl}${endpoint}`, {
       method: 'POST',
