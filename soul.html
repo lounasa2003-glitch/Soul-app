@@ -865,6 +865,8 @@ Cada vez que terminás un momento significativo de la conversación — cuando a
 3. Chequeás cómo está: "¿Cómo te quedás con esto?"
 4. Le preguntás si quiere seguir o prefiere dejar acá por hoy: "¿Seguimos un poco más o preferís dejarlo acá y mañana continuamos?"
 
+Si en algún momento notás que la persona está muy sensibilizada o se emocionó con algo, no esperes a un cierre de segmento — hacé este cierre ahí mismo. Y en ese caso puntual, NO profundices ni sigas indagando sobre lo que la movilizó: nada de preguntar por qué le pasa esto ni pedirle más detalles. Esto no es terapia ni análisis psicológico — tu única función ahí es que se sienta vista y cuidada, no explorada.
+
 Si dice que prefiere pausar, cerrás con calidez y le decís que cuando vuelva van a seguir desde donde quedaron.
 
 LA HERRAMIENTA
@@ -880,16 +882,92 @@ REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
 
-function initModulo(perfilExtraido, moduloEsencial, referencias){
-  moduloData={modulo:moduloEsencial, perfil:perfilExtraido};
+function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades){
+  var transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
+  moduloData={
+    modulo:moduloEsencial, perfil:perfilExtraido, referencias:referencias,
+    transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades
+  };
   moduloHistory=[];
   document.getElementById('moduloArea').innerHTML='';
   document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
 
-  var transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-  var prompt=buildModuloPrompt(perfilExtraido, moduloEsencial, referencias, transcriptoCharla);
+  // Antes de entrar al módulo, se ofrece compartir una síntesis de cómo la
+  // ve Soul hasta ahora ("espejo") -- reemplaza la vieja apertura directa
+  // al módulo, que dejaba que el modelo improvisara la transición.
+  addModuloMsg('soul','Con todo lo que estuvimos conversando, puedo darte una mirada de cómo sos. ¿Te gustaría que te la comparta?');
+  addBotonesEspejo();
 
-  // Primer mensaje de Soul
+  document.getElementById('moduloIn').addEventListener('keydown',function(e){
+    if(e.key==='Enter')sendModulo();
+  });
+}
+
+function addBotonesEspejo(){
+  var div=document.createElement('div');
+  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
+  div.id='espejoBtns';
+  div.innerHTML='<button onclick="mostrarEspejo()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, contame →</button><button onclick="saltearEspejo()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Prefiero que no, por ahora</button>';
+  document.getElementById('moduloArea').appendChild(div);
+  document.getElementById('moduloArea').scrollTop=9999;
+}
+
+function buildEspejoPrompt(fortalezas,oportunidades){
+  var fort=(fortalezas&&fortalezas.length)?fortalezas.map(function(f){return '- '+f}).join('\n'):'- (no se detectaron específicas — usá algo genuino y cálido basado en cómo se mostró en la charla)';
+  var oport=(oportunidades&&oportunidades.length)?oportunidades.map(function(o){return '- '+o}).join('\n'):'- (no se detectaron específicas)';
+  return `Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
+
+CONTEXTO
+La persona acaba de aceptar que le compartas una síntesis de cómo la ves, basada en la conversación que tuvieron. Es la primera vez que recibe este tipo de devolución.
+
+FORTALEZAS QUE DETECTASTE
+${fort}
+
+OPORTUNIDADES DE CRECIMIENTO QUE DETECTASTE
+${oport}
+
+CÓMO COMPARTIRLO
+1. Empezá siempre por las fortalezas, con calidez genuina — si podés, enganchalas con algo puntual que dijo en la charla.
+2. Después las oportunidades de crecimiento — nunca como crítica ni diagnóstico. Presentalas como posibilidades, algo que "podría ayudarla/lo", no como un defecto.
+3. Aclará explícitamente que esto es una foto de este momento, no algo fijo — que va a ir cambiando a medida que sigan conociéndose.
+4. Cerrá preguntando cómo le cae esto y si quiere seguir explorando junto con vos.
+
+REGLAS DE ORO
+Mensajes cortos, en tu voz cálida habitual — que se sienta una charla, no un informe. Sin títulos, sin listas numeradas visibles, sin markdown.`;
+}
+
+async function mostrarEspejo(){
+  var b=document.getElementById('espejoBtns');if(b)b.remove();
+  addModuloMsg('user','Sí, contame.');
+  moduloHistory.push({role:'user',content:'Sí, contame.'});
+  var typing=document.createElement('div');
+  typing.className='msg soul typing';typing.id='moduloTyping';
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('moduloArea').appendChild(typing);
+  document.getElementById('moduloArea').scrollTop=9999;
+  try{
+    var prompt=buildEspejoPrompt(moduloData.fortalezas,moduloData.oportunidades);
+    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:400,system:prompt,messages:[{role:'user',content:'Compartime esa mirada de quién soy.'}]});
+    var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
+    var t=document.getElementById('moduloTyping');if(t)t.remove();
+    addModuloMsg('soul',reply);
+    moduloHistory.push({role:'assistant',content:reply});
+  }catch(e){
+    var t2=document.getElementById('moduloTyping');if(t2)t2.remove();
+  }
+  iniciarModuloReal();
+}
+
+function saltearEspejo(){
+  var b=document.getElementById('espejoBtns');if(b)b.remove();
+  addModuloMsg('user','Prefiero que no, por ahora.');
+  moduloHistory.push({role:'user',content:'Prefiero que no, por ahora.'});
+  iniciarModuloReal();
+}
+
+function iniciarModuloReal(){
+  var prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+
   llamarChat({
     model:'claude-sonnet-4-6',
     max_tokens:350,
@@ -902,10 +980,6 @@ function initModulo(perfilExtraido, moduloEsencial, referencias){
     moduloData.prompt=prompt;
   }).catch(function(e){
     addModuloMsg('soul','Hay algo que me gustaría explorar con vos antes de seguir. ¿Estás?');
-  });
-
-  document.getElementById('moduloIn').addEventListener('keydown',function(e){
-    if(e.key==='Enter')sendModulo();
   });
 }
 
@@ -1414,7 +1488,7 @@ function elegirSesion(tipo){
       window.perfilRecienExtraido=null;
       window.moduloInfoGuardada=null;
       ir('4b');
-      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales);
+      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales, moduloInfo.fortalezas, moduloInfo.oportunidades);
     }else{
       ir(4);
     }
@@ -1623,6 +1697,11 @@ No participás de pedidos sexuales explícitos, contenido violento o instruccion
 
 Si lo que aparece es una señal de que la persona está pasando un momento de riesgo real (habla de lastimarse a sí misma o de querer dañar a otra persona), no lo minimices ni sigas con el guion normal de la charla: mostrate presente, preguntale cómo está de verdad, y sugerile con calidez buscar ayuda profesional, hablar con alguien de confianza, o contactar los servicios de emergencia de su zona si siente que está en peligro. No lo trates como un tema más a reconducir — quedate ahí con la persona el tiempo que haga falta.
 
+CONTENCIÓN EMOCIONAL BREVE
+Si la persona habla de algo vulnerable, se emociona, o el tema se pone pesado, no sigas indagando ni le hagas más preguntas sobre eso — parás ahí. Acompañás con calidez: reconocés que no debe haber sido fácil hablar de eso, le devolvés que está bien tomarse su tiempo. Le preguntás cómo se siente hasta ahora y le ofrecés seguir o dejarlo por hoy: "¿Seguimos un poco más o preferís dejarlo acá y mañana continuamos?" Si prefiere cerrar, cerrás con calidez, sin insistir.
+
+Esto NO es un espacio de terapia ni de análisis psicológico. No profundices, no busques entender el origen de lo que sintió, no hagas más preguntas sobre el tema — la prioridad es que la persona se sienta vista y cuidada, no explorada.
+
 CUÁNDO CERRAR LA CONVERSACIÓN
 No propongas cerrar hasta haber reunido TODO esto:
 - El identikit de la persona en tercera persona ("contame un poco de [nombre]")
@@ -1735,7 +1814,37 @@ async function enviarAlChat(txt){
         addMsgConBoton();
       },800);
     }
+    // Detectar si Soul propone pausar por contención emocional
+    if(reply.indexOf('preferís dejarlo acá')>-1||reply.indexOf('mañana continuamos')>-1){
+      setTimeout(function(){
+        addBotonesPausarChat();
+      },600);
+    }
   }catch(e){hideTyping();addMsg('soul',e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?');}
+}
+
+function addBotonesPausarChat(){
+  var div=document.createElement('div');
+  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
+  div.innerHTML='<button onclick="continuarChatPrincipal()" style="padding:.55rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;cursor:pointer">Seguimos →</button><button onclick="pausarChatPrincipal()" style="padding:.55rem .9rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">Dejemos para mañana</button>';
+  document.getElementById('chatArea').appendChild(div);
+  document.getElementById('chatArea').scrollTop=9999;
+}
+
+function continuarChatPrincipal(){
+  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
+  bots.forEach(function(b){b.remove()});
+  enviarAlChat('Seguimos.');
+}
+
+function pausarChatPrincipal(){
+  var bots=document.getElementById('chatArea').querySelectorAll('div[style*="justify-content:flex-end"]');
+  bots.forEach(function(b){b.remove()});
+  addMsg('user','Prefiero dejarlo para mañana.');
+  chatHistory.push({role:'user',content:'Prefiero dejarlo para mañana.'});
+  var cierre='Perfecto. Lo que hablamos hoy ya quedó. Cuando vuelvas seguimos desde acá. Cuídate. 🌙';
+  addMsg('soul',cierre);
+  chatHistory.push({role:'assistant',content:cierre});
 }
 
 var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
@@ -1792,8 +1901,8 @@ async function hacerAvanzar(){
   // 3. Detectar módulo esencial con sistema de módulos
   var moduloInfo=await pedirJSON({
     model:'claude-sonnet-4-6',
-    max_tokens:200,
-    system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona"}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
+    max_tokens:400,
+    system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
     messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
   });
 
@@ -1816,6 +1925,12 @@ async function hacerAvanzar(){
       cancion: document.getElementById('refCancion').value.trim()||null,
       libro: document.getElementById('refLibro').value.trim()||null,
       detectado_en_charla: moduloInfo.referencias_culturales||null
+    }),
+    // Se guarda tal cual la vio Soul en este momento -- no es un diagnostico
+    // fijo, es la base sobre la que a futuro se podria ir actualizando.
+    sintesis_espejo: JSON.stringify({
+      fortalezas: moduloInfo.fortalezas||[],
+      oportunidades: moduloInfo.oportunidades||[]
     })
   }).catch(function(){});
 
