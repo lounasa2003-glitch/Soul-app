@@ -868,7 +868,7 @@ var MODULOS_INFO={
   }
 };
 
-function buildModuloPrompt(perfilData, moduloEsencial, referencias, transcriptoCharla){
+function buildModuloPrompt(perfilData, moduloEsencial, referencias, transcriptoCharla, historialVivo){
   var info=MODULOS_INFO[moduloEsencial]||MODULOS_INFO['Capacidad de volver a elegir'];
   return `Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
@@ -882,6 +882,13 @@ ${transcriptoCharla||'(no disponible)'}
 
 REFERENCIAS CULTURALES DE ESTA PERSONA
 ${referencias||'No se detectaron referencias específicas — usá recursos universales y describílos brevemente.'}
+${moduloEsencial==='Capacidad de volver a elegir'&&historialVivo?`
+TU HISTORIAL REAL EN LA APP -- MUY IMPORTANTE
+Esto es lo que realmente pasó con matches anteriores, no algo que haya contado en una charla:
+${historialVivo}
+
+Si hay al menos dos momentos para comparar, en algún punto de esta charla -- no hace falta que sea en el primer mensaje, pero tampoco lo dejes para el final -- tenés que hacerle una devolución CONCRETA sobre su propia evolución, citando los hechos reales (qué decidió antes y qué decidió ahora), no solo una pregunta general sobre si algo cambió. Por ejemplo: "Hace un tiempo preferiste no seguir adelante con alguien, y te costó bastante. Hoy elegiste seguir conociendo a otra persona, y esta vez te sentiste más tranquila/o." Nombralo con calidez, como una observación genuina que vos notaste -- nunca como un informe o una estadística -- pero tiene que ser concreto, no una alusión vaga a "algo cambió". Nunca la compares con otras personas, siempre con su propio pasado. Si solo hay un momento registrado, todavía no hay suficiente para comparar -- no fuerces la devolución.
+`:''}
 
 MEMORIA — MUY IMPORTANTE
 Ya tenés arriba la conversación anterior completa. NO vuelvas a preguntar nada que ya se haya hablado ahí — ni el nombre, ni referencias culturales, ni nada de lo que ya contó. Si necesitás retomar algo de esa charla, hacelo mencionándolo como algo que ya sabés ("me quedé pensando en lo que me contaste de...", no "¿tenés alguna película que...?").
@@ -930,7 +937,28 @@ REGLAS DE ORO
 Una pregunta por mensaje. Mensajes cortos. Sin títulos ni listas. Hablás como una persona real. Usás el espejo — devolvés sus palabras para que ella encuentre el sentido. Reconocés gestos cálidos. Calidez genuina, nunca obsecuente.`;
 }
 
-function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla, historialPrevio){
+// Historial real de matches (aceptar/rechazar + check-in emocional) para
+// el módulo obligatorio "Capacidad de volver a elegir" -- le da a Soul
+// datos reales de la app, no algo que la persona haya contado en una
+// charla, para poder comparar su evolución en el tiempo.
+async function obtenerHistorialVivo(uid){
+  if(!uid)return null;
+  try{
+    var matches=await leerTabla('matches','usuario_a=eq.'+uid);
+    var respondidos=(matches||[]).filter(function(m){return m.fecha_respuesta}).sort(function(a,b){return new Date(a.fecha_respuesta)-new Date(b.fecha_respuesta)});
+    if(respondidos.length===0)return null;
+    var emociones={tranquila:'se sintió tranquila/o',ansiosa_bien:'se sintió un poco ansiosa/o, pero bien',me_costo:'le costó bastante',prefiero_no_decir:'prefirió no contar cómo se sintió'};
+    var lineas=respondidos.slice(-6).map(function(m,i){
+      var fecha=new Date(m.fecha_respuesta).toLocaleDateString('es-AR',{day:'numeric',month:'long',year:'numeric'});
+      var decision=m.estado==='aceptado'?'aceptó seguir conociendo a esa persona':'prefirió no seguir';
+      var emocion=m.checkin_emocional?emociones[m.checkin_emocional]:null;
+      return (i+1)+'. '+fecha+': '+decision+(emocion?', y '+emocion+'.':'.');
+    });
+    return lineas.join('\n');
+  }catch(e){return null;}
+}
+
+async function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla, historialPrevio){
   // Si no viene un transcripto ya armado (ej. reconstruido desde la BD tras
   // una recarga), se arma a partir de la charla viva en esta pestana.
   if(!transcriptoCharla){
@@ -955,7 +983,8 @@ function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, opo
     moduloHistory.forEach(function(m){
       addModuloMsg(m.role==='assistant'?'soul':'user', m.content);
     });
-    moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+    var historialVivoResume=moduloData.modulo==='Capacidad de volver a elegir'?await obtenerHistorialVivo(usuarioId):null;
+    moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, historialVivoResume);
     return;
   }
 
@@ -1063,10 +1092,11 @@ function iniciarModuloReal(){
 // no compite por ese lugar. Se sigue en el mismo hilo de moduloHistory (sin
 // volver a mostrar el espejo), asi que Soul mantiene todo el contexto de lo
 // que ya se hablo en el modulo anterior.
-function iniciarModuloObligatorio(){
+async function iniciarModuloObligatorio(){
   document.getElementById('moduloLabel').textContent='un último momento antes del encuentro';
   moduloData.modulo='Capacidad de volver a elegir';
-  moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+  var historialVivo=await obtenerHistorialVivo(usuarioId);
+  moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, historialVivo);
   addModuloMsg('user','Seguimos.');
   moduloHistory.push({role:'user',content:'Seguimos.'});
   var typing=document.createElement('div');
