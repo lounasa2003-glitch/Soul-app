@@ -886,6 +886,13 @@ ESTRUCTURA DEL MÓDULO
 4. Chequeás qué le generó
 5. Cerrás con una pregunta abierta que se lleve
 
+CUÁNDO CERRAR ESTE MÓDULO
+No hace falta que sea una charla larga. Vas a sentir que este momento llegó a su cierre natural cuando ya trajiste la referencia cultural, conversaron con libertad, apareció la idea que querías trabajar, y chequeaste qué le generó. Cuando sientas eso, cerrás con esta frase exacta, sin variaciones:
+
+"Siento que con este momento juntos ya tenemos una buena base. Vamos a lo que sigue."
+
+No la formules como pregunta ni la varíes -- el sistema la detecta para saber cuándo este momento particular terminó.
+
 CIERRES DE SEGMENTO — MUY IMPORTANTE
 Cada vez que terminás un momento significativo de la conversación — cuando algo se procesó, cuando la persona compartió algo que le costó, o cuando sentís que ese hilo llegó a un punto natural — hacés un cierre así:
 1. Reconocimiento genuino y específico de lo que pasó en esa parte de la charla
@@ -1041,6 +1048,25 @@ function iniciarModuloReal(){
   });
 }
 
+// "Capacidad de volver a elegir" es obligatorio para todos, sin excepcion --
+// se suma siempre despues del modulo esencial/recomendado que haya tocado,
+// no compite por ese lugar. Se sigue en el mismo hilo de moduloHistory (sin
+// volver a mostrar el espejo), asi que Soul mantiene todo el contexto de lo
+// que ya se hablo en el modulo anterior.
+function iniciarModuloObligatorio(){
+  document.getElementById('moduloLabel').textContent='un último momento antes del encuentro';
+  moduloData.modulo='Capacidad de volver a elegir';
+  moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+  addModuloMsg('user','Seguimos.');
+  moduloHistory.push({role:'user',content:'Seguimos.'});
+  var typing=document.createElement('div');
+  typing.className='msg soul typing';typing.id='moduloTyping';
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('moduloArea').appendChild(typing);
+  document.getElementById('moduloArea').scrollTop=9999;
+  sendModuloMsg();
+}
+
 function addModuloMsg(tipo,txt){
   var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
   document.getElementById('moduloArea').appendChild(div);
@@ -1050,9 +1076,18 @@ function addModuloMsg(tipo,txt){
   if(tipo==='soul'&&(txt.indexOf('preferís dejarlo acá')>-1||txt.indexOf('mañana continuamos')>-1)){
     setTimeout(function(){addModuloBtns()},600);
   }
-  // Detectar fin del módulo para ir al match
-  if(tipo==='soul'&&(txt.indexOf('estás lista')>-1||txt.indexOf('estás listo')>-1||txt.indexOf('ya tenés algo')>-1)){
-    setTimeout(function(){addBotonMatch()},800);
+  // Detectar el cierre de ESTE módulo puntual. "Capacidad de volver a elegir"
+  // es obligatorio para todos y se suma siempre despues del esencial/
+  // recomendado -- no compite por ese lugar, asi que si el que recien
+  // termino no es ese, se encadena automaticamente antes de ir al match.
+  if(tipo==='soul'&&txt.indexOf('Vamos a lo que sigue.')>-1){
+    setTimeout(function(){
+      if(moduloData.modulo==='Capacidad de volver a elegir'){
+        addBotonMatch();
+      }else{
+        iniciarModuloObligatorio();
+      }
+    },800);
   }
 }
 
@@ -2104,7 +2139,7 @@ var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basad
 // todavia, ej. filas guardadas antes de que esto se persistiera).
 var MODULO_DETECCION_PROMPT=`Analizá este perfil vincular y la conversación resumida. Elegí el módulo esencial (el que más urge) y el recomendado (el segundo) en base a las señales concretas que aparecen en la charla -- patrones consistentes, no frases aisladas -- no por intuición general.
 
-Los módulos posibles son exactamente estos cinco (usá el nombre tal cual, con esta capitalización exacta, en tu respuesta):
+"modulo_esencial" y "modulo_recomendado" solo pueden ser uno de estos CUATRO (usá el nombre tal cual, con esta capitalización exacta, en tu respuesta). Existe un quinto módulo, "Capacidad de volver a elegir", pero ese NUNCA va en estos dos campos -- se suma siempre después para todos, no compite por este lugar.
 
 "Apertura al compromiso" -- la tensión entre libertad y vínculo, cuando el compromiso se asocia automáticamente con pérdida.
 Señales: externaliza los conflictos relacionales ("siempre me tocan personas complicadas"), asocia compromiso con pérdida de libertad ("necesito sentir que nadie me limite"), lenguaje ambiguo y sostenido sobre lo que busca ("que fluya", "no me gusta poner etiquetas"), describe pareja ideal con expectativas contradictorias, entusiasmo por el comienzo pero evita hablar de construir, cambia de tiempo verbal (presente definido para el deseo, futuro vago para el compromiso), usa absolutos ("nunca", "siempre", "nadie").
@@ -2117,9 +2152,6 @@ Señales: el otro siempre tiene el poder ("siempre me tocó la peor gente"), poc
 
 "Coherencia interna" -- la distancia entre valores declarados y conducta real, y sobre todo la conciencia de esa brecha.
 Señales: valores declarados vs. ejemplos concretos contradictorios ("la honestidad es fundamental" + "prefiero desaparecer sin explicar"), lo que busca vs. lo que elige no coincide, justificaciones frecuentes ("es que...", "lo que pasa es que..."), cambios bruscos en el discurso sin poder integrarlos, emoción y contenido verbal que no coinciden ("ya lo superé" con tono de enojo intenso), inestabilidad narrativa. Alguien que reconoce su propia incoherencia tiene más potencial de crecimiento que alguien con discurso impecable pero rígido -- eso también es señal a favor de este módulo.
-
-"Capacidad de volver a elegir" -- mide crecimiento, no un estado inicial: apertura frente a la incertidumbre, regulación durante el vínculo naciente, recuperación después de un cierre.
-Señales: miedo al rechazo anticipado, ansiedad ante la incertidumbre vincular, dificultad para tolerar no saber, poca resiliencia narrada frente a cierres o finales de vínculos pasados.
 
 Respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. En "modulo_esencial" y "modulo_recomendado" usá el nombre EXACTO tal como aparece entre comillas arriba (ej. "Poder personal", no "PODER PERSONAL" ni "poder personal").`;
 
