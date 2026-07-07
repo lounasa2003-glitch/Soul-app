@@ -300,6 +300,22 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
+<!-- ══ NUEVA CONTRASEÑA (desde el link del mail de recuperación) ══ -->
+<div class="etapa" id="eNuevaPassword">
+  <div class="auth-wrap">
+    <div class="auth-orb"></div>
+    <p class="auth-title">Elegí una contraseña nueva</p>
+    <p class="auth-sub">Para volver a entrar a tu cuenta</p>
+
+    <div class="auth-err" id="nuevaPassErr"></div>
+
+    <input type="password" class="auth-input" id="nuevaPassInput" placeholder="Contraseña nueva (mínimo 6 caracteres)">
+
+    <button class="btn-gold" id="nuevaPassBtn" onclick="confirmarNuevaPassword()" style="width:100%;opacity:1">Guardar contraseña →</button>
+    <p class="auth-loading" id="nuevaPassLoading">Guardando...</p>
+  </div>
+</div>
+
 <!-- ══ ELECCIÓN DE SESIÓN ══ -->
 <div class="etapa" id="eEleccionSesion">
   <div class="sesion-wrap">
@@ -1366,6 +1382,73 @@ var authMode='registro';
 var accessToken=null;
 var refreshToken=null;
 var userEmail=null;
+
+// El link de recuperación de Supabase vuelve acá con el token de sesión en
+// el hash de la URL (#access_token=...&refresh_token=...&type=recovery),
+// no en la query string. Se detecta al cargar la página, antes de mostrar
+// el login normal. Se hace en DOMContentLoaded (no en carga directa del
+// script) para que ya haya corrido "var etapaActual=0" más abajo en el
+// archivo -- si no, esa declaración pisa el valor seteado acá.
+window.addEventListener('DOMContentLoaded',function(){
+  var hash=location.hash.replace(/^#/,'');
+  if(!hash)return;
+  var params={};
+  hash.split('&').forEach(function(p){
+    var kv=p.split('=');
+    if(kv[0])params[kv[0]]=decodeURIComponent(kv[1]||'');
+  });
+  if(params.type==='recovery'&&params.access_token){
+    accessToken=params.access_token;
+    refreshToken=params.refresh_token||null;
+    history.replaceState(null,'',location.pathname+location.search);
+    document.getElementById('e0').classList.remove('activa');
+    document.getElementById('eNuevaPassword').classList.add('activa');
+    etapaActual='NuevaPassword';
+  }
+});
+
+async function confirmarNuevaPassword(){
+  var pass=document.getElementById('nuevaPassInput').value;
+  var errEl=document.getElementById('nuevaPassErr');
+  errEl.style.display='none';
+
+  if(!pass||pass.length<6){
+    errEl.textContent='La contraseña tiene que tener al menos 6 caracteres.';
+    errEl.style.display='block';
+    return;
+  }
+
+  document.getElementById('nuevaPassBtn').style.display='none';
+  document.getElementById('nuevaPassLoading').style.display='block';
+
+  try{
+    var res=await fetch('/api/auth',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      body:JSON.stringify({accion:'actualizarPassword',password:pass})
+    });
+    var data=await res.json();
+
+    if(!res.ok){
+      // No se muestra el error crudo de Supabase (ej. detalles de parseo de
+      // JWT) -- para esta pantalla, cualquier rechazo del token significa lo
+      // mismo de cara a la persona: el link ya no sirve.
+      errEl.textContent='El link puede haber expirado. Pedí uno nuevo e intentá de nuevo.';
+      errEl.style.display='block';
+      document.getElementById('nuevaPassBtn').style.display='block';
+      document.getElementById('nuevaPassLoading').style.display='none';
+      return;
+    }
+
+    userEmail=data.email;
+    await cargarProgreso(userEmail);
+  }catch(e){
+    errEl.textContent='No pudimos conectar. Intentá de nuevo.';
+    errEl.style.display='block';
+    document.getElementById('nuevaPassBtn').style.display='block';
+    document.getElementById('nuevaPassLoading').style.display='none';
+  }
+}
 
 function toggleAuthMode(){
   authMode=authMode==='registro'?'login':'registro';
