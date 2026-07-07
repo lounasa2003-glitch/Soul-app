@@ -1628,7 +1628,13 @@ async function elegirSesion(tipo){
       try{
         var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
         var perfilGuardado=perfiles&&perfiles.length>0?perfiles[perfiles.length-1]:null;
-        if(perfilGuardado&&perfilGuardado.modulo_esencial){
+
+        // El perfil (grupo1..4) se guarda ANTES de intentar asignar módulo
+        // dentro de hacerAvanzar() -- son dos hitos distintos. Si hay perfil
+        // pero el módulo nunca se guardó (fila de antes de que esto se
+        // persistiera, o ese paso puntual se cortó), no se descarta todo el
+        // trabajo ya hecho: se retoma desde el perfil igual.
+        if(perfilGuardado&&perfilGuardado.grupo1){
           var referenciasGuardadas=null,fortalezasGuardadas=[],oportunidadesGuardadas=[];
           try{
             var sintesis=perfilGuardado.sintesis_espejo?JSON.parse(perfilGuardado.sintesis_espejo):null;
@@ -1646,17 +1652,46 @@ async function elegirSesion(tipo){
             }
           }catch(e){}
 
-          // Si ya se había arrancado el módulo antes (y se guardó en el
-          // camino), se retoma esa charla en vez de volver a ofrecer el
-          // espejo desde cero.
-          var historialModuloGuardado=[];
-          try{
-            if(perfilGuardado.modulo_historial) historialModuloGuardado=JSON.parse(perfilGuardado.modulo_historial)||[];
-          }catch(e){}
+          var moduloEsencial=perfilGuardado.modulo_esencial;
 
-          ir('4b');
-          initModulo(perfilGuardado, perfilGuardado.modulo_esencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado, historialModuloGuardado);
-          return;
+          if(!moduloEsencial){
+            // Falta el paso de asignación de módulo -- se corre ahora mismo
+            // con lo que ya tenemos guardado, en vez de perder el perfil.
+            try{
+              var perfilParaDeteccion={grupo1:perfilGuardado.grupo1,grupo2:perfilGuardado.grupo2,grupo3:perfilGuardado.grupo3,grupo4:perfilGuardado.grupo4};
+              var moduloInfo=await pedirJSON({
+                model:'claude-sonnet-4-6',
+                max_tokens:400,
+                system:MODULO_DETECCION_PROMPT,
+                messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaDeteccion)+'\n\nConversación resumida: '+transcriptoGuardado.slice(-2000)}]
+              });
+              moduloEsencial=moduloInfo.modulo_esencial;
+              fortalezasGuardadas=moduloInfo.fortalezas||[];
+              oportunidadesGuardadas=moduloInfo.oportunidades||[];
+              if(!referenciasGuardadas)referenciasGuardadas=moduloInfo.referencias_culturales||null;
+
+              guardarTabla('perfiles',{
+                usuario_id: usuarioId,
+                modulo_esencial: moduloEsencial||null,
+                modulo_recomendado: moduloInfo.modulo_recomendado||null,
+                sintesis_espejo: JSON.stringify({fortalezas:fortalezasGuardadas,oportunidades:oportunidadesGuardadas})
+              }).catch(function(){});
+            }catch(e){}
+          }
+
+          if(moduloEsencial){
+            // Si ya se había arrancado el módulo antes (y se guardó en el
+            // camino), se retoma esa charla en vez de volver a ofrecer el
+            // espejo desde cero.
+            var historialModuloGuardado=[];
+            try{
+              if(perfilGuardado.modulo_historial) historialModuloGuardado=JSON.parse(perfilGuardado.modulo_historial)||[];
+            }catch(e){}
+
+            ir('4b');
+            initModulo(perfilGuardado, moduloEsencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado, historialModuloGuardado);
+            return;
+          }
         }
       }catch(e){}
     }
@@ -2048,6 +2083,11 @@ function pausarChatPrincipal(){
 
 var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
 
+// Compartido entre hacerAvanzar() (recien completado el perfil) y el
+// fallback de elegirSesion() (perfil completo pero sin modulo asignado
+// todavia, ej. filas guardadas antes de que esto se persistiera).
+var MODULO_DETECCION_PROMPT='Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.';
+
 // Guardado incondicional al pausar la charla principal: el transcript
 // completo se guarda siempre, y además se intenta extraer y persistir lo
 // que ya se pueda inferir del perfil (aunque venga incompleto) para no
@@ -2100,7 +2140,7 @@ async function hacerAvanzar(){
   var moduloInfo=await pedirJSON({
     model:'claude-sonnet-4-6',
     max_tokens:400,
-    system:'Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.',
+    system:MODULO_DETECCION_PROMPT,
     messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
   });
 
