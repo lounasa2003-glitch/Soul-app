@@ -733,6 +733,16 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     </div>
     <div class="eleccion-final" id="eleccionFinal">
       <p id="eleccionMsg"></p>
+      <div id="checkinEmocional" style="margin-top:1.4rem;display:none">
+        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;color:#9a8e96;margin-bottom:.7rem">¿Cómo te sentís ahora, después de esto?</p>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center">
+          <div class="chip" onclick="guardarCheckinEmocional('tranquila')">Tranquila/o</div>
+          <div class="chip" onclick="guardarCheckinEmocional('ansiosa_bien')">Un poco ansiosa/o, pero bien</div>
+          <div class="chip" onclick="guardarCheckinEmocional('me_costo')">Me costó bastante</div>
+          <div class="chip" onclick="guardarCheckinEmocional('prefiero_no_decir')">Prefiero no decirlo</div>
+        </div>
+        <p id="checkinGracias" style="display:none;margin-top:.7rem;color:#4ecb71;font-size:.85rem">Gracias por contarlo 🤍</p>
+      </div>
     </div>
   </div>
 </div>
@@ -2377,6 +2387,11 @@ function usarRitmo(tipo){
 }
 
 // ── ELECCIÓN MUTUA ──
+// Antes esto era puramente cosmético -- no quedaba ningún registro real de
+// si la persona aceptó o prefirió no seguir. Ahora se persiste en el match
+// (aceptado/rechazado + cuándo), que es la base de datos real que el
+// módulo "Capacidad de volver a elegir" va a necesitar más adelante para
+// poder comparar a la persona consigo misma en el tiempo.
 function elegir(si){
   document.getElementById('eleccionBtns').style.display='none';
   var msg=document.getElementById('eleccionMsg');
@@ -2386,6 +2401,22 @@ function elegir(si){
     msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#d8cdd2;line-height:1.7">Está bien. Lo que viviste hoy tiene valor aunque no continúe.<br><br>Soul va a estar cuando estés lista/o para seguir.</span>';
   }
   document.getElementById('eleccionFinal').style.display='block';
+
+  if(window.matchData&&window.matchData.id){
+    guardarTabla('matches',{
+      estado: si?'aceptado':'rechazado',
+      fecha_respuesta: new Date().toISOString()
+    },'id=eq.'+window.matchData.id).catch(function(){});
+  }
+  document.getElementById('checkinEmocional').style.display='block';
+}
+
+function guardarCheckinEmocional(valor){
+  document.querySelectorAll('#checkinEmocional .chip').forEach(function(c){c.style.pointerEvents='none';c.style.opacity='.5'});
+  document.getElementById('checkinGracias').style.display='block';
+  if(window.matchData&&window.matchData.id){
+    guardarTabla('matches',{checkin_emocional:valor},'id=eq.'+window.matchData.id).catch(function(){});
+  }
 }
 </script>
 

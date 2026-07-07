@@ -67,7 +67,7 @@ export default async function handler(req, res) {
       });
 
       if (comp.compatibilidad_hoy >= 50 || comp.potencial_construccion >= 65) {
-        await fetch(`${supabaseUrl}/rest/v1/matches`, {
+        const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
           body: JSON.stringify({
@@ -82,8 +82,10 @@ export default async function handler(req, res) {
             activado_por: 'sistema'
           })
         });
+        const matchRows = matchRes.ok ? await matchRes.json() : [];
         matchEncontrado = true;
         matchData = {
+          id: matchRows[0] ? matchRows[0].id : null,
           compatibilidad_hoy: comp.compatibilidad_hoy,
           potencial_construccion: comp.potencial_construccion,
           mensaje_dupla: comp.mensaje_dupla
