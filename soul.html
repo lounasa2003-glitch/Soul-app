@@ -2097,7 +2097,26 @@ var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basad
 // Compartido entre hacerAvanzar() (recien completado el perfil) y el
 // fallback de elegirSesion() (perfil completo pero sin modulo asignado
 // todavia, ej. filas guardadas antes de que esto se persistiera).
-var MODULO_DETECCION_PROMPT='Analizá este perfil vincular y respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. Los módulos posibles son: Apertura al compromiso, Autonomía emocional, Poder personal, Coherencia interna, Capacidad de volver a elegir.';
+var MODULO_DETECCION_PROMPT=`Analizá este perfil vincular y la conversación resumida. Elegí el módulo esencial (el que más urge) y el recomendado (el segundo) en base a las señales concretas que aparecen en la charla -- patrones consistentes, no frases aisladas -- no por intuición general.
+
+Los módulos posibles son exactamente estos cinco (usá el nombre tal cual, con esta capitalización exacta, en tu respuesta):
+
+"Apertura al compromiso" -- la tensión entre libertad y vínculo, cuando el compromiso se asocia automáticamente con pérdida.
+Señales: externaliza los conflictos relacionales ("siempre me tocan personas complicadas"), asocia compromiso con pérdida de libertad ("necesito sentir que nadie me limite"), lenguaje ambiguo y sostenido sobre lo que busca ("que fluya", "no me gusta poner etiquetas"), describe pareja ideal con expectativas contradictorias, entusiasmo por el comienzo pero evita hablar de construir, cambia de tiempo verbal (presente definido para el deseo, futuro vago para el compromiso), usa absolutos ("nunca", "siempre", "nadie").
+
+"Autonomía emocional" -- cuánto depende el bienestar del vínculo, en lugar de sostenerse desde adentro.
+Señales: la pareja como fuente principal de bienestar ("con la persona indicada todo se acomoda"), miedo recurrente a la pérdida sin evidencia clara, necesidad elevada de validación y confirmaciones frecuentes, habla del otro como necesidad más que como elección, idealización de la pareja como solución, dificultad para poner límites en relaciones pasadas, identidad muy fusionada (le cuesta hablar de sí sin referirse al otro).
+
+"Poder personal" -- la posición frente a la responsabilidad relacional: verse como protagonista o como receptor de lo que pasa en los vínculos.
+Señales: el otro siempre tiene el poder ("siempre me tocó la peor gente"), poco espacio para autorreflexión al narrar conflictos, generalizaciones rígidas ("todos son iguales"), lenguaje de impotencia ("no tenía opción", "no dependía de mí"), explicaciones centradas afuera (suerte, destino, los demás), espera de rescate ("que me haga volver a creer"), dificultad para reconocer agencia ante "¿qué podrías hacer diferente?". El indicador más valioso es la evolución del discurso durante la charla -- de una narrativa rígida a una más compleja -- eso importa más que el punto de partida.
+
+"Coherencia interna" -- la distancia entre valores declarados y conducta real, y sobre todo la conciencia de esa brecha.
+Señales: valores declarados vs. ejemplos concretos contradictorios ("la honestidad es fundamental" + "prefiero desaparecer sin explicar"), lo que busca vs. lo que elige no coincide, justificaciones frecuentes ("es que...", "lo que pasa es que..."), cambios bruscos en el discurso sin poder integrarlos, emoción y contenido verbal que no coinciden ("ya lo superé" con tono de enojo intenso), inestabilidad narrativa. Alguien que reconoce su propia incoherencia tiene más potencial de crecimiento que alguien con discurso impecable pero rígido -- eso también es señal a favor de este módulo.
+
+"Capacidad de volver a elegir" -- mide crecimiento, no un estado inicial: apertura frente a la incertidumbre, regulación durante el vínculo naciente, recuperación después de un cierre.
+Señales: miedo al rechazo anticipado, ansiedad ante la incertidumbre vincular, dificultad para tolerar no saber, poca resiliencia narrada frente a cierres o finales de vínculos pasados.
+
+Respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. En "modulo_esencial" y "modulo_recomendado" usá el nombre EXACTO tal como aparece entre comillas arriba (ej. "Poder personal", no "PODER PERSONAL" ni "poder personal").`;
 
 // Guardado incondicional al pausar la charla principal: el transcript
 // completo se guarda siempre, y además se intenta extraer y persistir lo
