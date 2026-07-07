@@ -834,6 +834,36 @@ setTimeout(function(){
 // ── MÓDULOS ──
 var moduloHistory=[];
 var moduloData=null;
+// Hoy no hay ningun tope al largo de una charla de modulo -- si Soul nunca
+// decide cerrar, podria seguir indefinidamente (costo real sin control).
+// Se agrega un presupuesto por modulo: a partir de UMBRAL_MODO_CIERRE se le
+// pide a Soul que empiece a orientar hacia una sintesis (sin decirlo), y en
+// TOPE_MENSAJES_POR_MODULO se corta con un cierre pregrabado, sin llamar a
+// la IA, para que el limite nunca quede sin resolucion.
+var TOPE_MENSAJES_POR_MODULO=25;
+var UMBRAL_MODO_CIERRE=20;
+var moduloIntercambios=0;
+var moduloEnCierre=false;
+var MENSAJES_CIERRE_EMERGENCIA=[
+  'Lo que compartiste hoy ya es una base sólida. Vamos a darle espacio a esto y seguimos en el próximo paso.',
+  'Hay bastante para trabajar con lo que surgió acá. Dejemos que esto decante un poco antes de seguir.',
+  'Esto que conversamos ya dice mucho. Te propongo que lo dejemos ahí por hoy y continuamos.',
+  'Con todo lo que trajiste, ya tenés material valioso para seguir. Vamos al próximo paso.'
+];
+function getMensajeCierreEmergencia(){
+  return MENSAJES_CIERRE_EMERGENCIA[Math.floor(Math.random()*MENSAJES_CIERRE_EMERGENCIA.length)];
+}
+// Heuristica sobre el mensaje del USUARIO (no de Soul) para activar el modo
+// cierre antes de llegar al umbral duro, si ya hay señales de que la charla
+// esta llegando a su fin natural -- ahorra turnos innecesarios.
+function detectarCierreNatural(mensajeUsuario){
+  var señales=[
+    mensajeUsuario.length<40,
+    /^(s[ií]|creo que s[ií]|exacto|eso es|nada m[aá]s)/i.test(mensajeUsuario.trim()),
+    moduloIntercambios>=8
+  ];
+  return señales.filter(Boolean).length>=2;
+}
 
 var MODULOS_INFO={
   'Apertura al compromiso':{
@@ -868,7 +898,7 @@ var MODULOS_INFO={
   }
 };
 
-function buildModuloPrompt(perfilData, moduloEsencial, referencias, transcriptoCharla, historialVivo){
+function buildModuloPrompt(perfilData, moduloEsencial, referencias, transcriptoCharla, historialVivo, enModoCierre){
   var info=MODULOS_INFO[moduloEsencial]||MODULOS_INFO['Capacidad de volver a elegir'];
   return `Sos Soul, la voz que acompaña a las personas en una plataforma de vínculos humanos basada en coaching ontológico.
 
@@ -909,6 +939,17 @@ No hace falta que sea una charla larga. Vas a sentir que este momento llegó a s
 "Siento que con este momento juntos ya tenemos una buena base. Vamos a lo que sigue."
 
 No la formules como pregunta ni la varíes -- el sistema la detecta para saber cuándo este momento particular terminó.
+${enModoCierre?`
+MODO CIERRE -- MUY IMPORTANTE
+Estás llegando al final natural de esta conversación. A partir de ahora, orientá suavemente la charla hacia una síntesis, sin anunciar que se está terminando ni mencionar límites de mensajes.
+
+Técnicas a usar:
+- Reflejá lo que la persona compartió y proponé una síntesis breve ("Algo que se repite en lo que contaste es X — ¿sentís que eso resume bien este momento?")
+- Cambiá preguntas abiertas por preguntas de cierre ("¿hay algo más que sea importante decir antes de seguir, o sentís que esto ya lo dijiste?")
+- Nombrá lo que sigue generando expectativa, no como corte ("con esto ya tenés una base sólida para el próximo paso")
+
+Nunca digas explícitamente que la charla terminó, que se acabaron los mensajes, o que hay un límite. El cierre debe sentirse como una conclusión orgánica, no como una interrupción del sistema. En cuanto sientas que ya diste esa vuelta, cerrá con la frase exacta de arriba ("Siento que con este momento juntos ya tenemos una buena base. Vamos a lo que sigue.") -- no la demores de más.
+`:''}
 
 CIERRES DE SEGMENTO — MUY IMPORTANTE
 Cada vez que terminás un momento significativo de la conversación — cuando algo se procesó, cuando la persona compartió algo que le costó, o cuando sentís que ese hilo llegó a un punto natural — hacés un cierre así:
@@ -983,8 +1024,12 @@ async function initModulo(perfilExtraido, moduloEsencial, referencias, fortaleza
     moduloHistory.forEach(function(m){
       addModuloMsg(m.role==='assistant'?'soul':'user', m.content);
     });
-    var historialVivoResume=moduloData.modulo==='Capacidad de volver a elegir'?await obtenerHistorialVivo(usuarioId):null;
-    moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, historialVivoResume);
+    moduloData.historialVivo=moduloData.modulo==='Capacidad de volver a elegir'?await obtenerHistorialVivo(usuarioId):null;
+    // El presupuesto de mensajes es por sesion en vivo, no algo que se pueda
+    // reconstruir con precision desde el historial guardado -- se retoma con
+    // un presupuesto fresco en vez de tratar de recuperar el conteo exacto.
+    moduloIntercambios=0;
+    moduloEnCierre=false;
     return;
   }
 
@@ -1069,7 +1114,9 @@ function saltearEspejo(){
 }
 
 function iniciarModuloReal(){
-  var prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla);
+  moduloIntercambios=0;
+  moduloEnCierre=false;
+  var prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, moduloData.historialVivo, false);
 
   llamarChat({
     model:'claude-sonnet-4-6',
@@ -1080,7 +1127,6 @@ function iniciarModuloReal(){
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
-    moduloData.prompt=prompt;
     guardarModuloHistorial().catch(function(){});
   }).catch(function(e){
     addModuloMsg('soul','Hay algo que me gustaría explorar con vos antes de seguir. ¿Estás?');
@@ -1095,8 +1141,9 @@ function iniciarModuloReal(){
 async function iniciarModuloObligatorio(){
   document.getElementById('moduloLabel').textContent='un último momento antes del encuentro';
   moduloData.modulo='Capacidad de volver a elegir';
-  var historialVivo=await obtenerHistorialVivo(usuarioId);
-  moduloData.prompt=buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, historialVivo);
+  moduloIntercambios=0;
+  moduloEnCierre=false;
+  moduloData.historialVivo=await obtenerHistorialVivo(usuarioId);
   addModuloMsg('user','Seguimos.');
   moduloHistory.push({role:'user',content:'Seguimos.'});
   var typing=document.createElement('div');
@@ -1116,18 +1163,24 @@ function addModuloMsg(tipo,txt){
   if(tipo==='soul'&&(txt.indexOf('preferís dejarlo acá')>-1||txt.indexOf('mañana continuamos')>-1)){
     setTimeout(function(){addModuloBtns()},600);
   }
-  // Detectar el cierre de ESTE módulo puntual. "Capacidad de volver a elegir"
-  // es obligatorio para todos y se suma siempre despues del esencial/
-  // recomendado -- no compite por ese lugar, asi que si el que recien
-  // termino no es ese, se encadena automaticamente antes de ir al match.
+  // Detectar el cierre de ESTE módulo puntual (cierre organico via la frase
+  // marcadora). El cierre de emergencia por tope de mensajes dispara la
+  // misma transicion directamente, sin pasar por esta deteccion de texto.
   if(tipo==='soul'&&txt.indexOf('Vamos a lo que sigue.')>-1){
-    setTimeout(function(){
-      if(moduloData.modulo==='Capacidad de volver a elegir'){
-        addBotonMatch();
-      }else{
-        iniciarModuloObligatorio();
-      }
-    },800);
+    setTimeout(manejarCierreDeModulo,800);
+  }
+}
+
+// "Capacidad de volver a elegir" es obligatorio para todos y se suma
+// siempre despues del esencial/recomendado -- no compite por ese lugar, asi
+// que si el que recien termino no es ese, se encadena automaticamente antes
+// de ir al match. Compartido entre el cierre organico (deteccion de texto)
+// y el cierre de emergencia (tope de mensajes).
+function manejarCierreDeModulo(){
+  if(moduloData.modulo==='Capacidad de volver a elegir'){
+    addBotonMatch();
+  }else{
+    iniciarModuloObligatorio();
   }
 }
 
@@ -1220,11 +1273,35 @@ async function enviarAlModulo(txt){
 
 async function sendModuloMsg(){
   var typing=document.getElementById('moduloTyping');
+
+  // El presupuesto se cuenta sobre el ultimo turno del usuario, sea cual sea
+  // el camino que llamo a esto (input libre, "Seguimos", pedir pausa).
+  var ultimoTurno=moduloHistory[moduloHistory.length-1];
+  if(ultimoTurno&&ultimoTurno.role==='user'){
+    moduloIntercambios++;
+    if(!moduloEnCierre&&(moduloIntercambios>=UMBRAL_MODO_CIERRE||detectarCierreNatural(ultimoTurno.content))){
+      moduloEnCierre=true;
+    }
+  }
+
+  // Tope duro: no se llama mas a la IA, se corta con un cierre pregrabado
+  // para que el limite nunca quede sin resolucion (y sin costo de mas).
+  if(moduloIntercambios>=TOPE_MENSAJES_POR_MODULO){
+    if(typing)typing.remove();
+    var cierreEmergencia=getMensajeCierreEmergencia();
+    addModuloMsg('soul',cierreEmergencia);
+    moduloHistory.push({role:'assistant',content:cierreEmergencia});
+    guardarModuloHistorial().catch(function(){});
+    document.getElementById('moduloBtn').disabled=false;
+    setTimeout(manejarCierreDeModulo,800);
+    return;
+  }
+
   try{
     var data=await llamarChat({
       model:'claude-sonnet-4-6',
       max_tokens:350,
-      system:moduloData.prompt,
+      system:buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, moduloData.historialVivo, moduloEnCierre),
       messages:moduloHistory
     });
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
