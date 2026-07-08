@@ -3,7 +3,11 @@ import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 
-const COMPARE_PROMPT = `Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
+const COMPARE_PROMPT = `Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables.
+
+Algunos campos de cualquiera de los dos perfiles pueden venir en null -- significa que ese tema nunca se exploró en la conversación de esa persona, no que sea neutral ni automáticamente compatible. Si un campo es null en cualquiera de los dos perfiles, excluilo del cálculo de esa dimensión en vez de tratarlo como un punto medio o como coincidencia. No inventes ni asumas contenido para un campo null.
+
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;

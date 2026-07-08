@@ -4,9 +4,15 @@ import { registrarUsoTokens } from '../lib/logUso.js';
 
 const LIMITE_ANALISIS = 2;
 
-const EXTRACT_PROMPT = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}`;
+const EXTRACT_PROMPT = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}
 
-const COMPARE_EXTERNO_PROMPT = `Sos el motor de compatibilidad de Soul. Vas a comparar el perfil real de una persona (construido a través de una conversación profunda con Soul) contra una conversación externa con alguien que conoció fuera de la plataforma. Esta segunda fuente es información parcial — sé honesto sobre esa limitación en el veredicto. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":60,"potencial_construccion":75,"veredicto":"frase honesta que mencione que es un análisis probabilístico basado en información parcial"}`;
+MUY IMPORTANTE -- NO INVENTES: si un campo específico no tiene información real en la conversación (no se tocó, o se tocó de forma demasiado vaga para decir algo concreto), su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
+
+const COMPARE_EXTERNO_PROMPT = `Sos el motor de compatibilidad de Soul. Vas a comparar el perfil real de una persona (construido a través de una conversación profunda con Soul) contra una conversación externa con alguien que conoció fuera de la plataforma. Esta segunda fuente es información parcial — sé honesto sobre esa limitación en el veredicto.
+
+Algunos campos de cualquiera de los dos perfiles pueden venir en null -- significa que ese tema nunca se exploró, no que sea neutral ni automáticamente compatible. Si un campo es null en cualquiera de los dos perfiles, excluilo del cálculo en vez de tratarlo como un punto medio o coincidencia. No inventes contenido para un campo null.
+
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":60,"potencial_construccion":75,"veredicto":"frase honesta que mencione que es un análisis probabilístico basado en información parcial"}`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
