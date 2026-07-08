@@ -30,7 +30,43 @@ export default async function handler(req, res) {
       });
     }
 
-    const { max_tokens, system, messages } = req.body;
+    const { max_tokens, system, messages, contexto, moduloFase } = req.body;
+
+    // Los mensajes de un modulo declaran en que fase creen estar -- se valida
+    // contra lo que quedo guardado en la base antes de dejarlos pasar, para
+    // que no se pueda seguir escribiendo en un modulo ya completado (o saltar
+    // a uno que todavia no se desbloqueo) aunque el cliente este desactualizado.
+    // No afecta al chat principal ni al espejo, que no mandan "contexto".
+    if (contexto === 'modulo') {
+      if (!usuario.usuarioId) {
+        return res.status(403).json({ error: 'Todavía no existe tu perfil' });
+      }
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_ANON_KEY;
+      const perfilRes = await fetch(
+        `${supabaseUrl}/rest/v1/perfiles?select=modulo_fase&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
+        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+      );
+      const perfilRows = perfilRes.ok ? await perfilRes.json() : [];
+      const faseActual = perfilRows[0] ? perfilRows[0].modulo_fase : null;
+
+      if (faseActual === 'completo' || (faseActual && faseActual !== moduloFase)) {
+        return res.status(403).json({
+          error: 'modulo_no_disponible',
+          mensaje: 'Este momento del recorrido ya no está disponible.'
+        });
+      }
+      if (!faseActual) {
+        // Fila de antes de que esto se empezara a validar -- se repara en
+        // vez de bloquear a alguien que ya estaba en medio de un modulo real.
+        await fetch(`${supabaseUrl}/rest/v1/perfiles?usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+          method: 'PATCH',
+          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modulo_fase: moduloFase })
+        });
+      }
+    }
+
     const data = await llamarClaude({
       model: MODELO_FIJO,
       max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),

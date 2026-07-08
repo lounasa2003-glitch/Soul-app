@@ -1007,7 +1007,8 @@ async function initModulo(perfilExtraido, moduloEsencial, referencias, fortaleza
   }
   moduloData={
     modulo:moduloEsencial, perfil:perfilExtraido, referencias:referencias,
-    transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades
+    transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades,
+    fase: moduloEsencial==='Capacidad de volver a elegir'?'obligatorio':'esencial'
   };
   document.getElementById('moduloArea').innerHTML='';
   document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
@@ -1122,7 +1123,8 @@ function iniciarModuloReal(){
     model:'claude-sonnet-4-6',
     max_tokens:350,
     system:prompt,
-    messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}]
+    messages:[{role:'user',content:'Hola, ya terminé la charla con Soul y me dijeron que había algo más que podíamos explorar juntos.'}],
+    contexto:'modulo', moduloFase:moduloData.fase
   }).then(function(data){
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     addModuloMsg('soul',reply);
@@ -1141,9 +1143,13 @@ function iniciarModuloReal(){
 async function iniciarModuloObligatorio(){
   document.getElementById('moduloLabel').textContent='un último momento antes del encuentro';
   moduloData.modulo='Capacidad de volver a elegir';
+  moduloData.fase='obligatorio';
   moduloIntercambios=0;
   moduloEnCierre=false;
   moduloData.historialVivo=await obtenerHistorialVivo(usuarioId);
+  // Se espera a que quede guardado antes de mandar el primer mensaje, para
+  // que el backend ya vea "obligatorio" y no rechace por desactualizado.
+  try{ await guardarTabla('perfiles',{modulo_fase:'obligatorio'}); }catch(e){}
   addModuloMsg('user','Seguimos.');
   moduloHistory.push({role:'user',content:'Seguimos.'});
   var typing=document.createElement('div');
@@ -1178,6 +1184,8 @@ function addModuloMsg(tipo,txt){
 // y el cierre de emergencia (tope de mensajes).
 function manejarCierreDeModulo(){
   if(moduloData.modulo==='Capacidad de volver a elegir'){
+    moduloData.fase='completo';
+    guardarTabla('perfiles',{modulo_fase:'completo'}).catch(function(){});
     addBotonMatch();
   }else{
     iniciarModuloObligatorio();
@@ -1302,7 +1310,8 @@ async function sendModuloMsg(){
       model:'claude-sonnet-4-6',
       max_tokens:350,
       system:buildModuloPrompt(moduloData.perfil, moduloData.modulo, moduloData.referencias, moduloData.transcriptoCharla, moduloData.historialVivo, moduloEnCierre),
-      messages:moduloHistory
+      messages:moduloHistory,
+      contexto:'modulo', moduloFase:moduloData.fase
     });
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     if(typing)typing.remove();
@@ -1839,6 +1848,7 @@ async function elegirSesion(tipo){
                 usuario_id: usuarioId,
                 modulo_esencial: moduloEsencial||null,
                 modulo_recomendado: moduloInfo.modulo_recomendado||null,
+                modulo_fase: moduloEsencial?'esencial':null,
                 sintesis_espejo: JSON.stringify({fortalezas:fortalezasGuardadas,oportunidades:oportunidadesGuardadas})
               }).catch(function(){});
             }catch(e){}
@@ -2358,7 +2368,8 @@ async function hacerAvanzar(){
     // se pierde perfilRecienExtraido/moduloInfoGuardada (recarga, login en
     // otra pestana, etc.) -- son variables de memoria, no sobreviven eso.
     modulo_esencial: moduloInfo.modulo_esencial||null,
-    modulo_recomendado: moduloInfo.modulo_recomendado||null
+    modulo_recomendado: moduloInfo.modulo_recomendado||null,
+    modulo_fase: moduloInfo.modulo_esencial?'esencial':null
   }).catch(function(){});
 
   // 5. Calcular matches en paralelo mientras la persona elige
