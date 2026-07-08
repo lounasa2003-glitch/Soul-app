@@ -1803,6 +1803,34 @@ async function elegirSesion(tipo){
         var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
         var perfilGuardado=perfiles&&perfiles.length>0?perfiles[perfiles.length-1]:null;
 
+        // Si ya completó ambos módulos, no tiene sentido reabrir el chat del
+        // módulo -- el backend rechazaría cualquier mensaje ahí (validación
+        // de modulo_fase). Se la lleva directo a ver su match si ya existe,
+        // o a la pantalla de espera.
+        if(perfilGuardado&&perfilGuardado.modulo_fase==='completo'){
+          try{
+            var matchesGuardados=await leerTabla('matches','usuario_a=eq.'+usuarioId);
+            var matchGuardado=matchesGuardados&&matchesGuardados.length>0?matchesGuardados[matchesGuardados.length-1]:null;
+            if(matchGuardado){
+              window.matchEncontrado=true;
+              window.matchData={
+                compatibilidad_hoy: matchGuardado.compatibilidad_hoy,
+                potencial_construccion: matchGuardado.potencial_construccion,
+                mensaje_dupla: matchGuardado.mensaje_dupla
+              };
+              document.getElementById('scoreHoy').textContent=matchGuardado.compatibilidad_hoy+'%';
+              document.getElementById('scorePot').textContent=matchGuardado.potencial_construccion+'%';
+              document.getElementById('matchMsg').textContent=matchGuardado.mensaje_dupla;
+              ir(5);
+            }else{
+              ir('Esperando');
+            }
+          }catch(e){
+            ir('Esperando');
+          }
+          return;
+        }
+
         // El perfil (grupo1..4) se guarda ANTES de intentar asignar módulo
         // dentro de hacerAvanzar() -- son dos hitos distintos. Si hay perfil
         // pero el módulo nunca se guardó (fila de antes de que esto se
