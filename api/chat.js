@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
+import { registrarUsoTokens } from '../lib/logUso.js';
 
 const MODELO_FIJO = 'claude-sonnet-4-6';
 const MAX_TOKENS_TOPE = 1500;
@@ -72,6 +73,12 @@ export default async function handler(req, res) {
       max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
       system,
       messages
+    });
+    await registrarUsoTokens({
+      usuarioId: usuario.usuarioId,
+      endpoint: 'chat',
+      moduloFase: contexto === 'modulo' ? moduloFase : null,
+      usage: data.usage
     });
     return res.status(200).json(data);
 

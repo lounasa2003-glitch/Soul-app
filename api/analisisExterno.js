@@ -1,5 +1,6 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaudeJSON } from '../lib/anthropicClient.js';
+import { registrarUsoTokens } from '../lib/logUso.js';
 
 const LIMITE_ANALISIS = 2;
 
@@ -49,14 +50,14 @@ export default async function handler(req, res) {
     }
     const miPerfil = misPer[misPer.length - 1];
 
-    const perfilExterno = await llamarClaudeJSON({
+    const { json: perfilExterno, usage: usage1 } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       system: EXTRACT_PROMPT,
       messages: [{ role: 'user', content: 'Analizá esta conversación:\n\n' + conversacion }]
     });
 
-    const resultado = await llamarClaudeJSON({
+    const { json: resultado, usage: usage2 } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       system: COMPARE_EXTERNO_PROMPT,
@@ -65,6 +66,15 @@ export default async function handler(req, res) {
         content: 'Mi perfil:\n' + JSON.stringify(miPerfil) +
           '\n\nPerfil de ' + (nombre || 'esta persona') + ' (basado en conversación externa):\n' + JSON.stringify(perfilExterno)
       }]
+    });
+
+    await registrarUsoTokens({
+      usuarioId: usuario.usuarioId,
+      endpoint: 'analisisExterno',
+      usage: {
+        input_tokens: (usage1 ? usage1.input_tokens || 0 : 0) + (usage2 ? usage2.input_tokens || 0 : 0),
+        output_tokens: (usage1 ? usage1.output_tokens || 0 : 0) + (usage2 ? usage2.output_tokens || 0 : 0)
+      }
     });
 
     await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {

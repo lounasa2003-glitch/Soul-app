@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
+import { registrarUsoTokens } from '../lib/logUso.js';
 
 const COMPARE_PROMPT = `Sos el motor de compatibilidad de Soul. Comparás dos perfiles y calculás compatibilidad con la lógica de cuatro tipos de variables. Respondé ÚNICAMENTE con JSON válido sin backticks: {"compatibilidad_hoy":68,"potencial_construccion":91,"veredicto":"frase honesta","fortalezas":["fortaleza1","fortaleza2"],"desafio":"un desafio posible","mensaje_dupla":"mensaje específico para esta dupla"}`;
 
@@ -54,9 +55,13 @@ export default async function handler(req, res) {
 
     let matchEncontrado = false;
     let matchData = null;
+    // Este endpoint puede hacer varias llamadas a Claude (una por cada otro
+    // perfil) -- se acumula el uso total y se loguea una sola vez al final,
+    // en vez de sumar una escritura a Supabase por cada comparacion.
+    let totalInputTokens = 0, totalOutputTokens = 0;
 
     for (const otro of otrosPerfiles) {
-      const comp = await llamarClaudeJSON({
+      const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
         max_tokens: 600,
         system: COMPARE_PROMPT,
@@ -65,6 +70,10 @@ export default async function handler(req, res) {
           content: 'Perfil A:\n' + JSON.stringify(miPerfil) + '\n\nPerfil B:\n' + JSON.stringify(otro)
         }]
       });
+      if (usage) {
+        totalInputTokens += usage.input_tokens || 0;
+        totalOutputTokens += usage.output_tokens || 0;
+      }
 
       if (comp.compatibilidad_hoy >= 50 || comp.potencial_construccion >= 65) {
         const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
@@ -92,6 +101,12 @@ export default async function handler(req, res) {
         };
       }
     }
+
+    await registrarUsoTokens({
+      usuarioId,
+      endpoint: 'calcularMatches',
+      usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
+    });
 
     return res.status(200).json({ matchEncontrado, matchData });
 
