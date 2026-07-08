@@ -671,10 +671,17 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <!-- ══ ESPERANDO MATCH ══ -->
 <div class="etapa" id="eEsperando">
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
-    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 2rem;animation:pulse 3s ease-in-out infinite"></div>
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem">Ya tenemos tu perfil completo.</p>
-    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px;margin-bottom:2rem">Mientras seguís conociéndote con los módulos, el sistema ya está buscando a alguien compatible. En cuanto encontremos algo, te lo hacemos saber.</p>
-    <button class="btn-gold" onclick="ir('4b')">Seguir conociéndome →</button>
+    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite"></div>
+
+    <div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.6rem">
+      <div style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#8a6e2f,#c9a84c)"></div>
+      <div style="width:28px;height:1px;background:rgba(201,168,76,.5)"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#8a6e2f,#c9a84c)"></div>
+    </div>
+    <p style="font-family:'Inter',sans-serif;font-size:.68rem;letter-spacing:.08em;color:#7a6e78;text-transform:uppercase;margin-bottom:1.8rem">Tu recorrido con Soul está completo</p>
+
+    <p id="esperandoMotivacional" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem"></p>
+    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px">Soul ya guardó todo lo que compartiste, y en cuanto aparezca alguien compatible con vos, te lo va a hacer saber.</p>
   </div>
 </div>
 
@@ -1976,6 +1983,19 @@ function ir(n){
   if(n===4) initChat();
   if(n===5) initMatch();
   if(n===7) initCita();
+  if(n==='Esperando') initEsperando();
+}
+
+// Mensaje motivacional fijo, sin generar con Claude -- rota entre variantes
+// para que no se sienta repetido si alguien vuelve a ver esta pantalla.
+var MENSAJES_ESPERANDO=[
+  'Ya hiciste el trabajo más importante: conocerte mejor a vos misma/o.',
+  'Lo que compartiste ya es parte de cómo Soul te va a acompañar de acá en más.',
+  'Mientras esperás, ya estás un paso más cerca de encontrarte con alguien que te sume.'
+];
+function initEsperando(){
+  var msg=MENSAJES_ESPERANDO[Math.floor(Math.random()*MENSAJES_ESPERANDO.length)];
+  document.getElementById('esperandoMotivacional').textContent=msg;
 }
 
 // ── CONSENTIMIENTO ──
