@@ -316,6 +316,27 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
+<!-- ══ VALIDACIÓN DEL PERFIL ══ -->
+<div class="etapa" id="eValidarPerfil">
+  <div class="sesion-wrap">
+    <div class="sesion-orb"></div>
+    <p class="sesion-title">Esto es lo que fui entendiendo de vos</p>
+    <p class="sesion-sub" id="validacionResumen" style="font-family:'Cormorant Garamond',serif;font-style:italic;line-height:1.7;max-width:420px;margin:0 auto 1.8rem"></p>
+
+    <div id="validacionBotones" style="display:flex;flex-direction:column;gap:.7rem;align-items:center">
+      <button class="btn-gold" onclick="confirmarPerfilOk()" style="width:100%;max-width:320px">Sí, me representa →</button>
+      <button onclick="mostrarAjustePerfil()" style="width:100%;max-width:320px;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;padding:.7rem 1rem;font-family:Georgia,serif;font-style:italic;font-size:.88rem;cursor:pointer">Hay algo que ajustaría</button>
+    </div>
+
+    <div id="validacionAjusteBox" style="display:none;margin-top:1.2rem;max-width:420px;margin-left:auto;margin-right:auto">
+      <textarea id="validacionAjusteTexto" placeholder="Contame qué no sentís que te representa..." style="width:100%;min-height:90px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;padding:.7rem 1rem;font-family:'Cormorant Garamond',serif;font-size:1rem;outline:none;resize:vertical"></textarea>
+      <button class="btn-gold" onclick="enviarAjustePerfil()" style="width:100%;margin-top:.7rem">Enviar →</button>
+    </div>
+
+    <p id="validacionCargando" style="display:none;margin-top:1rem;color:#7a6e78;font-style:italic">Un momento...</p>
+  </div>
+</div>
+
 <!-- ══ ELECCIÓN DE SESIÓN ══ -->
 <div class="etapa" id="eEleccionSesion">
   <div class="sesion-wrap">
@@ -2107,9 +2128,7 @@ Incorrecto: "Tenés miedo al compromiso."
 Correcto: "Escucho que valorás mucho la cercanía y también la independencia. ¿Cómo conviven esas dos necesidades para vos?"
 
 CÓMO ARRANCA
-1. "Hola. ¿Cómo estás?"
-2. "¿Cómo te llamás?"
-3. A partir de ahí, charlá con naturalidad. Vos misma adaptás el tono y la profundidad según cómo responda la persona — si contesta corto y simple, mantenés algo liviano; si se explaya y busca profundidad, la acompañás ahí. No hace falta preguntarlo, se siente en cómo habla.
+Ya sabés su nombre (te lo paso más abajo si está disponible) -- nunca se lo preguntes, saludala usándolo directamente. A partir de ahí, charlá con naturalidad. Vos misma adaptás el tono y la profundidad según cómo responda la persona — si contesta corto y simple, mantenés algo liviano; si se explaya y busca profundidad, la acompañás ahí. No hace falta preguntarlo, se siente en cómo habla.
 
 DATOS CULTURALES
 Naturalmente vas sacando: películas, música, libros, comidas, viajes, deporte, baile, hobbies, curiosidades. Son para el matching y para la cita virtual.
@@ -2173,6 +2192,9 @@ function buildSoulPrompt(){
   if(cancion)refs.push('canción: '+cancion);
   if(libro)refs.push('libro: '+libro);
   var prompt=SOUL_PROMPT_BASE;
+  if(window.userNombre){
+    prompt+='\n\nSU NOMBRE ES: '+window.userNombre+'. Ya lo sabés desde que se registró -- nunca se lo preguntes, usalo naturalmente desde el saludo inicial.';
+  }
   if(refs.length>0){
     prompt+='\n\nYA RESPONDIÓ ESTO ANTES (en un formulario previo, no en esta charla) — no se lo vuelvas a preguntar, dalo por sabido:\n'+refs.join('\n');
   }
@@ -2187,8 +2209,9 @@ function buildSoulPrompt(){
 
 function initChat(){
   if(chatHistory.length>0)return;
-  addMsg('soul','Hola. ¿Cómo estás?');
-  chatHistory.push({role:'assistant',content:'Hola. ¿Cómo estás?'});
+  var saludo=window.userNombre?('Hola '+window.userNombre+', ¿cómo estás?'):'Hola. ¿Cómo estás?';
+  addMsg('soul',saludo);
+  chatHistory.push({role:'assistant',content:saludo});
   document.getElementById('chatIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
   // Listeners para inputs
 document.getElementById('fnac').addEventListener('change',function(){chkStep(0)});
@@ -2378,10 +2401,73 @@ async function avanzarAlMatch(){
   }
 }
 
+// Resumen humano y cálido del perfil extraído -- texto plano para leer,
+// nunca el JSON técnico. Se usa para la pantalla de validación, no se
+// guarda en ningún lado.
+var RESUMEN_PERFIL_PROMPT='Sos Soul. Le vas a hablar directo a la persona, en segunda persona, con calidez genuina -- nunca en tercera persona ni como un informe técnico. Resumí en 3 a 4 oraciones breves lo que fuiste entendiendo de ella a partir de este perfil vincular, sin nombrar "grupos" ni campos técnicos, como si se lo estuvieras contando en una charla real. Cerrá con una frase breve que invite a decir si se siente representada. Nunca uses markdown ni listas.';
+
 async function hacerAvanzar(){
   // 1. Extraer perfil
   var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
   var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
+  window.perfilParaValidar=perfil;
+
+  // Antes de avanzar a cualquier otra etapa, se le muestra a la persona un
+  // resumen legible de lo que Soul entendió de ella -- no bloquea el resto
+  // del flujo indefinidamente, es una validación breve, no una edición
+  // exhaustiva.
+  var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:300,system:RESUMEN_PERFIL_PROMPT,messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)}]});
+  var resumen=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
+
+  hideTyping();
+  document.getElementById('validacionResumen').textContent=resumen;
+  document.getElementById('validacionBotones').style.display='flex';
+  document.getElementById('validacionAjusteBox').style.display='none';
+  document.getElementById('validacionAjusteTexto').value='';
+  document.getElementById('validacionCargando').style.display='none';
+  ir('ValidarPerfil');
+}
+
+function mostrarAjustePerfil(){
+  document.getElementById('validacionAjusteBox').style.display='block';
+}
+
+function confirmarPerfilOk(){
+  guardarTabla('perfiles',{usuario_id:usuarioId,perfil_validado:true}).catch(function(){});
+  ejecutarContinuarTrasValidacion();
+}
+
+function enviarAjustePerfil(){
+  var nota=document.getElementById('validacionAjusteTexto').value.trim();
+  guardarTabla('perfiles',{usuario_id:usuarioId,perfil_validado:false,ajuste_perfil_nota:nota||null}).catch(function(){});
+  ejecutarContinuarTrasValidacion();
+}
+
+async function ejecutarContinuarTrasValidacion(){
+  document.getElementById('validacionBotones').style.display='none';
+  document.getElementById('validacionAjusteBox').style.display='none';
+  document.getElementById('validacionCargando').style.display='block';
+  document.getElementById('validacionCargando').textContent='Un momento...';
+
+  try{
+    // Mismo margen que el resto del pipeline -- si esto se cuelga de
+    // verdad, se corta y se ofrece reintentar en vez de dejar la pantalla
+    // colgada para siempre.
+    await Promise.race([continuarTrasValidacion(), timeoutTras(90000)]);
+  }catch(e){
+    console.error('Error continuando tras validación:',e);
+    document.getElementById('validacionCargando').textContent='Algo se complicó guardando esto.';
+    var btnRetry=document.createElement('button');
+    btnRetry.className='btn-gold';
+    btnRetry.style.cssText='width:100%;max-width:320px;margin-top:1rem';
+    btnRetry.textContent='Reintentar →';
+    btnRetry.onclick=function(){ btnRetry.remove(); ejecutarContinuarTrasValidacion(); };
+    document.getElementById('validacionCargando').parentElement.appendChild(btnRetry);
+  }
+}
+
+async function continuarTrasValidacion(){
+  var perfil=window.perfilParaValidar;
 
   // 2. Guardar perfil y conversación
   await guardarPerfil(perfil);
@@ -2439,10 +2525,9 @@ async function hacerAvanzar(){
     if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
   }catch(e){}
   var pctActual=calcularPorcentajePerfil(uActual,perfil);
-  hideTyping();
   setTimeout(function(){
     mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
-  },1500);
+  },300);
 }
 
 function addBotonReintentarMatch(){

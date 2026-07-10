@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soul — Panel</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#07050a;color:#f2ece4;font-family:'Inter',Arial,sans-serif;min-height:100vh}
+a{color:inherit}
+.oculto{display:none !important}
+
+/* ── LOGIN ── */
+.login-wrap{max-width:340px;margin:15vh auto;padding:2rem;text-align:center}
+.login-title{font-family:Georgia,serif;font-style:italic;font-size:1.4rem;color:#c9a84c;margin-bottom:1.5rem}
+.login-input{width:100%;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:1rem;padding:.7rem 1rem;margin-bottom:1rem;outline:none}
+.login-input:focus{border-color:rgba(201,168,76,.6)}
+.login-err{color:#d98a9e;font-size:.85rem;margin-bottom:1rem;display:none}
+
+/* ── BOTONES ── */
+.btn{padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:5px;color:#07050a;font-weight:600;font-size:.85rem;cursor:pointer}
+.btn-secundario{padding:.55rem 1rem;background:none;border:1px solid #2a1f28;border-radius:5px;color:#9a8e96;font-size:.82rem;cursor:pointer}
+
+/* ── LAYOUT GENERAL ── */
+.panel-header{padding:1rem 1.5rem;border-bottom:1px solid #2a1f28;display:flex;align-items:center;justify-content:space-between}
+.panel-title{font-family:Georgia,serif;font-style:italic;color:#c9a84c;font-size:1.2rem}
+.panel-body{padding:1.5rem;max-width:1100px;margin:0 auto}
+
+/* ── LISTA DE PERSONAS ── */
+.personas-tabla{width:100%;border-collapse:collapse}
+.personas-tabla th{text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;padding:.6rem .8rem;border-bottom:1px solid #2a1f28}
+.personas-tabla td{padding:.7rem .8rem;border-bottom:1px solid #1a1218;font-size:.9rem}
+.persona-row{cursor:pointer}
+.persona-row:hover{background:rgba(201,168,76,.06)}
+.etapa-chip{display:inline-block;padding:.2rem .55rem;border-radius:10px;font-size:.7rem;background:rgba(201,168,76,.12);color:#c9a84c}
+
+/* ── HOJA DE VIDA ── */
+.hv-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem}
+.hv-nombre{font-family:Georgia,serif;font-style:italic;font-size:1.3rem;color:#c9a84c}
+.hv-email{font-size:.8rem;color:#7a6e78}
+
+.subtabs{display:flex;gap:.4rem;border-bottom:1px solid #2a1f28;margin-bottom:1.2rem;flex-wrap:wrap}
+.subtab{padding:.55rem .9rem;background:none;border:none;color:#7a6e78;font-size:.82rem;cursor:pointer;border-bottom:2px solid transparent}
+.subtab.activo{color:#c9a84c;border-bottom-color:#c9a84c}
+
+.campo-grupo{margin-bottom:1.3rem}
+.campo-grupo-titulo{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.5rem}
+.campo{display:flex;padding:.4rem 0;border-bottom:1px solid #1a1218;font-size:.87rem}
+.campo-nombre{width:200px;flex-shrink:0;color:#9a8e96}
+.campo-valor{flex:1}
+.campo-valor.vacio{color:#5a5058;font-style:italic}
+
+.msg{padding:.6rem .9rem;border-radius:8px;margin-bottom:.5rem;font-size:.87rem;max-width:70%}
+.msg.assistant{background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.15)}
+.msg.user{background:rgba(36,26,32,.6);margin-left:auto}
+
+.match-card{border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:.8rem}
+.match-scores{display:flex;gap:1.5rem;margin:.5rem 0}
+.match-score{font-size:1.3rem;color:#c9a84c;font-weight:600}
+.match-score-lbl{font-size:.68rem;color:#7a6e78;text-transform:uppercase}
+
+.cargando{color:#7a6e78;font-style:italic;padding:1rem 0}
+.error-msg{color:#d98a9e;padding:1rem 0}
+
+#comparadorResultado{margin-top:1rem;padding:1rem;border:1px solid rgba(201,168,76,.3);border-radius:8px;display:none}
+#comparadorLista{margin-top:.6rem;max-height:200px;overflow-y:auto;border:1px solid #2a1f28;border-radius:6px;display:none}
+.comparador-opt{padding:.5rem .8rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid #1a1218}
+.comparador-opt:hover{background:rgba(201,168,76,.08)}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+  <p class="login-title">Panel de Soul</p>
+  <input type="password" class="login-input" id="loginPass" placeholder="Contraseña de admin">
+  <p class="login-err" id="loginErr">Contraseña incorrecta.</p>
+  <button class="btn" style="width:100%" onclick="entrarAdmin()">Entrar →</button>
+</div>
+
+<div id="panelWrap" class="oculto">
+  <div class="panel-header">
+    <span class="panel-title">Soul — Personas</span>
+    <button class="btn-secundario" onclick="volverALista()" id="btnVolver" style="display:none">← Volver a la lista</button>
+  </div>
+  <div class="panel-body">
+    <div id="vistaPersonas">
+      <p class="cargando" id="personasCargando">Cargando personas...</p>
+      <table class="personas-tabla oculto" id="personasTabla">
+        <thead>
+          <tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th></tr>
+        </thead>
+        <tbody id="personasBody"></tbody>
+      </table>
+    </div>
+
+    <div id="vistaHojaDeVida" class="oculto">
+      <div class="hv-header">
+        <div>
+          <p class="hv-nombre" id="hvNombre"></p>
+          <p class="hv-email" id="hvEmail"></p>
+        </div>
+      </div>
+      <div class="subtabs">
+        <button class="subtab activo" onclick="mostrarSubtab('datos',this)">Datos</button>
+        <button class="subtab" onclick="mostrarSubtab('perfil',this)">Perfil</button>
+        <button class="subtab" onclick="mostrarSubtab('modulos',this)">Módulos</button>
+        <button class="subtab" onclick="mostrarSubtab('conversacion',this)">Conversación con Soul</button>
+        <button class="subtab" onclick="mostrarSubtab('matches',this)">Matches</button>
+      </div>
+      <div id="subtabDatos"></div>
+      <div id="subtabPerfil" class="oculto"></div>
+      <div id="subtabModulos" class="oculto"></div>
+      <div id="subtabConversacion" class="oculto"></div>
+      <div id="subtabMatches" class="oculto"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var adminPassword=null;
+var personasCache=[];
+var personaActual=null;
+
+function entrarAdmin(){
+  var pass=document.getElementById('loginPass').value;
+  if(!pass)return;
+  adminPassword=pass;
+  document.getElementById('loginErr').style.display='none';
+  cargarPersonas(true);
+}
+
+async function llamarAdmin(url,opciones){
+  opciones=opciones||{};
+  opciones.headers=Object.assign({'X-Admin-Password':adminPassword},opciones.headers||{});
+  var res=await fetch(url,opciones);
+  return res;
+}
+
+async function cargarPersonas(esLogin){
+  try{
+    var res=await llamarAdmin('/api/admin/personas');
+    if(res.status===401){
+      if(esLogin){
+        document.getElementById('loginErr').style.display='block';
+        adminPassword=null;
+      }
+      return;
+    }
+    var data=await res.json();
+    personasCache=data.personas||[];
+
+    document.getElementById('loginWrap').classList.add('oculto');
+    document.getElementById('panelWrap').classList.remove('oculto');
+    document.getElementById('personasCargando').classList.add('oculto');
+
+    var tbody=document.getElementById('personasBody');
+    tbody.innerHTML='';
+    personasCache.forEach(function(p){
+      var tr=document.createElement('tr');
+      tr.className='persona-row';
+      tr.onclick=function(){ abrirHojaDeVida(p.id); };
+      tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(p.etapa_actual||'—')+'</span></td>';
+      tbody.appendChild(tr);
+    });
+    document.getElementById('personasTabla').classList.remove('oculto');
+  }catch(e){
+    document.getElementById('personasCargando').textContent='Error al cargar personas.';
+  }
+}
+
+function esc(s){
+  var d=document.createElement('div');
+  d.textContent=s==null?'':String(s);
+  return d.innerHTML;
+}
+
+function volverALista(){
+  document.getElementById('vistaHojaDeVida').classList.add('oculto');
+  document.getElementById('vistaPersonas').classList.remove('oculto');
+  document.getElementById('btnVolver').style.display='none';
+}
+
+async function abrirHojaDeVida(id){
+  document.getElementById('vistaPersonas').classList.add('oculto');
+  document.getElementById('vistaHojaDeVida').classList.remove('oculto');
+  document.getElementById('btnVolver').style.display='block';
+  document.getElementById('hvNombre').textContent='Cargando...';
+  document.getElementById('hvEmail').textContent='';
+
+  try{
+    var res=await llamarAdmin('/api/admin/persona?id='+encodeURIComponent(id));
+    if(!res.ok){
+      document.getElementById('hvNombre').textContent='No se pudo cargar.';
+      return;
+    }
+    var data=await res.json();
+    personaActual=data;
+    renderHojaDeVida(data);
+  }catch(e){
+    document.getElementById('hvNombre').textContent='Error al cargar.';
+  }
+}
+
+function mostrarSubtab(nombre,el){
+  document.querySelectorAll('.subtab').forEach(function(b){b.classList.remove('activo')});
+  el.classList.add('activo');
+  ['datos','perfil','modulos','conversacion','matches'].forEach(function(n){
+    document.getElementById('subtab'+n.charAt(0).toUpperCase()+n.slice(1)).classList.toggle('oculto',n!==nombre);
+  });
+}
+
+function campoHtml(nombre,valor){
+  var vacio=valor===null||valor===undefined||valor==='';
+  var texto=vacio?'no explorado':(Array.isArray(valor)?valor.join(', '):String(valor));
+  return '<div class="campo"><div class="campo-nombre">'+esc(nombre)+'</div><div class="campo-valor'+(vacio?' vacio':'')+'">'+esc(texto)+'</div></div>';
+}
+
+// Reusado por la sub-pestaña Perfil y por el detalle "ver ambos perfiles"
+// dentro de un match -- mismo formato en los dos lugares.
+function perfilAHtml(p,conValidacion){
+  if(!p)return '<p class="cargando">Todavía no tiene perfil extraído.</p>';
+  var g1=p.grupo1||{},g2=p.grupo2||{},g3=p.grupo3||{},g4=p.grupo4||{};
+  var html='';
+  html+='<div class="campo-grupo"><p class="campo-grupo-titulo">Grupo 1 — Identidad</p>';
+  html+=campoHtml('Valores',g1.valores);
+  html+=campoHtml('Estilo de comunicación',g1.estilo_comunicacion);
+  html+=campoHtml('Ritmo emocional',g1.ritmo_emocional);
+  html+=campoHtml('Máscara vs. auténtico',g1.mascara_vs_autentico);
+  html+=campoHtml('Momento evolutivo',g1.momento_evolutivo);
+  html+='</div>';
+  html+='<div class="campo-grupo"><p class="campo-grupo-titulo">Grupo 2 — Vínculo</p>';
+  html+=campoHtml('Tipo de vínculo',g2.tipo_vinculo);
+  html+=campoHtml('Proyecto de vida',g2.proyecto_vida);
+  html+=campoHtml('Necesidades de intimidad',g2.necesidades_intimidad);
+  html+=campoHtml('No puede faltar',g2.no_puede_faltar);
+  html+=campoHtml('No puede estar (límite real)',g2.no_puede_estar);
+  html+='</div>';
+  html+='<div class="campo-grupo"><p class="campo-grupo-titulo">Grupo 3 — Vincularidad</p>';
+  html+=campoHtml('Modo de conflictos',g3.modo_conflictos);
+  html+=campoHtml('Capacidad de reparación',g3.capacidad_reparacion);
+  html+=campoHtml('Reciprocidad',g3.reciprocidad);
+  html+=campoHtml('Flexibilidad',g3.flexibilidad);
+  html+=campoHtml('Patrones vinculares',g3.patrones_vinculares);
+  html+='</div>';
+  html+='<div class="campo-grupo"><p class="campo-grupo-titulo">Grupo 4 — Disponibilidad</p>';
+  html+=campoHtml('Apertura',g4.apertura);
+  html+=campoHtml('Consistencia',g4.consistencia);
+  html+=campoHtml('Estabilidad emocional',g4.estabilidad_emocional);
+  html+=campoHtml('Revisión de creencias',g4.revision_creencias);
+  html+=campoHtml('Metalenguaje',g4.metalenguaje);
+  html+=campoHtml('Índice de disponibilidad',g4.indice_disponibilidad);
+  html+='</div>';
+  if(conValidacion){
+    var estadoValidacion=p.perfil_validado===true?'validado por la persona':(p.perfil_validado===false?'la persona pidió un ajuste':'todavía sin validar');
+    html+='<div class="campo-grupo"><p class="campo-grupo-titulo">Validación del perfil</p>';
+    html+=campoHtml('Estado',estadoValidacion);
+    if(p.ajuste_perfil_nota)html+=campoHtml('Nota de ajuste',p.ajuste_perfil_nota);
+    html+='</div>';
+  }
+  return html;
+}
+
+function renderHojaDeVida(data){
+  var u=data.usuario||{};
+  document.getElementById('hvNombre').textContent=u.nombre||'(sin nombre)';
+  document.getElementById('hvEmail').textContent=u.email||'';
+
+  // ── DATOS (Capa A) ──
+  var htmlDatos='<div class="campo-grupo">';
+  htmlDatos+=campoHtml('Nombre',u.nombre);
+  htmlDatos+=campoHtml('Email',u.email);
+  htmlDatos+=campoHtml('Fecha de nacimiento',u.fecha_nacimiento);
+  htmlDatos+=campoHtml('Ciudad',u.ciudad);
+  htmlDatos+=campoHtml('Distancia máxima',u.distancia_max);
+  htmlDatos+=campoHtml('Género',u.genero);
+  htmlDatos+=campoHtml('Preferencia de género',u.preferencia_genero);
+  htmlDatos+=campoHtml('Tipo de vínculo',u.tipo_vinculo);
+  htmlDatos+=campoHtml('Hijos',u.hijos);
+  htmlDatos+=campoHtml('Estado civil',u.estado_civil);
+  htmlDatos+=campoHtml('Ocupación',u.ocupacion);
+  htmlDatos+=campoHtml('No negociables',u.no_negociables);
+  htmlDatos+=campoHtml('Negociables',u.negociables);
+  htmlDatos+=campoHtml('Etapa actual',u.etapa_actual);
+  htmlDatos+='</div>';
+  document.getElementById('subtabDatos').innerHTML=htmlDatos;
+
+  // ── PERFIL (extraido por Soul) ──
+  var p=data.perfil;
+  document.getElementById('subtabPerfil').innerHTML=perfilAHtml(p,true);
+
+  // ── MODULOS ──
+  var htmlModulos='';
+  if(!p||!p.modulo_esencial){
+    htmlModulos='<p class="cargando">Todavía no se le asignó módulo.</p>';
+  }else{
+    var fase=p.modulo_fase||'no iniciado';
+    var faseLegible={esencial:'en curso (módulo esencial)',obligatorio:'en curso (módulo obligatorio)',completo:'completado'}[fase]||fase;
+    var historial=[];
+    try{ historial=p.modulo_historial?JSON.parse(p.modulo_historial):[]; }catch(e){}
+
+    htmlModulos+='<div class="campo-grupo">';
+    htmlModulos+=campoHtml('Módulo esencial',p.modulo_esencial);
+    htmlModulos+=campoHtml('Módulo recomendado',p.modulo_recomendado);
+    htmlModulos+=campoHtml('Módulo obligatorio','Capacidad de volver a elegir');
+    htmlModulos+=campoHtml('Estado',faseLegible);
+    htmlModulos+=campoHtml('Mensajes acumulados (histórico guardado)',historial.length>0?(historial.length+' mensajes'):'0 mensajes');
+    htmlModulos+='</div>';
+    htmlModulos+='<p style="font-size:.75rem;color:#5a5058;margin-bottom:.8rem">El conteo no distingue con precisión cuántos de estos mensajes son del módulo esencial vs. el obligatorio -- es el total guardado en la charla de módulos.</p>';
+    htmlModulos+='<button class="btn-secundario" onclick="toggleTranscripto(\'modulos\')">Ver conversación completa de módulos →</button>';
+    htmlModulos+='<div id="transcriptoModulos" class="oculto" style="margin-top:1rem">';
+    if(historial.length===0){
+      htmlModulos+='<p class="cargando">Sin mensajes guardados todavía.</p>';
+    }else{
+      historial.forEach(function(m){
+        htmlModulos+='<div class="msg '+(m.role==='assistant'?'assistant':'user')+'">'+esc(m.content)+'</div>';
+      });
+    }
+    htmlModulos+='</div>';
+  }
+  document.getElementById('subtabModulos').innerHTML=htmlModulos;
+
+  // ── CONVERSACION CON SOUL ──
+  var conv=data.conversacion;
+  var htmlConv='';
+  if(!conv||!conv.historial||conv.historial.length===0){
+    htmlConv='<p class="cargando">Todavía no hay conversación guardada.</p>';
+  }else{
+    htmlConv+='<button class="btn-secundario" onclick="toggleTranscripto(\'chat\')">Ver conversación completa ('+conv.historial.length+' mensajes) →</button>';
+    htmlConv+='<div id="transcriptoChat" class="oculto" style="margin-top:1rem">';
+    conv.historial.forEach(function(m){
+      htmlConv+='<div class="msg '+(m.role==='assistant'?'assistant':'user')+'">'+esc(m.content)+'</div>';
+    });
+    htmlConv+='</div>';
+  }
+  document.getElementById('subtabConversacion').innerHTML=htmlConv;
+
+  // ── MATCHES ──
+  var matches=data.matches||[];
+  var htmlMatches='';
+  if(matches.length===0){
+    htmlMatches='<p class="cargando">Sin matches todavía.</p>';
+  }else{
+    matches.forEach(function(m,idx){
+      var detailId='matchDetalle'+idx;
+      htmlMatches+='<div class="match-card">';
+      htmlMatches+='<p style="color:#c9a84c">'+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
+      htmlMatches+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
+      htmlMatches+=campoHtml('Estado',m.estado);
+      htmlMatches+=campoHtml('Activado por',m.activado_por);
+      if(m.checkin_emocional)htmlMatches+=campoHtml('Check-in emocional',m.checkin_emocional);
+      if(m.mensaje_dupla)htmlMatches+=campoHtml('Mensaje para la dupla',m.mensaje_dupla);
+      if(m.fortalezas&&m.fortalezas.length)htmlMatches+=campoHtml('Fortalezas',m.fortalezas);
+      if(m.desafio)htmlMatches+=campoHtml('Desafío',m.desafio);
+      if(m.analisis_por_variable){
+        var av=m.analisis_por_variable;
+        htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Análisis por variable</p>';
+        htmlMatches+=campoHtml('Alineación',av.alineacion);
+        htmlMatches+=campoHtml('Complementariedad',av.complementariedad);
+        htmlMatches+=campoHtml('Adaptabilidad',av.adaptabilidad);
+        htmlMatches+=campoHtml('Potencial de construcción',av.potencial_de_construccion);
+      }
+      htmlMatches+='<button class="btn-secundario" style="margin-top:.6rem" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
+      htmlMatches+='<div id="'+detailId+'" style="display:none;margin-top:1rem"></div>';
+      htmlMatches+='</div>';
+    });
+  }
+  htmlMatches+='<div style="margin-top:1.5rem"><button class="btn-secundario" onclick="abrirComparador()">Comparar contra otro perfil →</button>';
+  htmlMatches+='<div id="comparadorLista"></div>';
+  htmlMatches+='<div id="comparadorResultado"></div></div>';
+  document.getElementById('subtabMatches').innerHTML=htmlMatches;
+}
+
+function toggleTranscripto(cual){
+  var id=cual==='modulos'?'transcriptoModulos':'transcriptoChat';
+  document.getElementById(id).classList.toggle('oculto');
+}
+
+function abrirComparador(){
+  var lista=document.getElementById('comparadorLista');
+  var yaAbierta=lista.style.display==='block';
+  if(yaAbierta){ lista.style.display='none'; return; }
+  lista.innerHTML='';
+  personasCache.filter(function(p){ return p.id!==personaActual.usuario.id; }).forEach(function(p){
+    var div=document.createElement('div');
+    div.className='comparador-opt';
+    div.textContent=p.nombre||p.email;
+    div.onclick=function(){ correrComparacion(p.id,p.nombre); };
+    lista.appendChild(div);
+  });
+  lista.style.display='block';
+}
+
+async function correrComparacion(otraId,otroNombre){
+  var resultadoDiv=document.getElementById('comparadorResultado');
+  resultadoDiv.style.display='block';
+  resultadoDiv.innerHTML='<p class="cargando">Comparando contra '+esc(otroNombre)+'...</p>';
+  document.getElementById('comparadorLista').style.display='none';
+
+  try{
+    var res=await llamarAdmin('/api/admin/comparar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({idA:personaActual.usuario.id,idB:otraId})
+    });
+    var data=await res.json();
+    if(!res.ok){
+      resultadoDiv.innerHTML='<p class="error-msg">'+esc(data.mensaje||data.error||'Error al comparar')+'</p>';
+      return;
+    }
+    var html='<p style="color:#c9a84c;margin-bottom:.5rem">Comparación contra '+esc(otroNombre)+'</p>';
+    html+='<div class="match-scores"><div><div class="match-score">'+esc(data.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(data.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
+    html+='<p style="font-size:.85rem;margin-top:.5rem">'+esc(data.veredicto)+'</p>';
+    if(data.fortalezas&&data.fortalezas.length)html+=campoHtml('Fortalezas',data.fortalezas);
+    if(data.desafio)html+=campoHtml('Desafío',data.desafio);
+    if(data.analisis_por_variable){
+      var av2=data.analisis_por_variable;
+      html+='<p class="campo-grupo-titulo" style="margin-top:.6rem">Análisis por variable</p>';
+      html+=campoHtml('Alineación',av2.alineacion);
+      html+=campoHtml('Complementariedad',av2.complementariedad);
+      html+=campoHtml('Adaptabilidad',av2.adaptabilidad);
+      html+=campoHtml('Potencial de construcción',av2.potencial_de_construccion);
+    }
+    resultadoDiv.innerHTML=html;
+  }catch(e){
+    resultadoDiv.innerHTML='<p class="error-msg">Error al comparar.</p>';
+  }
+}
+
+// Trae el perfil completo de la otra persona de un match y lo muestra al
+// lado del de esta persona -- para entender COMO se llego a los numeros,
+// no solo verlos.
+async function verAmbosPerfiles(otraId,detailId){
+  var div=document.getElementById(detailId);
+  if(div.style.display==='block'){ div.style.display='none'; return; }
+  div.style.display='block';
+  div.innerHTML='<p class="cargando">Cargando el otro perfil...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/perfil?id='+encodeURIComponent(otraId));
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">No se pudo cargar el otro perfil.</p>';
+      return;
+    }
+    var html='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">';
+    html+='<div><p class="campo-grupo-titulo" style="color:#c9a84c;font-size:.8rem;margin-bottom:.5rem">'+esc(personaActual.usuario.nombre||'Esta persona')+'</p>'+perfilAHtml(personaActual.perfil,false)+'</div>';
+    html+='<div><p class="campo-grupo-titulo" style="color:#c9a84c;font-size:.8rem;margin-bottom:.5rem">'+esc(data.nombre||'Otra persona')+'</p>'+perfilAHtml(data.perfil,false)+'</div>';
+    html+='</div>';
+    div.innerHTML=html;
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error al cargar el otro perfil.</p>';
+  }
+}
+
+document.getElementById('loginPass').addEventListener('keydown',function(e){
+  if(e.key==='Enter')entrarAdmin();
+});
+</script>
+</body>
+</html>
