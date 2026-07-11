@@ -300,6 +300,7 @@ function renderHojaDeVida(data){
 
     htmlModulos+='<div class="campo-grupo">';
     htmlModulos+=campoHtml('Módulo esencial',p.modulo_esencial);
+    htmlModulos+=campoHtml('Señales detectadas',p.senales_modulo);
     htmlModulos+=campoHtml('Módulo recomendado',p.modulo_recomendado);
     htmlModulos+=campoHtml('Módulo obligatorio','Capacidad de volver a elegir');
     htmlModulos+=campoHtml('Estado',faseLegible);
@@ -359,14 +360,23 @@ function renderHojaDeVida(data){
         htmlMatches+=campoHtml('Adaptabilidad',av.adaptabilidad);
         htmlMatches+=campoHtml('Potencial de construcción',av.potencial_de_construccion);
       }
-      htmlMatches+='<button class="btn-secundario" style="margin-top:.6rem" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
+      htmlMatches+='<div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">';
+      htmlMatches+='<button class="btn-secundario" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
+      if(m.estado==='pendiente'){
+        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">Activar →</button>';
+      }else if(m.estado==='activo'){
+        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'pausar\')">Pausar</button>';
+      }
+      htmlMatches+='</div>';
       htmlMatches+='<div id="'+detailId+'" style="display:none;margin-top:1rem"></div>';
       htmlMatches+='</div>';
     });
   }
-  htmlMatches+='<div style="margin-top:1.5rem"><button class="btn-secundario" onclick="abrirComparador()">Comparar contra otro perfil →</button>';
+  htmlMatches+='<div style="margin-top:1.5rem"><button class="btn-secundario" onclick="abrirComparador()">Comparar contra otro perfil →</button> ';
+  htmlMatches+='<button class="btn-secundario" onclick="pedirRanking()">Ver ranking de compatibilidad →</button>';
   htmlMatches+='<div id="comparadorLista"></div>';
-  htmlMatches+='<div id="comparadorResultado"></div></div>';
+  htmlMatches+='<div id="comparadorResultado"></div>';
+  htmlMatches+='<div id="rankingResultado" style="margin-top:1rem;display:none"></div></div>';
   document.getElementById('subtabMatches').innerHTML=htmlMatches;
 }
 
@@ -423,6 +433,70 @@ async function correrComparacion(otraId,otroNombre){
     resultadoDiv.innerHTML=html;
   }catch(e){
     resultadoDiv.innerHTML='<p class="error-msg">Error al comparar.</p>';
+  }
+}
+
+// Activa o pausa un match desde la pestaña Matches -- activar dispara del
+// lado de las dos personas la misma secuencia que si el sistema lo hubiera
+// activado solo (se resuelve al login, en soul.html). Recarga la hoja de
+// vida al terminar para reflejar el estado nuevo.
+async function cambiarEstadoMatch(matchId,accion){
+  try{
+    var res=await llamarAdmin('/api/admin/activarMatch',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({matchId:matchId,accion:accion})
+    });
+    if(!res.ok){
+      alert('No se pudo cambiar el estado del match.');
+      return;
+    }
+    await abrirHojaDeVida(personaActual.usuario.id);
+    document.querySelectorAll('.subtab').forEach(function(b){
+      if(b.textContent.indexOf('Matches')>-1)mostrarSubtab('matches',b);
+    });
+  }catch(e){
+    alert('Error al cambiar el estado del match.');
+  }
+}
+
+// Compara el perfil de esta persona contra TODOS los demás perfiles con
+// datos reales y muestra una escala ordenada de mayor a menor compatibilidad
+// -- puede tardar (hace varias llamadas reales a Claude en paralelo), por
+// eso el estado de carga explícito.
+async function pedirRanking(){
+  var div=document.getElementById('rankingResultado');
+  div.style.display='block';
+  div.innerHTML='<p class="cargando">Comparando contra todos los perfiles... esto puede tardar un rato.</p>';
+  document.getElementById('comparadorLista').style.display='none';
+  document.getElementById('comparadorResultado').style.display='none';
+
+  try{
+    var res=await llamarAdmin('/api/admin/ranking',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({personaId:personaActual.usuario.id})
+    });
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.mensaje||data.error||'Error al calcular el ranking')+'</p>';
+      return;
+    }
+    if(!data.ranking||data.ranking.length===0){
+      div.innerHTML='<p class="cargando">No hay otros perfiles con datos suficientes para comparar todavía.</p>';
+      return;
+    }
+    var html='<p style="color:#c9a84c;margin-bottom:.6rem">Ranking de compatibilidad ('+data.ranking.length+' perfiles comparados)</p>';
+    data.ranking.forEach(function(r,i){
+      html+='<div class="match-card">';
+      html+='<p style="color:#c9a84c">'+(i+1)+'. '+esc(r.nombre||'(sin nombre)')+'</p>';
+      html+='<div class="match-scores"><div><div class="match-score">'+esc(r.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(r.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
+      if(r.veredicto)html+='<p style="font-size:.85rem;margin-top:.4rem">'+esc(r.veredicto)+'</p>';
+      html+='</div>';
+    });
+    div.innerHTML=html;
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error al calcular el ranking.</p>';
   }
 }
 

@@ -686,7 +686,25 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
   <p class="match-sub">Ahora empieza la parte que ningún algoritmo puede hacer por ustedes.</p>
   <div class="match-msg" id="matchMsg"></div>
-  <button class="btn-gold" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
+  <button class="btn-gold" id="btnPrepararEncuentro" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
+  <div id="matchDecisionBtns" style="display:none;margin-top:1rem;gap:.6rem;justify-content:center;flex-wrap:wrap">
+    <button class="btn-gold" onclick="decidirEnMatch(true)">Quiero conocer a esta persona →</button>
+    <button class="btn-secundario" onclick="decidirEnMatch(false)" style="padding:.9rem 1.2rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.88rem;cursor:pointer">Prefiero esperar otro match</button>
+  </div>
+  <p id="matchDecisionMsg" style="display:none;margin-top:1rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7;text-align:center"></p>
+</div>
+
+<!-- ══ MATCH NO AVANZÓ ══ -->
+<div class="etapa" id="eMatchCerrado">
+  <div class="con-wrap">
+    <div class="con-orb"></div>
+    <p class="con-title">Esta vez no fue</p>
+    <div class="con-card">
+      <p>Esta vez no fue con esta persona. Pero elegiste abrirte a conocerla, y eso ya dice algo lindo de vos.</p>
+      <p>Soul va a estar acá cuando aparezca alguien más.</p>
+    </div>
+    <button class="btn-full" onclick="continuarTrasCierreMatch()">Entendido →</button>
+  </div>
 </div>
 
 <!-- ══ ESPERANDO MATCH ══ -->
@@ -1256,6 +1274,9 @@ function verResultadoMatch(){
     document.getElementById('scoreHoy').textContent=window.matchData.compatibilidad_hoy+'%';
     document.getElementById('scorePot').textContent=window.matchData.potencial_construccion+'%';
     document.getElementById('matchMsg').textContent=window.matchData.mensaje_dupla;
+    // Este match recién se calculó y todavía no pasó por activación --
+    // sigue el camino directo a preparación de siempre, sin pedir decisión.
+    window.matchEsPersistido=false;
     ir(5);
   }else{
     ir('Esperando');
@@ -1802,12 +1823,101 @@ async function cargarProgreso(email){
       }catch(e){}
 
       var pct=calcularPorcentajePerfil(u,perfil);
-      mostrarEleccionSesion(u,pct);
+      window.usuarioParaSesion=u;
+      window.pctParaSesion=pct;
+      var huboMatchPendiente=await chequearMatchPendiente();
+      if(!huboMatchPendiente){
+        mostrarEleccionSesion(u,pct);
+      }
     }else{
       ir(1);
     }
   }catch(e){
     ir(1);
+  }
+}
+
+// Se llama a la sesión propia de matches (no el /api/leer genérico, que solo
+// autoriza lecturas por 'usuario_a' -- ver lib/authUtil.js) porque acá hace
+// falta ver matches donde esta persona sea cualquiera de los dos lados.
+async function obtenerMisMatches(){
+  var res=await fetchConSesion(function(){
+    return fetch('/api/misMatches',{headers:{'Authorization':'Bearer '+accessToken}});
+  });
+  if(!res.ok)throw new Error('error_mis_matches');
+  return res.json();
+}
+
+// Se corre al loguearse, antes de la elección de sesión habitual. Misma
+// secuencia sin importar si el match lo activó el sistema o la
+// administradora -- este chequeo solo mira el estado 'activo', no quién lo
+// puso. Devuelve true si redirigió a otra pantalla (match pendiente de
+// decisión, o cierre de un match que no avanzó y todavía no se le avisó).
+async function chequearMatchPendiente(){
+  try{
+    var data=await obtenerMisMatches();
+    var matches=data.matches||[];
+    for(var i=0;i<matches.length;i++){
+      var m=matches[i];
+      var soyA=m.usuario_a===usuarioId;
+      var miEleccion=(soyA?m.eleccion_usuario_a:m.eleccion_usuario_b)||'pendiente';
+      if(m.estado==='activo'&&miEleccion==='pendiente'){
+        window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
+        window.matchEsPersistido=true;
+        document.getElementById('scoreHoy').textContent=m.compatibilidad_hoy+'%';
+        document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
+        document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
+        ir(5);
+        return true;
+      }
+      if(m.estado==='no_avanza'&&miEleccion==='acepta'){
+        ir('MatchCerrado');
+        fetch('/api/cerrarMatch',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({matchId:m.id})}).catch(function(){});
+        return true;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+
+function continuarTrasCierreMatch(){
+  mostrarEleccionSesion(window.usuarioParaSesion,window.pctParaSesion);
+}
+
+// Botones nuevos de e5 (match persistido -- activado por admin o sistema).
+// La distinción con el camino inmediato post-onboarding (window.matchEsPersistido
+// en false) es que ahí el match todavía no está 'activo' en la base -- ese
+// camino sigue yendo directo a preparación como siempre.
+async function decidirEnMatch(si){
+  document.getElementById('matchDecisionBtns').style.display='none';
+  var msg=document.getElementById('matchDecisionMsg');
+  msg.style.display='block';
+  msg.textContent='Guardando tu elección...';
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/elegirMatch',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+        body:JSON.stringify({matchId:window.matchData.id,eleccion:si?'acepta':'rechaza'})
+      });
+    });
+    var data=await res.json();
+    if(!res.ok){
+      msg.textContent='Algo se complicó guardando tu elección. Probá de nuevo en un rato.';
+      return;
+    }
+    if(data.estado==='no_avanza'&&si){
+      ir('MatchCerrado');
+      fetch('/api/cerrarMatch',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({matchId:window.matchData.id})}).catch(function(){});
+    }else if(data.estado==='mutuamente_aceptado'){
+      msg.textContent='¡Las dos partes eligieron seguir! Soul va a acompañar lo que viene.';
+    }else{
+      msg.textContent=si
+        ? 'Guardamos tu elección. En cuanto la otra persona también decida, Soul te va a avisar.'
+        : 'Guardamos tu elección. Soul va a estar cuando aparezca alguien más.';
+    }
+  }catch(e){
+    msg.textContent='Algo se complicó guardando tu elección. Probá de nuevo en un rato.';
   }
 }
 
@@ -1919,6 +2029,7 @@ async function elegirSesion(tipo){
                 modulo_esencial: moduloEsencial||null,
                 modulo_recomendado: moduloInfo.modulo_recomendado||null,
                 modulo_fase: moduloEsencial?'esencial':null,
+                senales_modulo: moduloInfo.senales_detectadas||null,
                 sintesis_espejo: JSON.stringify({fortalezas:fortalezasGuardadas,oportunidades:oportunidadesGuardadas})
               }).catch(function(){});
             }catch(e){}
@@ -2385,7 +2496,7 @@ Señales: el otro siempre tiene el poder ("siempre me tocó la peor gente"), poc
 "Coherencia interna" -- la distancia entre valores declarados y conducta real, y sobre todo la conciencia de esa brecha.
 Señales: valores declarados vs. ejemplos concretos contradictorios ("la honestidad es fundamental" + "prefiero desaparecer sin explicar"), lo que busca vs. lo que elige no coincide, justificaciones frecuentes ("es que...", "lo que pasa es que..."), cambios bruscos en el discurso sin poder integrarlos, emoción y contenido verbal que no coinciden ("ya lo superé" con tono de enojo intenso), inestabilidad narrativa. Alguien que reconoce su propia incoherencia tiene más potencial de crecimiento que alguien con discurso impecable pero rígido -- eso también es señal a favor de este módulo.
 
-Respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. En "modulo_esencial" y "modulo_recomendado" usá el nombre EXACTO tal como aparece entre comillas arriba (ej. "Poder personal", no "PODER PERSONAL" ni "poder personal").`;
+Respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","senales_detectadas":"descripción concreta, en 2-3 frases, de las señales específicas de la charla que llevaron a elegir el módulo esencial -- para que alguien pueda auditar la elección, no una etiqueta genérica","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. En "modulo_esencial" y "modulo_recomendado" usá el nombre EXACTO tal como aparece entre comillas arriba (ej. "Poder personal", no "PODER PERSONAL" ni "poder personal").`;
 
 // Guardado incondicional al pausar la charla principal: el transcript
 // completo se guarda siempre, y además se intenta extraer y persistir lo
@@ -2537,7 +2648,8 @@ async function continuarTrasValidacion(){
     // otra pestana, etc.) -- son variables de memoria, no sobreviven eso.
     modulo_esencial: moduloInfo.modulo_esencial||null,
     modulo_recomendado: moduloInfo.modulo_recomendado||null,
-    modulo_fase: moduloInfo.modulo_esencial?'esencial':null
+    modulo_fase: moduloInfo.modulo_esencial?'esencial':null,
+    senales_modulo: moduloInfo.senales_detectadas||null
   }).catch(function(){});
 
   // 5. Calcular matches en paralelo mientras la persona elige
@@ -2594,6 +2706,17 @@ async function extraerYGuardarPerfil(){
   }catch(e){console.error('Error extrayendo perfil:',e);}
 }
 function initMatch(){
+  // Match persistido (activado por admin o sistema): pide decisión antes de
+  // seguir. Match recién calculado en la misma sesión (todavía no pasó por
+  // activación): sigue directo a preparación, como siempre.
+  document.getElementById('matchDecisionMsg').style.display='none';
+  if(window.matchEsPersistido){
+    document.getElementById('btnPrepararEncuentro').style.display='none';
+    document.getElementById('matchDecisionBtns').style.display='flex';
+  }else{
+    document.getElementById('btnPrepararEncuentro').style.display='block';
+    document.getElementById('matchDecisionBtns').style.display='none';
+  }
   var c=document.getElementById('matchCanvas');
   var ctx=c.getContext('2d');
   var t=0;

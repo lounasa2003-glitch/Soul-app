@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     for (const otro of otrosPerfiles) {
       const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
-        max_tokens: 600,
+        max_tokens: 1200,
         system: COMPARE_PROMPT,
         messages: [{
           role: 'user',
