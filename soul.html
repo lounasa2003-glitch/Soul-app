@@ -811,8 +811,19 @@ function initAmbientSound(){
     oscillators.push(osc);
   });
 
-  // Arranca sonando automáticamente
-  masterGain.gain.linearRampToValueAtTime(0.06,audioCtx.currentTime+2);
+  // Arranca sonando automáticamente. Muchos navegadores mobile crean el
+  // AudioContext en estado "suspended" incluso durante un gesto directo del
+  // usuario -- sin resume() explícito los osciladores quedan conectados y
+  // arrancados pero mudos, que es justo el síntoma reportado (ícono visible,
+  // sin sonido real).
+  function arrancarVolumen(){
+    masterGain.gain.linearRampToValueAtTime(0.06,audioCtx.currentTime+2);
+  }
+  if(audioCtx.state==='suspended'){
+    audioCtx.resume().then(arrancarVolumen);
+  }else{
+    arrancarVolumen();
+  }
 }
 
 function toggleSound(){
@@ -826,13 +837,11 @@ function toggleSound(){
   masterGain.gain.linearRampToValueAtTime(target,audioCtx.currentTime+1.2);
 }
 
-// Inicia automáticamente con la primera interacción del usuario (requerido por navegadores)
-document.addEventListener('click',function autoStart(){
-  if(!audioReady) initAmbientSound();
-}, {once:true});
-document.addEventListener('touchstart',function autoStartTouch(){
-  if(!audioReady) initAmbientSound();
-}, {once:true});
+// El audio se inicializa únicamente desde el click/tap directo sobre el
+// ícono (toggleSound, más arriba) -- un listener genérico de "primer click
+// en cualquier lado del documento" no siempre cuenta como gesto de usuario
+// válido para las políticas de autoplay de los navegadores mobile, que era
+// la sospecha original de por qué nunca sonaba de forma confiable.
 // ── ESTRELLAS ──
 var sc=document.getElementById('stars');
 for(var i=0;i<60;i++){
@@ -1120,10 +1129,15 @@ async function mostrarEspejo(){
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
     guardarModuloHistorial().catch(function(){});
+    // El espejo termina con una pregunta ("¿cómo te cae esto?") -- se corta
+    // acá y se espera la reacción real de la persona en vez de encadenar de
+    // una el arranque del módulo, que llegaba pegado como un segundo bloque
+    // de texto sin pausa. sendModuloMsg (via enviarAlModulo) ya retoma sola
+    // con buildModuloPrompt en cuanto la persona responde algo.
   }catch(e){
     var t2=document.getElementById('moduloTyping');if(t2)t2.remove();
+    addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
   }
-  iniciarModuloReal();
 }
 
 // El módulo no tenía NINGÚN guardado propio -- si se cerraba la app en medio
