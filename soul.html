@@ -838,10 +838,11 @@ function initAmbientSound(){
   // El volumen final es oscGain (0.045 por oscilador) * masterGain -- con
   // masterGain en 0.06 el resultado quedaba en ~0.0027 de amplitud por
   // oscilador (~-51dB), inaudible en la práctica aunque el audio estuviera
-  // sonando de verdad. Subido a un nivel que se escucha como ambiental
-  // suave sin ser invasivo.
+  // sonando de verdad. Con masterGain=3 el pico teórico (los 4 osciladores
+  // en fase) es 0.18*3=0.54, con margen de sobra antes de 1.0 -- volumen
+  // claramente audible; quien lo sienta fuerte lo baja con el mismo ícono.
   function arrancarVolumen(){
-    masterGain.gain.linearRampToValueAtTime(1,audioCtx.currentTime+2);
+    masterGain.gain.linearRampToValueAtTime(3,audioCtx.currentTime+2);
   }
   if(audioCtx.state==='suspended'){
     audioCtx.resume().then(arrancarVolumen);
@@ -855,7 +856,7 @@ function toggleSound(){
   soundOn=!soundOn;
   var btn=document.getElementById('soundToggle');
   btn.classList.toggle('muted',!soundOn);
-  var target=soundOn?1:0;
+  var target=soundOn?3:0;
   masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
   masterGain.gain.setValueAtTime(masterGain.gain.value,audioCtx.currentTime);
   masterGain.gain.linearRampToValueAtTime(target,audioCtx.currentTime+1.2);
