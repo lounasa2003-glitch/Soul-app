@@ -362,8 +362,8 @@ function renderHojaDeVida(data){
       }
       htmlMatches+='<div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">';
       htmlMatches+='<button class="btn-secundario" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
-      if(m.estado==='pendiente'){
-        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">Activar →</button>';
+      if(m.estado==='pendiente'||m.estado==='pausado'){
+        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">'+(m.estado==='pausado'?'Reactivar →':'Activar →')+'</button>';
       }else if(m.estado==='activo'){
         htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'pausar\')">Pausar</button>';
       }
@@ -440,6 +440,20 @@ async function correrComparacion(otraId,otroNombre){
 // lado de las dos personas la misma secuencia que si el sistema lo hubiera
 // activado solo (se resuelve al login, en soul.html). Recarga la hoja de
 // vida al terminar para reflejar el estado nuevo.
+function mostrarToast(texto){
+  var t=document.getElementById('adminToast');
+  if(!t){
+    t=document.createElement('div');
+    t.id='adminToast';
+    t.style.cssText='position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:#1a1218;border:1px solid rgba(201,168,76,.4);color:#c9a84c;padding:.7rem 1.2rem;border-radius:6px;font-size:.85rem;z-index:9999;transition:opacity .3s';
+    document.body.appendChild(t);
+  }
+  t.textContent=texto;
+  t.style.opacity='1';
+  clearTimeout(t._timeout);
+  t._timeout=setTimeout(function(){ t.style.opacity='0'; },2500);
+}
+
 async function cambiarEstadoMatch(matchId,accion){
   try{
     var res=await llamarAdmin('/api/admin/matches',{
@@ -451,6 +465,8 @@ async function cambiarEstadoMatch(matchId,accion){
       alert('No se pudo cambiar el estado del match.');
       return;
     }
+    var data=await res.json();
+    mostrarToast('Match '+(data&&data.estado?('→ '+data.estado):'actualizado')+' ✓');
     await abrirHojaDeVida(personaActual.usuario.id);
     document.querySelectorAll('.subtab').forEach(function(b){
       if(b.textContent.indexOf('Matches')>-1)mostrarSubtab('matches',b);
