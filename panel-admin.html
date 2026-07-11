@@ -188,7 +188,7 @@ async function abrirHojaDeVida(id){
   document.getElementById('hvEmail').textContent='';
 
   try{
-    var res=await llamarAdmin('/api/admin/persona?id='+encodeURIComponent(id));
+    var res=await llamarAdmin('/api/admin/personas?id='+encodeURIComponent(id));
     if(!res.ok){
       document.getElementById('hvNombre').textContent='No se pudo cargar.';
       return;
@@ -442,7 +442,7 @@ async function correrComparacion(otraId,otroNombre){
 // vida al terminar para reflejar el estado nuevo.
 async function cambiarEstadoMatch(matchId,accion){
   try{
-    var res=await llamarAdmin('/api/admin/activarMatch',{
+    var res=await llamarAdmin('/api/admin/matches',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({matchId:matchId,accion:accion})
@@ -472,10 +472,10 @@ async function pedirRanking(){
   document.getElementById('comparadorResultado').style.display='none';
 
   try{
-    var res=await llamarAdmin('/api/admin/ranking',{
+    var res=await llamarAdmin('/api/admin/matches',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({personaId:personaActual.usuario.id})
+      body:JSON.stringify({accion:'ranking',personaId:personaActual.usuario.id})
     });
     var data=await res.json();
     if(!res.ok){
@@ -509,7 +509,7 @@ async function verAmbosPerfiles(otraId,detailId){
   div.style.display='block';
   div.innerHTML='<p class="cargando">Cargando el otro perfil...</p>';
   try{
-    var res=await llamarAdmin('/api/admin/perfil?id='+encodeURIComponent(otraId));
+    var res=await llamarAdmin('/api/admin/personas?modo=perfil&id='+encodeURIComponent(otraId));
     var data=await res.json();
     if(!res.ok){
       div.innerHTML='<p class="error-msg">No se pudo cargar el otro perfil.</p>';

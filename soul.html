@@ -1842,7 +1842,7 @@ async function cargarProgreso(email){
 // falta ver matches donde esta persona sea cualquiera de los dos lados.
 async function obtenerMisMatches(){
   var res=await fetchConSesion(function(){
-    return fetch('/api/misMatches',{headers:{'Authorization':'Bearer '+accessToken}});
+    return fetch('/api/matches',{headers:{'Authorization':'Bearer '+accessToken}});
   });
   if(!res.ok)throw new Error('error_mis_matches');
   return res.json();
@@ -1871,8 +1871,8 @@ async function chequearMatchPendiente(){
         return true;
       }
       if(m.estado==='no_avanza'&&miEleccion==='acepta'){
+        window.matchIdParaCerrar=m.id;
         ir('MatchCerrado');
-        fetch('/api/cerrarMatch',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({matchId:m.id})}).catch(function(){});
         return true;
       }
     }
@@ -1880,7 +1880,20 @@ async function chequearMatchPendiente(){
   return false;
 }
 
-function continuarTrasCierreMatch(){
+// El cierre se dispara reción al confirmar (no al mostrar la pantalla) --
+// antes era fire-and-forget en el momento de mostrarla, y un fallo
+// transitorio de red lo perdía en silencio, mostrando el mismo mensaje de
+// nuevo en cada login. Esperar la respuesta acá, con la acción explícita de
+// la persona, es más confiable, y aunque falle igual se la deja seguir.
+async function continuarTrasCierreMatch(){
+  if(window.matchIdParaCerrar){
+    try{
+      await fetchConSesion(function(){
+        return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrar',matchId:window.matchIdParaCerrar})});
+      });
+    }catch(e){}
+    window.matchIdParaCerrar=null;
+  }
   mostrarEleccionSesion(window.usuarioParaSesion,window.pctParaSesion);
 }
 
@@ -1895,10 +1908,10 @@ async function decidirEnMatch(si){
   msg.textContent='Guardando tu elección...';
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/elegirMatch',{
+      return fetch('/api/matches',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
-        body:JSON.stringify({matchId:window.matchData.id,eleccion:si?'acepta':'rechaza'})
+        body:JSON.stringify({accion:'elegir',matchId:window.matchData.id,eleccion:si?'acepta':'rechaza'})
       });
     });
     var data=await res.json();
@@ -1907,8 +1920,8 @@ async function decidirEnMatch(si){
       return;
     }
     if(data.estado==='no_avanza'&&si){
+      window.matchIdParaCerrar=window.matchData.id;
       ir('MatchCerrado');
-      fetch('/api/cerrarMatch',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({matchId:window.matchData.id})}).catch(function(){});
     }else if(data.estado==='mutuamente_aceptado'){
       msg.textContent='¡Las dos partes eligieron seguir! Soul va a acompañar lo que viene.';
     }else{
