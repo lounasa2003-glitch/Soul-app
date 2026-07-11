@@ -834,8 +834,14 @@ function initAmbientSound(){
   // usuario -- sin resume() explícito los osciladores quedan conectados y
   // arrancados pero mudos, que es justo el síntoma reportado (ícono visible,
   // sin sonido real).
+  //
+  // El volumen final es oscGain (0.045 por oscilador) * masterGain -- con
+  // masterGain en 0.06 el resultado quedaba en ~0.0027 de amplitud por
+  // oscilador (~-51dB), inaudible en la práctica aunque el audio estuviera
+  // sonando de verdad. Subido a un nivel que se escucha como ambiental
+  // suave sin ser invasivo.
   function arrancarVolumen(){
-    masterGain.gain.linearRampToValueAtTime(0.06,audioCtx.currentTime+2);
+    masterGain.gain.linearRampToValueAtTime(1,audioCtx.currentTime+2);
   }
   if(audioCtx.state==='suspended'){
     audioCtx.resume().then(arrancarVolumen);
@@ -849,7 +855,7 @@ function toggleSound(){
   soundOn=!soundOn;
   var btn=document.getElementById('soundToggle');
   btn.classList.toggle('muted',!soundOn);
-  var target=soundOn?0.06:0;
+  var target=soundOn?1:0;
   masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
   masterGain.gain.setValueAtTime(masterGain.gain.value,audioCtx.currentTime);
   masterGain.gain.linearRampToValueAtTime(target,audioCtx.currentTime+1.2);
