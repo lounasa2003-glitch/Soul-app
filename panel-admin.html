@@ -33,6 +33,8 @@ a{color:inherit}
 .persona-row{cursor:pointer}
 .persona-row:hover{background:rgba(201,168,76,.06)}
 .etapa-chip{display:inline-block;padding:.2rem .55rem;border-radius:10px;font-size:.7rem;background:rgba(201,168,76,.12);color:#c9a84c}
+.filtro-chip{padding:.35rem .75rem;border-radius:12px;font-size:.75rem;border:1px solid #2a1f28;color:#9a8e96;cursor:pointer;background:none;font-family:inherit}
+.filtro-chip.activo{background:linear-gradient(135deg,#8a6e2f,#c9a84c);border-color:transparent;color:#07050a;font-weight:600}
 
 /* ── HOJA DE VIDA ── */
 .hv-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem}
@@ -85,12 +87,17 @@ a{color:inherit}
   <div class="panel-body">
     <div id="vistaPersonas">
       <p class="cargando" id="personasCargando">Cargando personas...</p>
+      <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
+        <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="width:100%;max-width:340px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;margin-bottom:.7rem;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
+        <div id="personasChipsEtapa" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
+      </div>
       <table class="personas-tabla oculto" id="personasTabla">
         <thead>
           <tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th></tr>
         </thead>
         <tbody id="personasBody"></tbody>
       </table>
+      <p class="cargando oculto" id="personasSinResultados">Ninguna persona coincide con el filtro.</p>
     </div>
 
     <div id="vistaHojaDeVida" class="oculto">
@@ -136,6 +143,8 @@ async function llamarAdmin(url,opciones){
   return res;
 }
 
+var filtroEtapaActual='todas';
+
 async function cargarPersonas(esLogin){
   try{
     var res=await llamarAdmin('/api/admin/personas');
@@ -153,19 +162,62 @@ async function cargarPersonas(esLogin){
     document.getElementById('panelWrap').classList.remove('oculto');
     document.getElementById('personasCargando').classList.add('oculto');
 
-    var tbody=document.getElementById('personasBody');
-    tbody.innerHTML='';
-    personasCache.forEach(function(p){
-      var tr=document.createElement('tr');
-      tr.className='persona-row';
-      tr.onclick=function(){ abrirHojaDeVida(p.id); };
-      tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(p.etapa_actual||'—')+'</span></td>';
-      tbody.appendChild(tr);
-    });
+    construirChipsEtapa();
+    document.getElementById('personasFiltros').classList.remove('oculto');
     document.getElementById('personasTabla').classList.remove('oculto');
+    aplicarFiltrosPersonas();
   }catch(e){
     document.getElementById('personasCargando').textContent='Error al cargar personas.';
   }
+}
+
+// Chips dinámicos: solo las etapas que efectivamente aparecen en la lista
+// (más "Todas"), para no mostrar opciones vacías.
+function construirChipsEtapa(){
+  var etapasPresentes=[];
+  personasCache.forEach(function(p){
+    var e=p.etapa_actual||'—';
+    if(etapasPresentes.indexOf(e)===-1)etapasPresentes.push(e);
+  });
+  var cont=document.getElementById('personasChipsEtapa');
+  cont.innerHTML='';
+  var todasBtn=document.createElement('button');
+  todasBtn.className='filtro-chip'+(filtroEtapaActual==='todas'?' activo':'');
+  todasBtn.textContent='Todas ('+personasCache.length+')';
+  todasBtn.onclick=function(){ filtroEtapaActual='todas'; construirChipsEtapa(); aplicarFiltrosPersonas(); };
+  cont.appendChild(todasBtn);
+  etapasPresentes.forEach(function(e){
+    var cant=personasCache.filter(function(p){return (p.etapa_actual||'—')===e}).length;
+    var btn=document.createElement('button');
+    btn.className='filtro-chip'+(filtroEtapaActual===e?' activo':'');
+    btn.textContent=etapaLegible(e)+' ('+cant+')';
+    btn.onclick=function(){ filtroEtapaActual=e; construirChipsEtapa(); aplicarFiltrosPersonas(); };
+    cont.appendChild(btn);
+  });
+}
+
+function aplicarFiltrosPersonas(){
+  var texto=(document.getElementById('personasBuscar').value||'').trim().toLowerCase();
+  var filtradas=personasCache.filter(function(p){
+    var pasaEtapa=filtroEtapaActual==='todas'||(p.etapa_actual||'—')===filtroEtapaActual;
+    if(!pasaEtapa)return false;
+    if(!texto)return true;
+    var nombre=(p.nombre||'').toLowerCase();
+    var email=(p.email||'').toLowerCase();
+    return nombre.indexOf(texto)>-1||email.indexOf(texto)>-1;
+  });
+
+  var tbody=document.getElementById('personasBody');
+  tbody.innerHTML='';
+  filtradas.forEach(function(p){
+    var tr=document.createElement('tr');
+    tr.className='persona-row';
+    tr.onclick=function(){ abrirHojaDeVida(p.id); };
+    tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('personasTabla').classList.toggle('oculto',filtradas.length===0);
+  document.getElementById('personasSinResultados').classList.toggle('oculto',filtradas.length>0);
 }
 
 function esc(s){
@@ -213,6 +265,20 @@ function campoHtml(nombre,valor){
   var vacio=valor===null||valor===undefined||valor==='';
   var texto=vacio?'no explorado':(Array.isArray(valor)?valor.join(', '):String(valor));
   return '<div class="campo"><div class="campo-nombre">'+esc(nombre)+'</div><div class="campo-valor'+(vacio?' vacio':'')+'">'+esc(texto)+'</div></div>';
+}
+
+// Nombres reales de etapa_actual (usuarios) -> texto legible para el panel.
+// Se usa acá y en el filtro por etapa de la lista de Personas.
+var ETAPAS_LEGIBLES={
+  nuevo:'Nuevo (sin empezar)',
+  chat:'Charlando con Soul',
+  modulos:'En los módulos',
+  match_visto:'Vio un match',
+  match_aceptado:'Aceptó un match',
+  en_cita:'En la cita virtual'
+};
+function etapaLegible(etapa){
+  return ETAPAS_LEGIBLES[etapa]||etapa||'—';
 }
 
 // Reusado por la sub-pestaña Perfil y por el detalle "ver ambos perfiles"
@@ -280,7 +346,7 @@ function renderHojaDeVida(data){
   htmlDatos+=campoHtml('Ocupación',u.ocupacion);
   htmlDatos+=campoHtml('No negociables',u.no_negociables);
   htmlDatos+=campoHtml('Negociables',u.negociables);
-  htmlDatos+=campoHtml('Etapa actual',u.etapa_actual);
+  htmlDatos+=campoHtml('Etapa actual',etapaLegible(u.etapa_actual));
   htmlDatos+='</div>';
   document.getElementById('subtabDatos').innerHTML=htmlDatos;
 
@@ -336,41 +402,82 @@ function renderHojaDeVida(data){
   document.getElementById('subtabConversacion').innerHTML=htmlConv;
 
   // ── MATCHES ──
+  // Se agrupan en tres baldes en vez de una lista plana: el/los match(es)
+  // activos o con acuerdo mutuo quedan destacados arriba de todo (con badge
+  // y quién es, sin que la administradora tenga que adivinar cuál es el
+  // "real" entre el resto del ranking), después el historial de matches ya
+  // resueltos, y al final los candidatos que salieron del ranking pero
+  // todavía nadie activó.
+  var ESTADO_LEGIBLE={
+    pendiente:'Candidato (sin activar)',
+    activo:'Activo — esperando decisión',
+    pausado:'Pausado',
+    mutuamente_aceptado:'Match mutuo ✓',
+    no_avanza:'No avanzó',
+    cerrado:'Cerrado',
+    aceptado:'Aceptado (post-cita)',
+    rechazado:'Rechazado (post-cita)'
+  };
+  function eleccionLegible(v){
+    return v==='acepta'?'Aceptó':v==='rechaza'?'Rechazó':'Todavía no decidió';
+  }
+  function matchCardHtml(m,idx,destacado){
+    var detailId='matchDetalle'+idx;
+    var html='<div class="match-card"'+(destacado?' style="border-color:#c9a84c;box-shadow:0 0 0 1px rgba(201,168,76,.4)"':'')+'>';
+    if(destacado)html+='<p style="color:#07050a;background:linear-gradient(135deg,#8a6e2f,#c9a84c);display:inline-block;padding:.15rem .6rem;border-radius:10px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.5rem">★ Match activo</p>';
+    html+='<p style="color:#c9a84c">Con: '+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
+    html+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
+    html+=campoHtml('Estado',ESTADO_LEGIBLE[m.estado]||m.estado);
+    html+=campoHtml('Activado por',m.activado_por);
+    if(m.eleccion_usuario_a||m.eleccion_usuario_b){
+      html+=campoHtml('Elección de '+esc(data.usuario.nombre||'esta persona'),eleccionLegible(m.usuario_a===data.usuario.id?m.eleccion_usuario_a:m.eleccion_usuario_b));
+      html+=campoHtml('Elección de '+esc(m.otra_persona_nombre||'la otra persona'),eleccionLegible(m.usuario_a===data.usuario.id?m.eleccion_usuario_b:m.eleccion_usuario_a));
+    }
+    if(m.checkin_emocional)html+=campoHtml('Check-in emocional',m.checkin_emocional);
+    if(m.mensaje_dupla)html+=campoHtml('Mensaje para la dupla',m.mensaje_dupla);
+    if(m.fortalezas&&m.fortalezas.length)html+=campoHtml('Fortalezas',m.fortalezas);
+    if(m.desafio)html+=campoHtml('Desafío',m.desafio);
+    if(m.analisis_por_variable){
+      var av=m.analisis_por_variable;
+      html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Análisis por variable</p>';
+      html+=campoHtml('Alineación',av.alineacion);
+      html+=campoHtml('Complementariedad',av.complementariedad);
+      html+=campoHtml('Adaptabilidad',av.adaptabilidad);
+      html+=campoHtml('Potencial de construcción',av.potencial_de_construccion);
+    }
+    html+='<div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">';
+    html+='<button class="btn-secundario" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
+    if(m.estado==='pendiente'||m.estado==='pausado'){
+      html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">'+(m.estado==='pausado'?'Reactivar →':'Activar →')+'</button>';
+    }else if(m.estado==='activo'){
+      html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'pausar\')">Pausar</button>';
+    }
+    html+='</div>';
+    html+='<div id="'+detailId+'" style="display:none;margin-top:1rem"></div>';
+    html+='</div>';
+    return html;
+  }
+
   var matches=data.matches||[];
   var htmlMatches='';
   if(matches.length===0){
     htmlMatches='<p class="cargando">Sin matches todavía.</p>';
   }else{
-    matches.forEach(function(m,idx){
-      var detailId='matchDetalle'+idx;
-      htmlMatches+='<div class="match-card">';
-      htmlMatches+='<p style="color:#c9a84c">'+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
-      htmlMatches+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
-      htmlMatches+=campoHtml('Estado',m.estado);
-      htmlMatches+=campoHtml('Activado por',m.activado_por);
-      if(m.checkin_emocional)htmlMatches+=campoHtml('Check-in emocional',m.checkin_emocional);
-      if(m.mensaje_dupla)htmlMatches+=campoHtml('Mensaje para la dupla',m.mensaje_dupla);
-      if(m.fortalezas&&m.fortalezas.length)htmlMatches+=campoHtml('Fortalezas',m.fortalezas);
-      if(m.desafio)htmlMatches+=campoHtml('Desafío',m.desafio);
-      if(m.analisis_por_variable){
-        var av=m.analisis_por_variable;
-        htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Análisis por variable</p>';
-        htmlMatches+=campoHtml('Alineación',av.alineacion);
-        htmlMatches+=campoHtml('Complementariedad',av.complementariedad);
-        htmlMatches+=campoHtml('Adaptabilidad',av.adaptabilidad);
-        htmlMatches+=campoHtml('Potencial de construcción',av.potencial_de_construccion);
-      }
-      htmlMatches+='<div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">';
-      htmlMatches+='<button class="btn-secundario" onclick="verAmbosPerfiles(\''+esc(m.otra_persona_id)+'\',\''+detailId+'\')">Ver ambos perfiles →</button>';
-      if(m.estado==='pendiente'||m.estado==='pausado'){
-        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">'+(m.estado==='pausado'?'Reactivar →':'Activar →')+'</button>';
-      }else if(m.estado==='activo'){
-        htmlMatches+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'pausar\')">Pausar</button>';
-      }
-      htmlMatches+='</div>';
-      htmlMatches+='<div id="'+detailId+'" style="display:none;margin-top:1rem"></div>';
-      htmlMatches+='</div>';
-    });
+    var activos=matches.filter(function(m){return m.estado==='activo'||m.estado==='mutuamente_aceptado'});
+    var historial=matches.filter(function(m){return m.estado==='no_avanza'||m.estado==='cerrado'||m.estado==='aceptado'||m.estado==='rechazado'||m.estado==='pausado'});
+    var candidatos=matches.filter(function(m){return m.estado==='pendiente'});
+
+    if(activos.length>0){
+      activos.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),true)});
+    }
+    if(historial.length>0){
+      htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:1.2rem">Historial</p>';
+      historial.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),false)});
+    }
+    if(candidatos.length>0){
+      htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:1.2rem">Candidatos del ranking (sin activar) — '+candidatos.length+'</p>';
+      candidatos.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),false)});
+    }
   }
   htmlMatches+='<div style="margin-top:1.5rem"><button class="btn-secundario" onclick="abrirComparador()">Comparar contra otro perfil →</button> ';
   htmlMatches+='<button class="btn-secundario" onclick="pedirRanking()">Ver ranking de compatibilidad →</button>';

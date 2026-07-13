@@ -1873,6 +1873,9 @@ async function chequearMatchPendiente(){
         document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
         document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
         ir(5);
+        // Para que el panel refleje donde esta la persona de verdad, no
+        // solo hasta 'modulos' -- best-effort, no bloquea la pantalla.
+        guardarTabla('usuarios',{etapa_actual:'match_visto'},'id=eq.'+usuarioId).catch(function(){});
         return true;
       }
       if(m.estado==='no_avanza'&&miEleccion==='acepta'){
@@ -1924,6 +1927,10 @@ async function decidirEnMatch(si){
       msg.textContent='Algo se complicó guardando tu elección. Probá de nuevo en un rato.';
       return;
     }
+    // Igual que con 'match_visto': registra el hito para que el panel
+    // sepa que esta persona ya decidió, sin depender de inferirlo de la
+    // fila del match.
+    if(si)guardarTabla('usuarios',{etapa_actual:'match_aceptado'},'id=eq.'+usuarioId).catch(function(){});
     if(data.estado==='no_avanza'&&si){
       window.matchIdParaCerrar=window.matchData.id;
       ir('MatchCerrado');
@@ -2760,6 +2767,10 @@ function initMatch(){
 var citaTimer=null;var citaSeg=0;
 function initCita(){
   citaSeg=0;
+  // La cita todavía no es alcanzable en el flujo real (queda bloqueada
+  // hasta que haya consentimiento mutuo Y la cita esté terminada) -- se
+  // deja el hito registrado desde ya para cuando lo sea.
+  if(usuarioId)guardarTabla('usuarios',{etapa_actual:'en_cita'},'id=eq.'+usuarioId).catch(function(){});
   if(citaTimer)clearInterval(citaTimer);
   citaTimer=setInterval(function(){
     citaSeg++;
