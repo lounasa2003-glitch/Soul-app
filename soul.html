@@ -1277,17 +1277,15 @@ function addBotonMatch(){
 }
 
 function verResultadoMatch(){
-  if(window.matchEncontrado&&window.matchData){
-    document.getElementById('scoreHoy').textContent=window.matchData.compatibilidad_hoy+'%';
-    document.getElementById('scorePot').textContent=window.matchData.potencial_construccion+'%';
-    document.getElementById('matchMsg').textContent=window.matchData.mensaje_dupla;
-    // Este match recién se calculó y todavía no pasó por activación --
-    // sigue el camino directo a preparación de siempre, sin pedir decisión.
-    window.matchEsPersistido=false;
-    ir(5);
-  }else{
-    ir('Esperando');
-  }
+  // calcularMatches() puede haber encontrado y guardado un match real, pero
+  // nace en estado 'pendiente' -- todavía no pasó por la activación de la
+  // administradora (o del sistema, a futuro) ni por el consentimiento mutuo
+  // de las dos personas, y la cita en sí ni siquiera está construida
+  // todavía. Antes esto llevaba derecho a "Prepararme para el encuentro" y
+  // de ahí a la cita sin ningún control -- ahora, como cualquier otro
+  // match, solo se revela cuando chequearMatchPendiente() lo encuentra ya
+  // activo (en el próximo login), vía la pantalla de decisión real.
+  ir('Esperando');
 }
 
 function irAntesMatch(){
@@ -1977,26 +1975,15 @@ async function elegirSesion(tipo){
 
         // Si ya completó ambos módulos, no tiene sentido reabrir el chat del
         // módulo -- el backend rechazaría cualquier mensaje ahí (validación
-        // de modulo_fase). Se la lleva directo a ver su match si ya existe,
-        // o a la pantalla de espera.
+        // de modulo_fase). Se la lleva a ver su match SOLO si ya está
+        // activo y esperando su decisión (mismo chequeo que al loguearse) --
+        // antes esto leía cualquier fila de 'matches' tal cual, sin
+        // importar el estado, y mostraba directo el botón a preparación/
+        // cita sin pasar por activación ni consentimiento mutuo.
         if(perfilGuardado&&perfilGuardado.modulo_fase==='completo'){
           try{
-            var matchesGuardados=await leerTabla('matches','usuario_a=eq.'+usuarioId);
-            var matchGuardado=matchesGuardados&&matchesGuardados.length>0?matchesGuardados[matchesGuardados.length-1]:null;
-            if(matchGuardado){
-              window.matchEncontrado=true;
-              window.matchData={
-                compatibilidad_hoy: matchGuardado.compatibilidad_hoy,
-                potencial_construccion: matchGuardado.potencial_construccion,
-                mensaje_dupla: matchGuardado.mensaje_dupla
-              };
-              document.getElementById('scoreHoy').textContent=matchGuardado.compatibilidad_hoy+'%';
-              document.getElementById('scorePot').textContent=matchGuardado.potencial_construccion+'%';
-              document.getElementById('matchMsg').textContent=matchGuardado.mensaje_dupla;
-              ir(5);
-            }else{
-              ir('Esperando');
-            }
+            var huboMatchPendiente=await chequearMatchPendiente();
+            if(!huboMatchPendiente)ir('Esperando');
           }catch(e){
             ir('Esperando');
           }
