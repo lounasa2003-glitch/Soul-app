@@ -213,7 +213,9 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 ══════════════════════════════════ */
 #e7{overflow:hidden;height:100vh}
 .cita-wrap{display:flex;flex-direction:column;height:100vh}
-.cita-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(7,5,10,.95);flex-shrink:0}
+.cita-header{display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(7,5,10,.95);flex-shrink:0;position:relative}
+.cita-msg.nuevo{animation:msgIn .3s ease,destacarNuevo 2.5s ease}
+@keyframes destacarNuevo{0%,60%{background-color:rgba(201,168,76,.22)}100%{background-color:transparent}}
 .cita-title{font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:.95rem}
 .cita-timer{font-family:'Inter',sans-serif;font-size:.75rem;color:#7a6e78}
 .cita-area{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.8rem}
@@ -742,26 +744,18 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div class="cita-wrap">
     <div class="cita-header">
       <p class="cita-title">La cita ✦</p>
-      <p class="cita-timer" id="citaTimer">00:00</p>
-    </div>
-    <div class="cita-area" id="citaArea">
-      <div class="cita-soul">
-        <p class="soul-label">Soul</p>
-        <p>Hoy no intenten decidir nada. Solo intenten descubrir algo del otro que no esperaban encontrar.</p>
-      </div>
-      <div style="text-align:center;margin:.5rem 0">
-        <button class="ritmo-btn" onclick="toggleRitmo()">✦ ¿Quieren cambiar el ritmo?</button>
-        <div class="ritmo-opts" id="ritmoOpts">
-          <div class="ritmo-opt" onclick="usarRitmo('explorar')">Explorar — una pregunta de Soul</div>
-          <div class="ritmo-opt" onclick="usarRitmo('jugar')">Jugar — un desafío</div>
-          <div class="ritmo-opt" onclick="usarRitmo('compartir')">Compartir — algo en común</div>
-          <div class="ritmo-opt" onclick="usarRitmo('descubrir')">Descubrir — tres palabras</div>
-        </div>
+      <button class="ritmo-btn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
+      <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
+        <div class="ritmo-opt" onclick="pedirAyudaPrivada('generar_tema')">Generar un tema</div>
+        <div class="ritmo-opt" onclick="pedirAyudaPrivada('salir_incomodidad')">Salir de una situación incómoda</div>
+        <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar la cita</div>
       </div>
     </div>
+    <div class="cita-area" id="citaArea"></div>
     <div class="cita-input-area">
+      <button class="send-btn" id="citaMicBtn" onclick="toggleGrabacionAudio()" style="background:none;border:1px solid rgba(201,168,76,.4)">🎙</button>
       <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en la cita...">
-      <button class="send-btn" onclick="sendCita()">→</button>
+      <button class="send-btn" id="citaSendBtn" onclick="sendCita()">→</button>
     </div>
   </div>
 </div>
@@ -1831,7 +1825,8 @@ async function cargarProgreso(email){
       window.usuarioParaSesion=u;
       window.pctParaSesion=pct;
       var huboMatchPendiente=await chequearMatchPendiente();
-      if(!huboMatchPendiente){
+      var huboCitaPendiente=huboMatchPendiente?false:await chequearCitaPendiente();
+      if(!huboMatchPendiente&&!huboCitaPendiente){
         mostrarEleccionSesion(u,pct);
       }
     }else{
@@ -1883,6 +1878,35 @@ async function chequearMatchPendiente(){
       if(m.estado==='no_avanza'&&miEleccion==='acepta'){
         window.matchIdParaCerrar=m.id;
         ir('MatchCerrado');
+        return true;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+
+// Se corre solo si chequearMatchPendiente() no encontró nada -- mira si
+// hay una cita en curso (recién creada al mutuo acuerdo, o ya con
+// mensajes) o una cita cerrada cuyo debriefing todavía está pendiente.
+async function chequearCitaPendiente(){
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    if(!res.ok)return false;
+    var data=await res.json();
+    var citas=data.citas||[];
+    for(var i=0;i<citas.length;i++){
+      var c=citas[i];
+      if(!c.match)continue;
+      if(c.estado!=='cerrada'){
+        window.citaActualId=c.id;
+        ir(7);
+        return true;
+      }
+      if(c.estado==='cerrada'&&c.match.estado==='mutuamente_aceptado'){
+        window.matchData={id:c.match.id,compatibilidad_hoy:c.match.compatibilidad_hoy,potencial_construccion:c.match.potencial_construccion,mensaje_dupla:c.match.mensaje_dupla};
+        ir(8);
         return true;
       }
     }
@@ -2765,56 +2789,194 @@ function initMatch(){
   },16);
 }
 
-// ── CITA VIRTUAL ──
-var citaTimer=null;var citaSeg=0;
+// ── CITA VIRTUAL (asincrónica: cada quien entra a su ritmo) ──
+// Escapa HTML para los pocos lugares de la cita que arman contenido con
+// innerHTML (el mensaje de Soul) -- el resto usa textContent, que ya
+// escapa solo.
+function esc(s){
+  var d=document.createElement('div');
+  d.textContent=s==null?'':String(s);
+  return d.innerHTML;
+}
+var citaPollTimer=null;
+var citaUltimoCount=0;
+var citaGrabador=null,citaChunksAudio=[],citaGrabando=false,citaSegGrabando=0,citaTimerGrabacion=null;
+
 function initCita(){
-  citaSeg=0;
-  // La cita todavía no es alcanzable en el flujo real (queda bloqueada
-  // hasta que haya consentimiento mutuo Y la cita esté terminada) -- se
-  // deja el hito registrado desde ya para cuando lo sea. Debriefing (el
-  // paso posterior a la cita) todavía no tiene ningún flujo construido --
-  // no hay ningún "fin de la cita" en el código todavía, así que no hay
-  // ningún punto real donde registrarlo por ahora.
-  if(usuarioId)guardarTabla('usuarios',{etapa_actual:'cita'},'id=eq.'+usuarioId).catch(function(){});
-  if(citaTimer)clearInterval(citaTimer);
-  citaTimer=setInterval(function(){
-    citaSeg++;
-    var m=Math.floor(citaSeg/60),s=citaSeg%60;
-    document.getElementById('citaTimer').textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
-  },1000);
   document.getElementById('citaIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendCita()});
-  // Intervención automática a los 5 minutos
-  setTimeout(function(){
-    if(etapaActual===7) addCitaSoul('Tengo una pregunta que preparé para ustedes. ¿Cuál fue el momento en tu vida donde más claramente fuiste vos mismo/a?');
-  },300000);
+  citaUltimoCount=0;
+  cargarCita();
+  if(citaPollTimer)clearInterval(citaPollTimer);
+  citaPollTimer=setInterval(cargarCita,6000);
 }
-function addCitaMsg(tipo,txt){
-  var div=document.createElement('div');div.className='cita-msg '+tipo;div.textContent=txt;
-  document.getElementById('citaArea').appendChild(div);
+
+async function cargarCita(){
+  if(!window.citaActualId)return;
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/citas?citaId='+encodeURIComponent(window.citaActualId),{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    if(!res.ok)return;
+    var data=await res.json();
+    window.citaSoyA=data.soyA;
+    renderCita(data.cita,data.mensajes);
+    if(data.cita.estado==='cerrada'){
+      if(citaPollTimer)clearInterval(citaPollTimer);
+      var matchesInfo=await obtenerMisMatches();
+      var m=(matchesInfo.matches||[]).find(function(x){return x.id===data.cita.match_id});
+      if(m){
+        window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
+      }
+      setTimeout(function(){ir(8)},1500);
+    }
+  }catch(e){}
+}
+
+function renderCita(cita,mensajes){
+  var area=document.getElementById('citaArea');
+  var esNuevo=mensajes.length>citaUltimoCount;
+  area.innerHTML='';
+  mensajes.forEach(function(m,idx){
+    var esUltimoTramoNuevo=esNuevo&&idx>=citaUltimoCount;
+    if(m.usuario_id===null){
+      var div=document.createElement('div');
+      div.className='cita-soul'+(esUltimoTramoNuevo?' nuevo':'');
+      div.innerHTML='<p class="soul-label">Soul</p><p>'+esc(m.contenido)+'</p>';
+      area.appendChild(div);
+    }else{
+      var esMio=esMensajeMio(m);
+      var div2=document.createElement('div');
+      div2.className='cita-msg '+(esMio?'yo':'otro')+(esUltimoTramoNuevo?' nuevo':'');
+      if(m.tipo==='audio'&&m.audioUrl){
+        var audio=document.createElement('audio');
+        audio.controls=true;audio.src=m.audioUrl;audio.style.cssText='max-width:100%';
+        div2.appendChild(audio);
+      }else{
+        div2.textContent=m.contenido;
+      }
+      area.appendChild(div2);
+    }
+  });
+
+  // Chequeo de cierre: si hay uno en curso y mi elección todavía no quedó
+  // registrada, muestro los botones debajo del último mensaje.
+  if(cita.estado==='chequeo_cierre'){
+    var miEleccion=window.citaSoyA?cita.eleccion_a:cita.eleccion_b;
+    if(!miEleccion){
+      var btns=document.createElement('div');
+      btns.style.cssText='display:flex;gap:.6rem;justify-content:center;padding:.6rem 0';
+      btns.innerHTML='<button onclick="responderCierreCita(\'sigue\')" style="padding:.55rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.75rem;font-weight:600;cursor:pointer">Seguimos →</button><button onclick="responderCierreCita(\'para\')" style="padding:.55rem .9rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">Prefiero parar acá</button>';
+      area.appendChild(btns);
+    }
+  }
+
+  citaUltimoCount=mensajes.length;
   scrollAlFondo('citaArea');
 }
-function addCitaSoul(txt){
-  var div=document.createElement('div');
-  div.className='cita-soul';div.style.marginTop='.5rem';
-  div.innerHTML='<p class="soul-label">Soul</p><p>'+txt+'</p>';
-  document.getElementById('citaArea').appendChild(div);
-  scrollAlFondo('citaArea');
+
+// El backend no manda quién es "usuario_a" en cada mensaje individual --
+// alcanza con comparar contra mi propio usuarioId.
+function esMensajeMio(m){
+  return m.usuario_id===usuarioId;
 }
-function sendCita(){
+
+async function sendCita(){
   var inp=document.getElementById('citaIn');
   var txt=inp.value.trim();if(!txt)return;
-  addCitaMsg('yo',txt);inp.value='';
+  inp.value='';
+  try{
+    await fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'texto',contenido:txt})});
+    });
+  }catch(e){}
+  cargarCita();
 }
-function toggleRitmo(){document.getElementById('ritmoOpts').classList.toggle('vis')}
-var ritmoMsgs={
-  explorar:'¿Qué es lo que más valorás en una conversación?',
-  jugar:'Cada uno escriba tres palabras que crea que describen al otro después de este rato. Después las comparan.',
-  compartir:'¿Hay una canción, película o libro que sientas que dice algo de vos que cuesta explicar con palabras?',
-  descubrir:'¿Cuál fue la decisión que más cambió tu vida?'
-};
-function usarRitmo(tipo){
-  document.getElementById('ritmoOpts').classList.remove('vis');
-  addCitaSoul(ritmoMsgs[tipo]);
+
+function toggleAyuda(){document.getElementById('ayudaOpts').classList.toggle('vis')}
+
+// Ninguna de estas 3 opciones deja rastro visible para la otra persona --
+// lo único que ve es el mensaje de Soul que resulta, igual que cualquier
+// otra intervención suya.
+async function pedirAyudaPrivada(tipo){
+  document.getElementById('ayudaOpts').classList.remove('vis');
+  try{
+    await fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'ayudaPrivada',citaId:window.citaActualId,tipoAyuda:tipo})});
+    });
+  }catch(e){}
+  cargarCita();
+}
+
+async function responderCierreCita(respuesta){
+  try{
+    await fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'responderCierre',citaId:window.citaActualId,respuesta:respuesta})});
+    });
+  }catch(e){}
+  cargarCita();
+}
+
+// ── Grabación de audio ──
+async function toggleGrabacionAudio(){
+  if(citaGrabando){
+    citaGrabador.stop();
+    return;
+  }
+  try{
+    var stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    citaGrabador=new MediaRecorder(stream);
+    citaChunksAudio=[];
+    citaGrabador.ondataavailable=function(e){if(e.data.size>0)citaChunksAudio.push(e.data)};
+    citaGrabador.onstop=async function(){
+      stream.getTracks().forEach(function(t){t.stop()});
+      citaGrabando=false;
+      clearInterval(citaTimerGrabacion);
+      document.getElementById('citaMicBtn').textContent='🎙';
+      document.getElementById('citaMicBtn').style.color='';
+      var blob=new Blob(citaChunksAudio,{type:'audio/webm'});
+      await subirAudioCita(blob);
+    };
+    citaGrabador.start();
+    citaGrabando=true;
+    citaSegGrabando=0;
+    document.getElementById('citaMicBtn').style.color='#d98a9e';
+    document.getElementById('citaMicBtn').textContent='■';
+    citaTimerGrabacion=setInterval(function(){
+      citaSegGrabando++;
+      var m=Math.floor(citaSegGrabando/60),s=citaSegGrabando%60;
+      document.getElementById('citaMicBtn').textContent='■ '+(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+    },1000);
+  }catch(e){
+    // Mensaje no bloqueante -- un alert() acá frena todo el JS de la
+    // pestaña hasta que alguien lo cierra, algo particularmente molesto en
+    // mobile si el permiso de micrófono quedó denegado.
+    mostrarAvisoCita('No pudimos acceder al micrófono. Revisá los permisos del navegador.');
+  }
+}
+
+function mostrarAvisoCita(texto){
+  var btn=document.getElementById('citaMicBtn');
+  var original=btn.textContent;
+  btn.title=texto;
+  btn.textContent='⚠';
+  setTimeout(function(){btn.textContent=original;},3000);
+}
+
+async function subirAudioCita(blob){
+  try{
+    var resUrl=await fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'audioUploadUrl',citaId:window.citaActualId})});
+    });
+    var dataUrl=await resUrl.json();
+    if(!resUrl.ok||!dataUrl.uploadUrl)throw new Error('sin_url_firmada');
+    await fetch(dataUrl.uploadUrl,{method:'PUT',headers:{'Content-Type':'audio/webm'},body:blob});
+    await fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'audio',contenido:dataUrl.path})});
+    });
+  }catch(e){
+    mostrarAvisoCita('No se pudo subir el audio. Probá de nuevo.');
+  }
+  cargarCita();
 }
 
 // ── ELECCIÓN MUTUA ──
@@ -2834,10 +2996,13 @@ function elegir(si){
   document.getElementById('eleccionFinal').style.display='block';
 
   if(window.matchData&&window.matchData.id){
-    guardarTabla('matches',{
-      estado: si?'aceptado':'rechazado',
-      fecha_respuesta: new Date().toISOString()
-    },'id=eq.'+window.matchData.id).catch(function(){});
+    // Antes iba por guardarTabla genérico, que solo autoriza escrituras de
+    // usuario_a -- si esta persona era usuario_b del match, se perdía en
+    // silencio. Pasa por el endpoint dedicado, que autoriza cualquiera de
+    // los dos lados.
+    fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'elegirDebriefing',matchId:window.matchData.id,eleccion:si?'aceptado':'rechazado'})});
+    }).catch(function(){});
   }
   document.getElementById('checkinEmocional').style.display='block';
 }
@@ -2846,7 +3011,9 @@ function guardarCheckinEmocional(valor){
   document.querySelectorAll('#checkinEmocional .chip').forEach(function(c){c.style.pointerEvents='none';c.style.opacity='.5'});
   document.getElementById('checkinGracias').style.display='block';
   if(window.matchData&&window.matchData.id){
-    guardarTabla('matches',{checkin_emocional:valor},'id=eq.'+window.matchData.id).catch(function(){});
+    fetchConSesion(function(){
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'checkinEmocional',matchId:window.matchData.id,valor:valor})});
+    }).catch(function(){});
   }
 }
 </script>

@@ -67,6 +67,28 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
     return res.status(500).json({ error: 'No se pudo guardar tu elección' });
   }
 
+  // Se crea la cita y se marca la etapa de las dos personas server-side,
+  // en el momento mismo del acuerdo mutuo -- mismo principio que ya
+  // aplicamos para 'match': no depende de que ninguna de las dos vuelva a
+  // loguearse para que el panel y el chequeo de login reflejen esto.
+  if (estadoResultante === 'mutuamente_aceptado') {
+    await fetch(`${supabaseUrl}/rest/v1/citas`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ match_id: matchId })
+    }).catch(() => {});
+    await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ etapa_actual: 'cita' })
+      }),
+      fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_b)}`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ etapa_actual: 'cita' })
+      })
+    ]).catch(() => {});
+  }
+
   return res.status(200).json({ estado: estadoResultante });
 }
 
