@@ -150,6 +150,26 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
   if (!response.ok) {
     return res.status(response.status).json(data);
   }
+
+  // La etapa de cada persona en el panel tiene que reflejar esto ya, no
+  // recién cuando esa persona vuelva a entrar a la app -- antes esto solo
+  // se actualizaba del lado del cliente (chequearMatchPendiente), así que
+  // si todavía no volvió a loguearse la lista seguía mostrando "modulos"
+  // aunque el match ya estuviera activo.
+  if (accion === 'activar' && data[0]) {
+    const match = data[0];
+    await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ etapa_actual: 'match' })
+      }),
+      fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_b)}`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ etapa_actual: 'match' })
+      })
+    ]).catch(() => {});
+  }
+
   return res.status(200).json(data[0] || null);
 }
 

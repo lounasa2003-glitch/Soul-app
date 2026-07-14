@@ -1873,9 +1873,11 @@ async function chequearMatchPendiente(){
         document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
         document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
         ir(5);
-        // Para que el panel refleje donde esta la persona de verdad, no
-        // solo hasta 'modulos' -- best-effort, no bloquea la pantalla.
-        guardarTabla('usuarios',{etapa_actual:'match_visto'},'id=eq.'+usuarioId).catch(function(){});
+        // El panel ya marca 'match' de entrada al activarlo (server-side,
+        // en api/admin/matches.js) -- este re-guardado es solo para el
+        // caso en que esta persona haya sido usuario_a/b de un match que
+        // el sistema (a futuro) active directo sin pasar por el admin.
+        guardarTabla('usuarios',{etapa_actual:'match'},'id=eq.'+usuarioId).catch(function(){});
         return true;
       }
       if(m.estado==='no_avanza'&&miEleccion==='acepta'){
@@ -1927,10 +1929,10 @@ async function decidirEnMatch(si){
       msg.textContent='Algo se complicó guardando tu elección. Probá de nuevo en un rato.';
       return;
     }
-    // Igual que con 'match_visto': registra el hito para que el panel
-    // sepa que esta persona ya decidió, sin depender de inferirlo de la
-    // fila del match.
-    if(si)guardarTabla('usuarios',{etapa_actual:'match_aceptado'},'id=eq.'+usuarioId).catch(function(){});
+    // La eleccion de aceptar/rechazar ya queda registrada en el match mismo
+    // (eleccion_usuario_a/b, visible en la Hoja de Vida) -- la etapa
+    // general se mantiene en 'match' mientras siga esa fase, sin abrir un
+    // valor nuevo solo para esto.
     if(data.estado==='no_avanza'&&si){
       window.matchIdParaCerrar=window.matchData.id;
       ir('MatchCerrado');
@@ -2769,8 +2771,11 @@ function initCita(){
   citaSeg=0;
   // La cita todavía no es alcanzable en el flujo real (queda bloqueada
   // hasta que haya consentimiento mutuo Y la cita esté terminada) -- se
-  // deja el hito registrado desde ya para cuando lo sea.
-  if(usuarioId)guardarTabla('usuarios',{etapa_actual:'en_cita'},'id=eq.'+usuarioId).catch(function(){});
+  // deja el hito registrado desde ya para cuando lo sea. Debriefing (el
+  // paso posterior a la cita) todavía no tiene ningún flujo construido --
+  // no hay ningún "fin de la cita" en el código todavía, así que no hay
+  // ningún punto real donde registrarlo por ahora.
+  if(usuarioId)guardarTabla('usuarios',{etapa_actual:'cita'},'id=eq.'+usuarioId).catch(function(){});
   if(citaTimer)clearInterval(citaTimer);
   citaTimer=setInterval(function(){
     citaSeg++;
