@@ -2,6 +2,7 @@ import { verificarAdmin } from '../../lib/verificarAdmin.js';
 import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
+import { notificarNuevoMatch } from '../../lib/email.js';
 
 // Fusiona lo que antes eran admin/ranking.js y admin/activarMatch.js en un
 // solo archivo -- el plan Hobby de Vercel permite como maximo 12 funciones
@@ -168,6 +169,18 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
         body: JSON.stringify({ etapa_actual: 'match' })
       })
     ]).catch(() => {});
+
+    // Avisar por mail a los dos -- se espera a que termine (no
+    // fire-and-forget): en serverless el contexto puede cortarse apenas se
+    // responde, asi que una llamada sin await puede no llegar a mandarse.
+    // Si Resend falla igual se responde 200 -- el match ya quedo activo.
+    try {
+      const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
+      const usuarios = nRes.ok ? await nRes.json() : [];
+      await notificarNuevoMatch(usuarios);
+    } catch (e) {
+      console.error('Error notificando match nuevo por mail:', e);
+    }
   }
 
   return res.status(200).json(data[0] || null);

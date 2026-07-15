@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
+import { notificarMensajeCita } from '../lib/email.js';
 
 // Endpoint dedicado para la cita virtual asincronica -- mismo motivo que
 // api/matches.js: hace falta que usuario_a Y usuario_b del match puedan
@@ -9,6 +10,13 @@ import { registrarUsoTokens } from '../lib/logUso.js';
 
 const BUCKET_AUDIO = 'cita-audio';
 const EXPIRACION_URL_FIRMADA = 3600; // 1h, de sobra para una sesion de cita
+
+// Si el destinatario polleo la cita hace menos de esto, esta mirando la
+// pantalla ahora mismo -- no hace falta mandarle un mail. Si no, se le avisa
+// pero como maximo una vez por este margen (evita mandar un mail por cada
+// mensaje de una tanda mientras esta desconectado).
+const ACTIVO_MS = 2 * 60 * 1000;
+const COOLDOWN_EMAIL_MS = 20 * 60 * 1000;
 
 const PROMPT_BASE = `Sos Soul, presente en la cita virtual entre dos personas que hicieron match. Tu rol acá es de directora invisible: interviniste solo cuando hace falta, en mensajes cortos, cálidos, sin markdown ni listas, nunca como un bot de soporte. Nunca revelás que alguien te pidió algo -- lo que decís tiene que sonar como si fuera tu propia ocurrencia, participando naturalmente del momento.`;
 
@@ -87,6 +95,35 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ cita: auth.cita, soyA: auth.soyA, mensajes: mensajesConUrl });
 }
 
+async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, remitenteId) {
+  const soyA = match.usuario_a === remitenteId;
+  const receptorId = soyA ? match.usuario_b : match.usuario_a;
+  const campoEmail = soyA ? 'ultimo_email_b' : 'ultimo_email_a';
+
+  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email,ultima_actividad&id=eq.${encodeURIComponent(receptorId)}`, { headers });
+  const usuarios = uRes.ok ? await uRes.json() : [];
+  const receptor = usuarios[0];
+  if (!receptor || !receptor.email) return;
+
+  const ahora = Date.now();
+  if (receptor.ultima_actividad && (ahora - new Date(receptor.ultima_actividad).getTime()) < ACTIVO_MS) {
+    return; // esta viendo la app ahora mismo
+  }
+  const ultimoEmail = cita[campoEmail];
+  if (ultimoEmail && (ahora - new Date(ultimoEmail).getTime()) < COOLDOWN_EMAIL_MS) {
+    return; // ya se le aviso hace poco, no juntar mail por cada mensaje
+  }
+
+  const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email });
+  if (!enviado) return; // si Resend fallo, no marcar cooldown -- que reintente en el proximo mensaje
+
+  await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ [campoEmail]: new Date().toISOString() })
+  });
+}
+
 async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   const { citaId, tipo, contenido } = req.body;
   if (!citaId || (tipo !== 'texto' && tipo !== 'audio') || !contenido) {
@@ -108,6 +145,15 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ estado: 'activa' })
     });
+  }
+
+  // Se espera a que termine (no fire-and-forget): en un entorno serverless
+  // el contexto de ejecucion no sigue vivo garantizado despues de responder,
+  // asi que una llamada sin await puede cortarse antes de llegar a Resend.
+  try {
+    await avisarSiDesconectado(supabaseUrl, headers, citaId, auth.cita, auth.match, usuario.usuarioId);
+  } catch (e) {
+    console.error('Error avisando mensaje nuevo por mail:', e);
   }
 
   return res.status(200).json({ ok: true });
@@ -343,6 +389,13 @@ export default async function handler(req, res) {
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
     if (req.method === 'GET') {
+      // Marca de presencia: mientras el cliente este polleando la cita
+      // activamente, se lo considera "conectado" y no hace falta mandarle
+      // mail cuando le llega un mensaje nuevo.
+      fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ ultima_actividad: new Date().toISOString() })
+      }).catch(() => {});
       return await obtenerCita(req, res, supabaseUrl, headers, usuario);
     }
     if (req.method === 'POST') {
