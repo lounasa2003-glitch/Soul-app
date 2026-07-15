@@ -2055,7 +2055,7 @@ async function elegirSesion(tipo){
               var perfilParaDeteccion={grupo1:perfilGuardado.grupo1,grupo2:perfilGuardado.grupo2,grupo3:perfilGuardado.grupo3,grupo4:perfilGuardado.grupo4};
               var moduloInfo=await pedirJSON({
                 model:'claude-sonnet-4-6',
-                max_tokens:400,
+                max_tokens:1024,
                 system:MODULO_DETECCION_PROMPT,
                 messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaDeteccion)+'\n\nConversación resumida: '+transcriptoGuardado.slice(-2000)}]
               });
@@ -2652,7 +2652,7 @@ async function continuarTrasValidacion(){
   // 3. Detectar módulo esencial con sistema de módulos
   var moduloInfo=await pedirJSON({
     model:'claude-sonnet-4-6',
-    max_tokens:400,
+    max_tokens:1024,
     system:MODULO_DETECCION_PROMPT,
     messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
   });

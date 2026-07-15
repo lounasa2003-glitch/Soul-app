@@ -366,7 +366,7 @@ function renderHojaDeVida(data){
 
     htmlModulos+='<div class="campo-grupo">';
     htmlModulos+=campoHtml('Módulo esencial',p.modulo_esencial);
-    htmlModulos+=campoHtml('Señales detectadas',p.senales_modulo);
+    htmlModulos+=campoHtml('Señales detectadas',p.senales_modulo||'sin fundamento registrado (asignación anterior a este campo, o falló al guardarse)');
     htmlModulos+=campoHtml('Módulo recomendado',p.modulo_recomendado);
     htmlModulos+=campoHtml('Módulo obligatorio','Capacidad de volver a elegir');
     htmlModulos+=campoHtml('Estado',faseLegible);
