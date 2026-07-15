@@ -100,9 +100,10 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   const receptorId = soyA ? match.usuario_b : match.usuario_a;
   const campoEmail = soyA ? 'ultimo_email_b' : 'ultimo_email_a';
 
-  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email,ultima_actividad&id=eq.${encodeURIComponent(receptorId)}`, { headers });
+  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers });
   const usuarios = uRes.ok ? await uRes.json() : [];
-  const receptor = usuarios[0];
+  const receptor = usuarios.find(u => u.id === receptorId);
+  const remitente = usuarios.find(u => u.id === remitenteId);
   if (!receptor || !receptor.email) return;
 
   const ahora = Date.now();
@@ -114,7 +115,8 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
     return; // ya se le aviso hace poco, no juntar mail por cada mensaje
   }
 
-  const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email });
+  const remitenteNombre = remitente ? (remitente.nombre || remitente.email) : null;
+  const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email, remitenteNombre });
   if (!enviado) return; // si Resend fallo, no marcar cooldown -- que reintente en el proximo mensaje
 
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
