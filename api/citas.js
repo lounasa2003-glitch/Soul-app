@@ -181,21 +181,29 @@ async function audioUploadUrl(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ uploadUrl: `${supabaseUrl}/storage/v1${data.url}`, path });
 }
 
-function promptGenerarTema(refsA, refsB) {
+function promptGenerarTema(refsA, refsB, transcripto) {
   return `${PROMPT_BASE}
 
 Están en silencio o la charla se trabó. Traé un tema nuevo, natural, que abra una vía de conversación.
 
+Acá está la charla hasta ahora -- leela antes de intervenir. Fijate el tono real: si viene profunda (se abrieron, hablaron de algo personal o denso), NO la bajes a algo liviano de golpe -- segui en ese mismo registro o traé algo que conecte con lo que ya se dijo. Si viene liviana o recién arrancando, no le metas peso de más -- algo simple y cálido alcanza. Nunca ignores lo que ya se dijo para meter un tema random.
+
+${transcripto || '(Todavía no hay mensajes -- es el comienzo de la charla.)'}
+
 Referencias culturales de A: ${refsA || 'ninguna registrada'}
 Referencias culturales de B: ${refsB || 'ninguna registrada'}
 
-Si alguna de las dos personas tiene referencias reales, usalas como puerta de entrada (describí brevemente la escena o canción en dos líneas si no es obvio). Si ninguna tiene, elegí algo universal y cálido (una escena de película, una pregunta genuina, un "¿nunca les pasó...?"). Un solo mensaje corto. Nunca dos preguntas juntas.`;
+Si alguna de las dos personas tiene referencias reales y encajan con el momento de la charla, usalas como puerta de entrada (describí brevemente la escena o canción en dos líneas si no es obvio). Si ninguna tiene o no encajan con el tono actual, elegí algo universal que sí encaje. Un solo mensaje corto. Nunca dos preguntas juntas.`;
 }
 
-function promptSalirIncomodidad() {
+function promptSalirIncomodidad(transcripto) {
   return `${PROMPT_BASE}
 
-Algo en la charla se puso incómodo o tenso. Cambiá de tema con delicadeza -- nunca mencionás que algo estuvo raro, incómodo o mal. Simplemente redirigís hacia otro lugar cálido, como si fuera una ocurrencia espontánea tuya. Un solo mensaje corto.`;
+Algo en la charla se puso incómodo o tenso. Acá está la charla hasta ahora -- leela para entender qué generó la incomodidad y hacia dónde conviene ir, en vez de cambiar de tema a ciegas:
+
+${transcripto || '(No hay mensajes previos disponibles.)'}
+
+Cambiá de tema con delicadeza -- nunca mencionás que algo estuvo raro, incómodo o mal. Simplemente redirigís hacia otro lugar cálido, coherente con lo que veniían hablando, como si fuera una ocurrencia espontánea tuya. Un solo mensaje corto.`;
 }
 
 async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
@@ -233,12 +241,20 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
     return res.status(200).json({ ok: true });
   }
 
-  // generar_tema / salir_incomodidad: una sola llamada real a Claude.
-  const perfilesRes = await fetch(
-    `${supabaseUrl}/rest/v1/perfiles?select=usuario_id,referencias_culturales&usuario_id=in.(${encodeURIComponent(auth.match.usuario_a)},${encodeURIComponent(auth.match.usuario_b)})`,
-    { headers }
-  );
+  // generar_tema / salir_incomodidad: una sola llamada real a Claude, pero
+  // necesita ver la charla real -- sin esto Soul elegia un tema a ciegas,
+  // sin saber si la conversacion venia profunda o liviana.
+  const [perfilesRes, mensajesRes] = await Promise.all([
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,referencias_culturales&usuario_id=in.(${encodeURIComponent(auth.match.usuario_a)},${encodeURIComponent(auth.match.usuario_b)})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,tipo,contenido&cita_id=eq.${encodeURIComponent(citaId)}&tipo=eq.texto&order=created_at.desc&limit=20`, { headers })
+  ]);
   const perfiles = perfilesRes.ok ? await perfilesRes.json() : [];
+  const mensajesRecientes = mensajesRes.ok ? (await mensajesRes.json()).reverse() : [];
+  const transcripto = mensajesRecientes.map(m => {
+    const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === auth.match.usuario_a ? 'A' : 'B');
+    return quien + ': ' + m.contenido;
+  }).join('\n');
+
   function refsDe(uid) {
     const p = perfiles.find(x => x.usuario_id === uid);
     if (!p || !p.referencias_culturales) return null;
@@ -249,8 +265,8 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
   }
 
   const prompt = tipoAyuda === 'generar_tema'
-    ? promptGenerarTema(refsDe(auth.match.usuario_a), refsDe(auth.match.usuario_b))
-    : promptSalirIncomodidad();
+    ? promptGenerarTema(refsDe(auth.match.usuario_a), refsDe(auth.match.usuario_b), transcripto)
+    : promptSalirIncomodidad(transcripto);
 
   try {
     const data = await llamarClaude({ model: 'claude-sonnet-4-6', max_tokens: 300, system: prompt, messages: [{ role: 'user', content: 'Intervení ahora.' }] });
@@ -355,6 +371,13 @@ async function elegirDebriefing(req, res, supabaseUrl, headers, usuario) {
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ estado: eleccion, fecha_respuesta: new Date().toISOString() })
   });
+  // Sin esto, etapa_actual se quedaba en 'debriefing' para siempre en el
+  // panel para esta persona, aunque su ciclo con este match ya haya
+  // terminado -- vuelve a 'chat', el estado normal de espera/conversacion.
+  await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+    method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ etapa_actual: 'chat' })
+  }).catch(() => {});
   return res.status(200).json({ ok: true });
 }
 
