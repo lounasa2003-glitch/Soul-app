@@ -1485,6 +1485,39 @@ async function llamarChat(datos){
   return res.json();
 }
 
+// Version con streaming de /api/chat -- usada solo por el chat principal
+// (enviarAlChat), para que el texto de Soul aparezca progresivamente en vez
+// de esperar a que termine de generarse entera. onChunk se llama con el
+// texto acumulado hasta el momento cada vez que llega un pedazo nuevo.
+async function llamarChatStreaming(datos,onChunk){
+  var res=await fetchConSesion(function(){
+    return fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      body:JSON.stringify(Object.assign({},datos,{stream:true}))
+    });
+  });
+  if(res.status===429){
+    var err=await res.json();
+    var e=new Error(err.mensaje||'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.');
+    e.rateLimited=true;
+    throw e;
+  }
+  if(!res.ok){
+    throw new Error('error_chat_streaming');
+  }
+  var reader=res.body.getReader();
+  var decoder=new TextDecoder();
+  var texto='';
+  while(true){
+    var paso=await reader.read();
+    if(paso.done)break;
+    texto+=decoder.decode(paso.value,{stream:true});
+    onChunk(texto);
+  }
+  return texto;
+}
+
 function extraerJSON(texto){
   var limpio=texto.replace(/```json|```/g,'').trim();
   try{
@@ -1923,10 +1956,21 @@ async function chequearCitaPendiente(){
         ir(7);
         return true;
       }
-      if(c.estado==='cerrada'&&c.match.estado==='mutuamente_aceptado'){
-        window.matchData={id:c.match.id,compatibilidad_hoy:c.match.compatibilidad_hoy,potencial_construccion:c.match.potencial_construccion,mensaje_dupla:c.match.mensaje_dupla};
-        ir(8);
-        return true;
+      // Antes esto miraba match.estado==='mutuamente_aceptado' -- un campo
+      // COMPARTIDO que la primera persona en terminar su debriefing pisa
+      // con 'aceptado'/'rechazado'. Eso tapaba a la segunda persona: su
+      // debriefing seguia pendiente pero el chequeo ya no encontraba nada
+      // porque el estado global habia cambiado. Ahora se mira solo MI
+      // propio campo (debriefing_usuario_a/b), independiente de si la otra
+      // persona ya contesto o no.
+      if(c.estado==='cerrada'){
+        var soyADebriefing=c.match.usuario_a===usuarioId;
+        var miDebriefing=soyADebriefing?c.match.debriefing_usuario_a:c.match.debriefing_usuario_b;
+        if(!miDebriefing){
+          window.matchData={id:c.match.id,compatibilidad_hoy:c.match.compatibilidad_hoy,potencial_construccion:c.match.potencial_construccion,mensaje_dupla:c.match.mensaje_dupla};
+          ir(8);
+          return true;
+        }
       }
     }
   }catch(e){}
@@ -2433,6 +2477,7 @@ function addMsg(tipo,txt){
   var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
   document.getElementById('chatArea').appendChild(div);
   scrollAlFondo('chatArea');
+  return div;
 }
 // En mobile, 100dvh no contempla el teclado virtual: cuando se abre o se
 // cierra, el scroll ya seteado queda desactualizado respecto al nuevo alto
@@ -2480,9 +2525,20 @@ async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
   showTyping();
   try{
-    var data=await llamarChat({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory});
-    var reply=limpiarMarkdown(data.content.map(function(b){return b.text||""}).join(""));
-    hideTyping();addMsg('soul',reply);chatHistory.push({role:'assistant',content:reply});
+    // Streaming: el texto de Soul se va mostrando a medida que llega, en vez
+    // de esperar a que termine de generarse entera -- eso era lo que se
+    // sentia lento (los puntitos quietos varios segundos y despues todo el
+    // mensaje de golpe). El primer pedazo que llega saca los puntitos y crea
+    // la burbuja; despues solo se actualiza su texto.
+    var soulEl=null;
+    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory},function(parcial){
+      if(!soulEl){hideTyping();soulEl=addMsg('soul',parcial);}
+      else{soulEl.textContent=parcial;scrollAlFondo('chatArea');}
+    });
+    var reply=limpiarMarkdown(crudo);
+    hideTyping();
+    if(soulEl)soulEl.textContent=reply;else addMsg('soul',reply);
+    chatHistory.push({role:'assistant',content:reply});
 
     intercambiosDesdeGuardado++;
     if(intercambiosDesdeGuardado>=INTERCAMBIOS_AUTOSAVE){

@@ -55,7 +55,7 @@ async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuarioId) {
 async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
   const matchesRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
+    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,debriefing_usuario_a,debriefing_usuario_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
     { headers }
   );
   const matches = matchesRes.ok ? await matchesRes.json() : [];
@@ -354,26 +354,45 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
 // escrituras de usuario_a, asi que usuario_b nunca podia guardar su propia
 // eleccion de debriefing. Se pasa por este endpoint, autorizando por
 // cualquiera de los dos lados.
+// Antes esto escribia derecho a matches.estado -- un campo unico
+// compartido -- asi que en cuanto la PRIMERA persona completaba su
+// debriefing, matches.estado dejaba de ser 'mutuamente_aceptado' y el
+// chequeo de login de la SEGUNDA persona (que buscaba justo ese valor)
+// ya no encontraba nada: caia derecho a la eleccion de sesion normal,
+// como si su debriefing pendiente no existiera. Se guarda la eleccion de
+// cada lado por separado (mismo patron que eleccion_usuario_a/b en la
+// decision del match) y el estado final solo se resuelve cuando las DOS
+// ya contestaron.
 async function elegirDebriefing(req, res, supabaseUrl, headers, usuario) {
   const { matchId, eleccion } = req.body;
   if (!matchId || (eleccion !== 'aceptado' && eleccion !== 'rechazado')) {
     return res.status(400).json({ error: 'Faltan datos o elección inválida' });
   }
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,debriefing_usuario_a,debriefing_usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
-  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
-    return res.status(403).json({ error: 'No autorizado' });
+  const soyA = match.usuario_a === usuario.usuarioId;
+  const soyB = match.usuario_b === usuario.usuarioId;
+  if (!soyA && !soyB) return res.status(403).json({ error: 'No autorizado' });
+
+  const campoPropio = soyA ? 'debriefing_usuario_a' : 'debriefing_usuario_b';
+  const campoAjeno = soyA ? 'debriefing_usuario_b' : 'debriefing_usuario_a';
+  const ajena = match[campoAjeno];
+
+  const datosPatch = { [campoPropio]: eleccion };
+  if (ajena) {
+    // Las dos ya contestaron -- recien ahi se resuelve el estado final.
+    datosPatch.estado = (eleccion === 'aceptado' && ajena === 'aceptado') ? 'aceptado' : 'rechazado';
+    datosPatch.fecha_respuesta = new Date().toISOString();
   }
   await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ estado: eleccion, fecha_respuesta: new Date().toISOString() })
+    body: JSON.stringify(datosPatch)
   });
-  // Sin esto, etapa_actual se quedaba en 'debriefing' para siempre en el
-  // panel para esta persona, aunque su ciclo con este match ya haya
-  // terminado -- vuelve a 'chat', el estado normal de espera/conversacion.
+  // Mi parte del debriefing ya termino -- vuelvo a 'chat', el estado normal
+  // de espera/conversacion (antes quedaba en 'debriefing' para siempre).
   await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
     method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ etapa_actual: 'chat' })
@@ -388,13 +407,16 @@ async function checkinEmocional(req, res, supabaseUrl, headers, usuario) {
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
-  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+  const soyA = match.usuario_a === usuario.usuarioId;
+  if (!soyA && match.usuario_b !== usuario.usuarioId) {
     return res.status(403).json({ error: 'No autorizado' });
   }
+  // Campo separado por lado -- antes era un unico campo compartido y el
+  // checkin del segundo pisaba el del primero.
   await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify({ checkin_emocional: valor })
+    body: JSON.stringify({ [soyA ? 'checkin_emocional_a' : 'checkin_emocional_b']: valor })
   });
   return res.status(200).json({ ok: true });
 }

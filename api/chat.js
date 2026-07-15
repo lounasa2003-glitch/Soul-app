@@ -68,6 +68,72 @@ export default async function handler(req, res) {
       }
     }
 
+    // El chat principal pide streaming (stream:true en el body) para que la
+    // respuesta de Soul aparezca progresivamente en vez de esperar a que
+    // termine de generarse entera -- eso era lo que se sentia "lento": los
+    // puntitos de "escribiendo" se quedaban quietos varios segundos y despues
+    // aparecia todo junto. El resto de los llamados (modulos, deteccion de
+    // JSON) siguen sin mandar este flag y se comportan exactamente igual que
+    // antes (necesitan la respuesta completa para poder parsearla).
+    if (req.body.stream) {
+      const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: MODELO_FIJO,
+          max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
+          system,
+          messages,
+          stream: true
+        })
+      });
+
+      if (!anthropicRes.ok) {
+        const errData = await anthropicRes.json().catch(() => ({}));
+        return res.status(anthropicRes.status).json(errData);
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
+
+      let inputTokens = 0, outputTokens = 0, buffer = '';
+      const reader = anthropicRes.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lineas = buffer.split('\n');
+        buffer = lineas.pop(); // linea incompleta -- se retoma en la proxima vuelta
+        for (const linea of lineas) {
+          if (!linea.startsWith('data: ')) continue;
+          const jsonStr = linea.slice(6).trim();
+          if (!jsonStr) continue;
+          let evt;
+          try { evt = JSON.parse(jsonStr); } catch (e) { continue; }
+          if (evt.type === 'message_start' && evt.message && evt.message.usage) {
+            inputTokens = evt.message.usage.input_tokens || 0;
+          } else if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+            res.write(evt.delta.text);
+          } else if (evt.type === 'message_delta' && evt.usage) {
+            outputTokens = evt.usage.output_tokens || 0;
+          }
+        }
+      }
+      res.end();
+
+      registrarUsoTokens({
+        usuarioId: usuario.usuarioId,
+        endpoint: 'chat',
+        moduloFase: contexto === 'modulo' ? moduloFase : null,
+        usage: { input_tokens: inputTokens, output_tokens: outputTokens }
+      }).catch(() => {});
+      return;
+    }
+
     const data = await llamarClaude({
       model: MODELO_FIJO,
       max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
@@ -83,6 +149,7 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch (error) {
+    if (res.headersSent) { res.end(); return; }
     if (error.status) {
       return res.status(error.status).json(error.data);
     }
