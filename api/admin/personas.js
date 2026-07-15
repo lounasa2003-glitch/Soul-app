@@ -77,11 +77,17 @@ export default async function handler(req, res) {
     if (otrosIds.length > 0) {
       const listaIds = otrosIds.map(encodeURIComponent).join(',');
       const otrosRes = await fetch(
-        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre&id=in.(${listaIds})`,
+        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${listaIds})`,
         { headers }
       );
       const otros = otrosRes.ok ? await otrosRes.json() : [];
-      otros.forEach(o => { nombrePorId[o.id] = o.nombre; });
+      // Varias personas del piloto real nunca llegaron a guardar "nombre"
+      // (solo email) -- sin este fallback, esas mismas personas aparecian
+      // con nombre en los matches de la OTRA parte (si su contraparte si
+      // tenia nombre) pero como "(persona sin nombre)" del propio lado,
+      // dando la falsa impresion de que el match no era el mismo de los dos
+      // lados.
+      otros.forEach(o => { nombrePorId[o.id] = o.nombre || o.email || null; });
     }
 
     const matchesConNombre = matches.map(m => {

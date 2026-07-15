@@ -109,9 +109,16 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   });
 
   if (inserts.length > 0) {
-    const insertRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
+    // El chequeo de "paresExistentes" de arriba solo protege dentro de esta
+    // misma llamada -- si esta funcion se dispara dos veces casi al mismo
+    // tiempo para la misma persona (doble click, reintento de red), las dos
+    // pueden no ver el match de la otra todavia y terminar creando dos filas
+    // para el mismo par. `on_conflict=par_clave` + `ignore-duplicates` hace
+    // que Postgres directamente descarte el insert repetido en vez de crear
+    // la fila de mas (requiere el indice unico sobre `par_clave`).
+    const insertRes = await fetch(`${supabaseUrl}/rest/v1/matches?on_conflict=par_clave`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
       body: JSON.stringify(inserts)
     });
     if (!insertRes.ok) {

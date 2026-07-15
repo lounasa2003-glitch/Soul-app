@@ -326,6 +326,17 @@ function perfilAHtml(p,conValidacion){
   return html;
 }
 
+var ESTADO_LEGIBLE={
+  pendiente:'Candidato (sin activar)',
+  activo:'Activo — esperando decisión',
+  pausado:'Pausado',
+  mutuamente_aceptado:'Match mutuo ✓',
+  no_avanza:'No avanzó',
+  cerrado:'Cerrado',
+  aceptado:'Aceptado (post-cita)',
+  rechazado:'Rechazado (post-cita)'
+};
+
 function renderHojaDeVida(data){
   var u=data.usuario||{};
   document.getElementById('hvNombre').textContent=u.nombre||'(sin nombre)';
@@ -408,16 +419,6 @@ function renderHojaDeVida(data){
   // "real" entre el resto del ranking), después el historial de matches ya
   // resueltos, y al final los candidatos que salieron del ranking pero
   // todavía nadie activó.
-  var ESTADO_LEGIBLE={
-    pendiente:'Candidato (sin activar)',
-    activo:'Activo — esperando decisión',
-    pausado:'Pausado',
-    mutuamente_aceptado:'Match mutuo ✓',
-    no_avanza:'No avanzó',
-    cerrado:'Cerrado',
-    aceptado:'Aceptado (post-cita)',
-    rechazado:'Rechazado (post-cita)'
-  };
   function eleccionLegible(v){
     return v==='acepta'?'Aceptó':v==='rechaza'?'Rechazó':'Todavía no decidió';
   }
@@ -501,7 +502,7 @@ function abrirComparador(){
     var div=document.createElement('div');
     div.className='comparador-opt';
     div.textContent=p.nombre||p.email;
-    div.onclick=function(){ correrComparacion(p.id,p.nombre); };
+    div.onclick=function(){ correrComparacion(p.id,p.nombre||p.email); };
     lista.appendChild(div);
   });
   lista.style.display='block';
@@ -524,7 +525,8 @@ async function correrComparacion(otraId,otroNombre){
       resultadoDiv.innerHTML='<p class="error-msg">'+esc(data.mensaje||data.error||'Error al comparar')+'</p>';
       return;
     }
-    var html='<p style="color:#c9a84c;margin-bottom:.5rem">Comparación contra '+esc(otroNombre)+'</p>';
+    var nombreMostrado=data.nombreA&&data.nombreB?(esc(data.nombreA)+' + '+esc(data.nombreB)):esc(otroNombre);
+    var html='<p style="color:#c9a84c;margin-bottom:.5rem">Comparación: '+nombreMostrado+'</p>';
     html+='<div class="match-scores"><div><div class="match-score">'+esc(data.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(data.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
     html+='<p style="font-size:.85rem;margin-top:.5rem">'+esc(data.veredicto)+'</p>';
     if(data.fortalezas&&data.fortalezas.length)html+=campoHtml('Fortalezas',data.fortalezas);
@@ -536,6 +538,17 @@ async function correrComparacion(otraId,otroNombre){
       html+=campoHtml('Complementariedad',av2.complementariedad);
       html+=campoHtml('Adaptabilidad',av2.adaptabilidad);
       html+=campoHtml('Potencial de construcción',av2.potencial_de_construccion);
+    }
+    if(data.matchId){
+      html+='<div style="margin-top:.8rem">';
+      if(data.matchEstado==='pendiente'||data.matchEstado==='pausado'){
+        html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(data.matchId)+'\',\'activar\')">'+(data.matchEstado==='pausado'?'Reactivar →':'Activar match →')+'</button>';
+      }else if(data.matchEstado==='activo'){
+        html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(data.matchId)+'\',\'pausar\')">Pausar</button>';
+      }else{
+        html+=campoHtml('Estado del match',ESTADO_LEGIBLE[data.matchEstado]||data.matchEstado);
+      }
+      html+='</div>';
     }
     resultadoDiv.innerHTML=html;
   }catch(e){
