@@ -51,23 +51,41 @@ async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuarioId) {
 
 // Sin citaId: lista las citas propias (via los matches donde soy
 // usuario_a/b) -- lo usa el chequeo de login para saber si hay una cita en
-// curso sin que el cliente tenga que conocer el id de antemano.
+// curso sin que el cliente tenga que conocer el id de antemano, y tambien
+// la pantalla "Mis citas" para mostrar el historial completo.
 async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
   const matchesRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,debriefing_usuario_a,debriefing_usuario_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
+    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,fortalezas,desafio,debriefing_usuario_a,debriefing_usuario_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
     { headers }
   );
   const matches = matchesRes.ok ? await matchesRes.json() : [];
   if (matches.length === 0) return res.status(200).json({ citas: [] });
 
-  const idsMatches = matches.map(m => m.id);
+  const otrosIds = [...new Set(matches.map(m => (m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a)))];
+  let nombrePorId = {};
+  if (otrosIds.length > 0) {
+    const usuariosRes = await fetch(
+      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
+      { headers }
+    );
+    const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
+    // Algunas personas del piloto nunca guardaron "nombre" (solo email) --
+    // mismo fallback ya aplicado en api/admin/personas.js para el panel.
+    usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
+  }
+  const matchesConNombre = matches.map(m => {
+    const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
+    return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
+  });
+
+  const idsMatches = matchesConNombre.map(m => m.id);
   const citasRes = await fetch(
     `${supabaseUrl}/rest/v1/citas?select=*&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
     { headers }
   );
   const citas = citasRes.ok ? await citasRes.json() : [];
-  const citasConMatch = citas.map(c => ({ ...c, match: matches.find(m => m.id === c.match_id) }));
+  const citasConMatch = citas.map(c => ({ ...c, match: matchesConNombre.find(m => m.id === c.match_id) }));
   return res.status(200).json({ citas: citasConMatch });
 }
 
@@ -133,7 +151,11 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   }
   const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
   if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
-  if (auth.cita.estado === 'cerrada') return res.status(409).json({ error: 'cita_cerrada', mensaje: 'Esta cita ya terminó.' });
+  // Antes esto bloqueaba escribir si la cita ya estaba 'cerrada' -- ahora se
+  // puede reabrir para seguir la charla desde "Mis citas" aunque ya haya
+  // pasado por el cierre y el debriefing. No se toca el estado (se queda
+  // 'cerrada'): asi no se reactiva sola la auto-navegacion de login a la
+  // cita ni se pisa el debriefing ya resuelto.
 
   await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
     method: 'POST',
@@ -421,6 +443,67 @@ async function checkinEmocional(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ ok: true });
 }
 
+// Conversacion privada de reflexion sobre una cita puntual -- una por
+// (usuario, match), nunca compartida con la otra persona del match. La IA
+// en si la maneja el cliente llamando directo a /api/chat (mismo streaming
+// que el chat principal); esto solo persiste el historial y devuelve el
+// contexto del match para que el cliente arme el system prompt.
+async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
+  const { reflexionMatchId } = req.query;
+  const matchRes = await fetch(
+    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio&id=eq.${encodeURIComponent(reflexionMatchId)}`,
+    { headers }
+  );
+  const matches = matchRes.ok ? await matchRes.json() : [];
+  const match = matches[0];
+  if (!match) return res.status(404).json({ error: 'Match no encontrado' });
+  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
+  const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=eq.${encodeURIComponent(otraId)}`, { headers });
+  const otras = otraRes.ok ? await otraRes.json() : [];
+  const otraPersonaNombre = otras[0] ? (otras[0].nombre || otras[0].email || null) : null;
+
+  const reflexionRes = await fetch(
+    `${supabaseUrl}/rest/v1/cita_reflexiones?select=historial&match_id=eq.${encodeURIComponent(reflexionMatchId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
+    { headers }
+  );
+  const reflexiones = reflexionRes.ok ? await reflexionRes.json() : [];
+
+  return res.status(200).json({
+    historial: reflexiones[0] ? reflexiones[0].historial : [],
+    otraPersonaNombre,
+    mensajeDupla: match.mensaje_dupla || null,
+    fortalezas: match.fortalezas || null,
+    desafio: match.desafio || null
+  });
+}
+
+async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {
+  const { matchId, historial } = req.body;
+  if (!matchId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matches = matchRes.ok ? await matchRes.json() : [];
+  const match = matches[0];
+  if (!match) return res.status(404).json({ error: 'Match no encontrado' });
+  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  // Upsert por (match_id, usuario_id) -- el cliente siempre manda el
+  // historial completo, no hace falta trackear un id de fila.
+  const upsertRes = await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ match_id: matchId, usuario_id: usuario.usuarioId, historial, updated_at: new Date().toISOString() })
+  });
+  if (!upsertRes.ok) {
+    console.error('Error guardando reflexion:', upsertRes.status, await upsertRes.text());
+    return res.status(500).json({ error: 'No se pudo guardar' });
+  }
+  return res.status(200).json({ ok: true });
+}
+
 export default async function handler(req, res) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -436,6 +519,9 @@ export default async function handler(req, res) {
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
     if (req.method === 'GET') {
+      if (req.query.reflexionMatchId) {
+        return await obtenerReflexion(req, res, supabaseUrl, headers, usuario);
+      }
       // Marca de presencia: mientras el cliente este polleando la cita
       // activamente, se lo considera "conectado" y no hace falta mandarle
       // mail cuando le llega un mensaje nuevo.
@@ -453,6 +539,7 @@ export default async function handler(req, res) {
       if (accion === 'responderCierre') return await responderCierre(req, res, supabaseUrl, headers, usuario);
       if (accion === 'elegirDebriefing') return await elegirDebriefing(req, res, supabaseUrl, headers, usuario);
       if (accion === 'checkinEmocional') return await checkinEmocional(req, res, supabaseUrl, headers, usuario);
+      if (accion === 'guardarReflexion') return await guardarReflexion(req, res, supabaseUrl, headers, usuario);
       return res.status(400).json({ error: 'Acción no válida' });
     }
     return res.status(405).json({ error: 'Method not allowed' });

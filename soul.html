@@ -355,6 +355,35 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-title">Analizar una conversación</p>
       <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
+
+    <div class="sesion-opt" onclick="mostrarMisCitas()">
+      <p class="sesion-opt-title">Tus citas</p>
+      <p class="sesion-opt-desc">Volvé a alguna conversación, o hablá con Soul sobre cómo te fue.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MIS CITAS ══ -->
+<div class="etapa" id="eMisCitas">
+  <div class="scroll" style="max-width:520px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem;text-align:center">Tus citas</p>
+    <div id="misCitasLista"></div>
+    <button class="btn-back" onclick="volverDeMisCitas()">← Volver</button>
+  </div>
+</div>
+
+<!-- ══ REFLEXIÓN SOBRE UNA CITA (chat privado con Soul, nunca compartido) ══ -->
+<div class="etapa" id="eReflexionCita">
+  <div class="chat-wrap">
+    <div class="chat-header">
+      <span onclick="volverDeReflexion()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.9rem;cursor:pointer">←</span>
+      <div><div class="chat-nm" id="reflexionTitulo">Pensando en tu cita</div><div class="chat-st">privado, solo para vos</div></div>
+    </div>
+    <div class="chat-area" id="reflexionArea"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-in" id="reflexionIn" placeholder="Escribile a Soul...">
+      <button class="send-btn" id="reflexionSendBtn" onclick="enviarReflexion()">→</button>
+    </div>
   </div>
 </div>
 
@@ -1953,6 +1982,7 @@ async function chequearCitaPendiente(){
       if(!c.match)continue;
       if(c.estado!=='cerrada'){
         window.citaActualId=c.id;
+        window.citaModoRevisita=false;
         ir(7);
         return true;
       }
@@ -2047,6 +2077,160 @@ function mostrarEleccionSesion(u,pct,saludo){
     opcAnalisis.style.display='block';
   }
   ir('EleccionSesion');
+}
+
+var CITA_ESTADO_LEGIBLE={
+  pendiente:'Todavía sin mensajes',
+  activa:'En curso',
+  chequeo_cierre:'Definiendo si siguen',
+  cerrada:'Cerrada'
+};
+
+// Pantalla "Tus citas": historial completo (activas y cerradas), con opcion
+// de volver a entrar a cualquiera (incluso cerradas -- se puede seguir
+// escribiendo) o de abrir una conversacion privada de reflexion con Soul
+// sobre esa cita puntual.
+async function mostrarMisCitas(){
+  var lista=document.getElementById('misCitasLista');
+  lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Cargando...</p>';
+  ir('MisCitas');
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    var data=await res.json();
+    var citas=(data.citas||[]).filter(function(c){return c.match});
+    if(citas.length===0){
+      lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Todavía no tuviste ninguna cita.</p>';
+      return;
+    }
+    var estiloBtn='padding:.6rem .9rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer';
+    lista.innerHTML=citas.map(function(c){
+      var nombre=c.match.otra_persona_nombre||'(persona sin nombre)';
+      var estadoTxt=CITA_ESTADO_LEGIBLE[c.estado]||c.estado;
+      var html='<div style="border:1px solid #2a1f28;border-radius:6px;padding:1rem;margin-bottom:.9rem">';
+      html+='<p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
+      html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p>';
+      html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
+      html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(c.id)+'\')">Abrir cita →</button>';
+      html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeM(\''+esc(c.match.id)+'\')">Hablar con Soul sobre esto →</button>';
+      html+='</div></div>';
+      return html;
+    }).join('');
+  }catch(e){
+    lista.innerHTML='<p class="auth-err" style="display:block">No pudimos cargar tus citas. Probá de nuevo.</p>';
+  }
+}
+function abrirCitaDesdeM(citaId){
+  window.citaActualId=citaId;
+  window.citaModoRevisita=true;
+  ir(7);
+}
+function volverDeMisCitas(){
+  mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
+}
+
+// ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──
+var reflexionHistory=[];
+var reflexionMatchIdActual=null;
+
+function abrirReflexionDesdeM(matchId){
+  reflexionMatchIdActual=matchId;
+  reflexionHistory=[];
+  document.getElementById('reflexionArea').innerHTML='';
+  ir('ReflexionCita');
+  initReflexionCita();
+}
+function volverDeReflexion(){
+  mostrarMisCitas();
+}
+
+function buildReflexionPrompt(ctx){
+  var partes=[`Sos Soul. Esta es una conversación privada -- la persona con la que hablás la tuvo una cita con ${ctx.otraPersonaNombre||'la otra persona'}, y quiere pensarla con vos. Esta charla nunca la ve la otra persona del match, es un espacio solo de ella. No apures a ninguna conclusión ni dés un veredicto sobre si "conviene" seguir o no -- ayudá a que ella misma vea con más claridad qué sintió, qué le gustó, qué le costó. Mensajes cortos, cálidos, sin markdown, sin listas.`];
+  if(ctx.mensajeDupla)partes.push('Contexto del match (lo que Soul ya vio en los dos perfiles): '+ctx.mensajeDupla);
+  if(ctx.fortalezas&&ctx.fortalezas.length)partes.push('Fortalezas detectadas de la pareja: '+ctx.fortalezas.join(' / '));
+  if(ctx.desafio)partes.push('Desafío detectado: '+ctx.desafio);
+  return partes.join('\n\n');
+}
+
+async function initReflexionCita(){
+  document.getElementById('reflexionTitulo').textContent='Pensando en tu cita';
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/citas?reflexionMatchId='+encodeURIComponent(reflexionMatchIdActual),{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    var data=await res.json();
+    if(!res.ok){
+      document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.</p>';
+      return;
+    }
+    window.reflexionContexto=data;
+    if(data.otraPersonaNombre)document.getElementById('reflexionTitulo').textContent='Pensando en tu cita con '+data.otraPersonaNombre;
+    reflexionHistory=data.historial||[];
+    var area=document.getElementById('reflexionArea');
+    area.innerHTML='';
+    reflexionHistory.forEach(function(m){
+      var div=document.createElement('div');
+      div.className='msg '+(m.role==='assistant'?'soul':'user');
+      div.textContent=m.content;
+      area.appendChild(div);
+    });
+    if(reflexionHistory.length===0){
+      var saludo='¿Cómo la pasaste? Contame lo que quieras de esta cita.';
+      addReflexionMsg('soul',saludo);
+      reflexionHistory.push({role:'assistant',content:saludo});
+      guardarReflexionHistorial();
+    }
+    scrollAlFondo('reflexionArea');
+  }catch(e){
+    document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.</p>';
+  }
+}
+function addReflexionMsg(tipo,txt){
+  var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
+  document.getElementById('reflexionArea').appendChild(div);
+  scrollAlFondo('reflexionArea');
+  return div;
+}
+function guardarReflexionHistorial(){
+  fetchConSesion(function(){
+    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'guardarReflexion',matchId:reflexionMatchIdActual,historial:reflexionHistory})});
+  }).catch(function(){});
+}
+async function enviarReflexion(){
+  var inp=document.getElementById('reflexionIn');
+  var txt=inp.value.trim();if(!txt)return;
+  inp.value='';
+  document.getElementById('reflexionSendBtn').disabled=true;
+  addReflexionMsg('user',txt);
+  reflexionHistory.push({role:'user',content:txt});
+  var typing=document.createElement('div');
+  typing.className='msg soul typing';typing.id='reflexionTyping';
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('reflexionArea').appendChild(typing);
+  scrollAlFondo('reflexionArea');
+  try{
+    var soulEl=null;
+    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory},function(parcial){
+      if(!soulEl){
+        var t=document.getElementById('reflexionTyping');if(t)t.remove();
+        soulEl=addReflexionMsg('soul',parcial);
+      }else{
+        soulEl.textContent=parcial;scrollAlFondo('reflexionArea');
+      }
+    });
+    var reply=limpiarMarkdown(crudo);
+    var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
+    if(soulEl)soulEl.textContent=reply;else addReflexionMsg('soul',reply);
+    reflexionHistory.push({role:'assistant',content:reply});
+    guardarReflexionHistorial();
+  }catch(e){
+    var t3=document.getElementById('reflexionTyping');if(t3)t3.remove();
+    addReflexionMsg('soul',e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?');
+  }finally{
+    document.getElementById('reflexionSendBtn').disabled=false;
+    inp.focus();
+  }
 }
 
 async function elegirSesion(tipo){
@@ -2895,7 +3079,13 @@ async function cargarCita(){
     var data=await res.json();
     window.citaSoyA=data.soyA;
     renderCita(data.cita,data.mensajes);
-    if(data.cita.estado==='cerrada'){
+    // Si vine desde "Mis citas" a revisitar una cita que ya estaba cerrada
+    // de antes, NO hay que mandar a debriefing -- eso es solo para cuando
+    // la cita se cierra recien ahora, en vivo. Sin este chequeo, con solo
+    // entrar a revisar/seguir escribiendo en una cita vieja ya te sacaba
+    // de la pantalla a los 1.5s, antes de poder ver el mensaje que acabas
+    // de mandar.
+    if(data.cita.estado==='cerrada'&&!window.citaModoRevisita){
       if(citaPollTimer)clearInterval(citaPollTimer);
       var matchesInfo=await obtenerMisMatches();
       var m=(matchesInfo.matches||[]).find(function(x){return x.id===data.cita.match_id});
