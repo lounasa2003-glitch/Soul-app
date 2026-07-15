@@ -1,4 +1,4 @@
-import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeLecturaValido } from '../lib/authUtil.js';
+import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeLecturaValido, parsearFiltro } from '../lib/authUtil.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -35,7 +35,13 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'No autorizado para leer estos datos' });
     }
 
-    const url = `${supabaseUrl}/rest/v1/${tabla}?select=*&${filtroFinal}`;
+    // Reconstruir el filtro con el valor re-codificado -- si vino con
+    // caracteres como "+" (comun en emails de gmail con subaddressing), el
+    // "+" sin re-codificar viaja literal en la URL saliente y PostgREST lo
+    // interpreta como espacio, haciendo que la busqueda no encuentre nada
+    // aunque la fila exista.
+    const { campo, operador, valor } = parsearFiltro(filtroFinal);
+    const url = `${supabaseUrl}/rest/v1/${tabla}?select=*&${campo}=${operador}.${encodeURIComponent(valor)}`;
 
     const response = await fetch(url, {
       headers: {

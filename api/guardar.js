@@ -1,4 +1,4 @@
-import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido } from '../lib/authUtil.js';
+import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido, parsearFiltro } from '../lib/authUtil.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
 // atomico (on_conflict=usuario_id) para no depender de un check-then-act
@@ -44,9 +44,15 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'No autorizado para modificar estos datos' });
     }
 
-    let url = filtro
-      ? `${supabaseUrl}/rest/v1/${tabla}?${filtro}`
-      : `${supabaseUrl}/rest/v1/${tabla}`;
+    // Mismo motivo que en /api/leer: reconstruir con el valor re-codificado
+    // en vez de inyectar el filtro crudo -- un "+" sin re-codificar (comun
+    // en emails de gmail con subaddressing) viaja como espacio literal y
+    // PostgREST no encuentra la fila a actualizar.
+    let url = supabaseUrl + '/rest/v1/' + tabla;
+    if (filtro) {
+      const { campo, operador, valor } = parsearFiltro(filtro);
+      url += `?${campo}=${operador}.${encodeURIComponent(valor)}`;
+    }
     if (esUpsert) url += '?on_conflict=usuario_id';
 
     const response = await fetch(url, {
