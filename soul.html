@@ -709,6 +709,15 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
+<!-- ══ MATCH: YA DECIDÍ, ESPERANDO A LA OTRA PERSONA ══ -->
+<div class="etapa" id="eEsperandoRespuestaOtro">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
+    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite"></div>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem">Ya diste tu respuesta.</p>
+    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px">En cuanto la otra persona también decida, Soul te va a avisar.</p>
+  </div>
+</div>
+
 <!-- ══ ESPERANDO MATCH ══ -->
 <div class="etapa" id="eEsperando">
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
@@ -1878,6 +1887,15 @@ async function chequearMatchPendiente(){
       if(m.estado==='no_avanza'&&miEleccion==='acepta'){
         window.matchIdParaCerrar=m.id;
         ir('MatchCerrado');
+        return true;
+      }
+      // Ya decidí (acepta o rechaza) pero el match sigue 'activo' porque la
+      // otra persona todavía no contestó -- sin esto, volver a entrar acá
+      // (recargar, cerrar y volver a loguearse) caía directo a la pantalla
+      // normal de elección de sesión, como si el match no existiera más,
+      // en vez de reflejar que sigue en curso esperando al otro lado.
+      if(m.estado==='activo'&&miEleccion!=='pendiente'){
+        ir('EsperandoRespuestaOtro');
         return true;
       }
     }
