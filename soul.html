@@ -1826,16 +1826,14 @@ function toggleAuthMode(){
 }
 
 function mostrarRecuperar(){
-  document.getElementById('e0').classList.remove('activa');
-  document.getElementById('eRecuperar').classList.add('activa');
+  ir('Recuperar');
 }
 
 function volverALogin(){
-  document.getElementById('eRecuperar').classList.remove('activa');
-  document.getElementById('e0').classList.add('activa');
   document.getElementById('recErr').style.display='none';
   document.getElementById('recExito').style.display='none';
   document.getElementById('recBtn').style.display='block';
+  ir(0);
 }
 
 async function enviarRecuperacion(){
@@ -2520,11 +2518,16 @@ async function elegirSesion(tipo){
 }
 
 function volverAEleccion(){
-  document.getElementById('eAnalisisExterno').classList.remove('activa');
-  document.getElementById('eEleccionSesion').classList.add('activa');
+  // Antes esto manipulaba las clases CSS directo, sin pasar por ir() -- no
+  // actualizaba la variable etapaActual ni reseteaba el scroll, asi que
+  // eEleccionSesion quedaba "activa" para siempre (display:flex) sin que
+  // ningun ir() posterior la sacara (solo saca la que coincide con
+  // etapaActual). Efecto real: cada pantalla nueva de ahi en mas quedaba
+  // apilada debajo de esta, invisible hasta scrollear.
   document.getElementById('analisisResultado').style.display='none';
   document.getElementById('analisisConv').value='';
   document.getElementById('analisisNombre').value='';
+  ir('EleccionSesion');
 }
 
 async function analizarConversacionExterna(){
