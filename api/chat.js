@@ -1,5 +1,5 @@
 import { verificarUsuario } from '../lib/authUtil.js';
-import { llamarClaude } from '../lib/anthropicClient.js';
+import { llamarClaude, systemConCache } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: MODELO_FIJO,
           max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
-          system,
+          system: systemConCache(system),
           messages,
           stream: true
         })
