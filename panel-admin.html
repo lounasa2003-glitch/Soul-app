@@ -441,7 +441,6 @@ function renderHojaDeVida(data){
   }
   var TIER_BADGE={
     1:{txt:'★ Debriefing pendiente',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
-    2:{txt:'★ Cita en curso',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
     3:{txt:'★ Match activo',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
     4:{txt:'Pausado',bg:'#2a1f28',color:'#9a8e96'}
   };
@@ -449,9 +448,14 @@ function renderHojaDeVida(data){
     var detailId='matchDetalle'+idx;
     var destacado=tier&&tier<=3;
     var html='<div class="match-card"'+(destacado?' style="border-color:#c9a84c;box-shadow:0 0 0 1px rgba(201,168,76,.4)"':'')+'>';
-    if(tier&&TIER_BADGE[tier]){
-      var b=TIER_BADGE[tier];
-      html+='<p style="color:'+b.color+';background:'+b.bg+';display:inline-block;padding:.15rem .6rem;border-radius:10px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.5rem">'+b.txt+'</p>';
+    // Tier 2 ("tiene cita") se arma aparte porque el texto depende de si la
+    // cita sigue en curso o ya se resolvio -- un match "Aceptado" con una
+    // cita cerrada no deberia decir "en curso".
+    var badge=tier===2
+      ? {txt:'★ '+(m.estado==='aceptado'||m.estado==='rechazado'?'Tuvieron cita':'Cita en curso'),bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'}
+      : TIER_BADGE[tier];
+    if(badge){
+      html+='<p style="color:'+badge.color+';background:'+badge.bg+';display:inline-block;padding:.15rem .6rem;border-radius:10px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.5rem">'+badge.txt+'</p>';
     }
     html+='<p style="color:#c9a84c">Con: '+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
     html+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
@@ -487,17 +491,18 @@ function renderHojaDeVida(data){
     return html;
   }
 
-  // Orden de importancia pedido: debriefing pendiente > cita en curso >
-  // match activo > match pausado -- lo primero que aparece es lo mas urgente
-  // de revisar (una cita ya cerrada esperando devolucion pesa mas que un
-  // match recien activado que todavia nadie respondio).
+  // Orden de importancia pedido: debriefing pendiente > cita > match activo
+  // > match pausado -- "tener cita" pesa mas que "pausado" sin importar si
+  // esa cita ya se resolvio (aceptado/rechazado): antes un match ya resuelto
+  // se sacaba por completo de la escala y cambiaba al historial (al final de
+  // la lista), lo cual hacia que un match pausado sin cita apareciera ANTES
+  // que uno con una cita real ya tenida, aunque esa cita pesara mas.
   function tierDeMatch(m){
     if(m.cita){
-      if(m.cita.estado==='cerrada'){
-        if(m.estado!=='aceptado'&&m.estado!=='rechazado')return 1; // debriefing pendiente
-      }else{
-        return 2; // cita en curso (pendiente/activa/chequeo_cierre)
-      }
+      // Debriefing pendiente: la cita ya cerro pero todavia falta que se
+      // resuelva la decision de alguna de las dos partes -- lo mas urgente.
+      if(m.cita.estado==='cerrada'&&m.estado!=='aceptado'&&m.estado!=='rechazado')return 1;
+      return 2; // cualquier otro caso con cita: en curso, o ya resuelta
     }
     if(m.estado==='activo'||m.estado==='mutuamente_aceptado')return 3;
     if(m.estado==='pausado')return 4;
