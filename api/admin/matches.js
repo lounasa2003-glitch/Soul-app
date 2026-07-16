@@ -167,29 +167,11 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
   if (accion === 'activar' && data[0]) {
     const match = data[0];
 
-    // El chequeo de login (chequearMatchPendiente en soul.html) muestra el
-    // primer match 'activo' con eleccion pendiente que encuentra -- si esta
-    // persona ya tenia OTRO match activo de antes (test viejo sin resolver,
-    // o dos activaciones seguidas sin que la primera se resolviera), ese
-    // otro tapaba silenciosamente al que se acaba de activar, sin error
-    // visible. El diseño es de a un match activo por vez y por persona, asi
-    // que activar este pausa cualquier otro activo que involucre a
-    // cualquiera de los dos lados.
-    const idA = encodeURIComponent(match.usuario_a);
-    const idB = encodeURIComponent(match.usuario_b);
-    const otrosActivosRes = await fetch(
-      `${supabaseUrl}/rest/v1/matches?select=id&estado=eq.activo&id=neq.${encodeURIComponent(match.id)}&or=(usuario_a.eq.${idA},usuario_b.eq.${idA},usuario_a.eq.${idB},usuario_b.eq.${idB})`,
-      { headers }
-    );
-    const otrosActivos = otrosActivosRes.ok ? await otrosActivosRes.json() : [];
-    if (otrosActivos.length > 0) {
-      await Promise.all(otrosActivos.map(m =>
-        fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(m.id)}`, {
-          method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ estado: 'pausado' })
-        })
-      )).catch(() => {});
-    }
+    // Decision de producto confirmada: una persona puede tener varios
+    // matches activos en paralelo, cada uno en su propia etapa -- ya no se
+    // pausan los demas al activar uno nuevo (antes si, cuando el diseño era
+    // "un match a la vez"; el cliente ahora junta todos los pendientes en
+    // vez de quedarse con el primero que encuentra).
 
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {

@@ -12,6 +12,11 @@ import { verificarUsuario } from '../lib/authUtil.js';
 // para su validación extra: consulta propia en vez de forzar el caso en el
 // validador compartido.
 
+// Resuelve nombre (o email si nunca guardaron "nombre") de la otra persona
+// de cada match -- mismo fallback ya usado en api/admin/personas.js y en
+// listarMisCitas de api/citas.js. Hace falta para las etiquetas de la
+// pantalla de "varios pendientes" en soul.html ("Match nuevo con X", etc.)
+// sin que el cliente tenga que pedirlo aparte.
 async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
   const response = await fetch(
@@ -19,7 +24,24 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
     { headers }
   );
   const matches = response.ok ? await response.json() : [];
-  return res.status(200).json({ matches });
+  if (matches.length === 0) return res.status(200).json({ matches: [] });
+
+  const otrosIds = [...new Set(matches.map(m => (m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a)))];
+  let nombrePorId = {};
+  if (otrosIds.length > 0) {
+    const usuariosRes = await fetch(
+      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
+      { headers }
+    );
+    const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
+    usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
+  }
+  const matchesConNombre = matches.map(m => {
+    const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
+    return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
+  });
+
+  return res.status(200).json({ matches: matchesConNombre });
 }
 
 async function elegir(req, res, supabaseUrl, headers, usuario) {

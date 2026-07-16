@@ -743,7 +743,25 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
     <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite"></div>
     <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem">Ya diste tu respuesta.</p>
-    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px">En cuanto la otra persona también decida, Soul te va a avisar.</p>
+    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1rem,3vw,1.2rem);color:#d8cdd2;line-height:1.7;max-width:400px;margin-bottom:1.5rem">En cuanto la otra persona también decida, Soul te va a avisar.</p>
+    <span onclick="continuarTrasAccionDePendiente()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">← Volver</span>
+  </div>
+</div>
+
+<!-- ══ PREÁMBULO ANTES DE REVELAR EL MATCH ══ -->
+<div class="etapa" id="ePreambuloMatch">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem 1.5rem;text-align:center;position:relative;z-index:1">
+    <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 2.5s ease-in-out infinite"></div>
+    <p id="preambuloMatchTexto" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px">Hola, tenemos algo para mostrarte...</p>
+  </div>
+</div>
+
+<!-- ══ VARIOS PENDIENTES EN PARALELO ══ -->
+<div class="etapa" id="eListaPendientes">
+  <div class="scroll" style="max-width:520px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:.4rem;text-align:center">Tenés varias cosas por atender</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.76rem;color:#7a6e78;margin-bottom:1.3rem;text-align:center">Elegí a cuál entrar primero.</p>
+    <div id="listaPendientesLista"></div>
   </div>
 </div>
 
@@ -1316,7 +1334,7 @@ function verResultadoMatch(){
   // de las dos personas, y la cita en sí ni siquiera está construida
   // todavía. Antes esto llevaba derecho a "Prepararme para el encuentro" y
   // de ahí a la cita sin ningún control -- ahora, como cualquier otro
-  // match, solo se revela cuando chequearMatchPendiente() lo encuentra ya
+  // match, solo se revela cuando recolectarPendientes() lo encuentra ya
   // activo (en el próximo login), vía la pantalla de decisión real.
   ir('Esperando');
 }
@@ -1896,10 +1914,13 @@ async function cargarProgreso(email){
       var pct=calcularPorcentajePerfil(u,perfil);
       window.usuarioParaSesion=u;
       window.pctParaSesion=pct;
-      var huboMatchPendiente=await chequearMatchPendiente();
-      var huboCitaPendiente=huboMatchPendiente?false:await chequearCitaPendiente();
-      if(!huboMatchPendiente&&!huboCitaPendiente){
+      var pendientes=await recolectarPendientes();
+      if(pendientes.length===0){
         mostrarEleccionSesion(u,pct);
+      }else if(pendientes.length===1){
+        entrarAPendiente(pendientes[0]);
+      }else{
+        mostrarListaPendientes(pendientes);
       }
     }else{
       ir(1);
@@ -1920,91 +1941,144 @@ async function obtenerMisMatches(){
   return res.json();
 }
 
-// Se corre al loguearse, antes de la elección de sesión habitual. Misma
-// secuencia sin importar si el match lo activó el sistema o la
-// administradora -- este chequeo solo mira el estado 'activo', no quién lo
-// puso. Devuelve true si redirigió a otra pantalla (match pendiente de
-// decisión, o cierre de un match que no avanzó y todavía no se le avisó).
-async function chequearMatchPendiente(){
+// Decision de producto: una persona puede tener varios matches activos en
+// paralelo, cada uno en su propia etapa (uno recien activado, otro en cita,
+// otro en debriefing) -- ya no "el" match activo. Se juntan TODOS los items
+// que necesitan atencion (antes esto cortaba en el primero que encontraba)
+// y cargarProgreso decide: 0 -> eleccion de sesion normal, 1 -> entra
+// derecho como siempre, 2+ -> pantalla para elegir a cual atender.
+async function recolectarPendientes(){
+  var pendientes=[];
   try{
-    var data=await obtenerMisMatches();
-    var matches=data.matches||[];
-    for(var i=0;i<matches.length;i++){
-      var m=matches[i];
+    var dataM=await obtenerMisMatches();
+    var matches=dataM.matches||[];
+    matches.forEach(function(m){
       var soyA=m.usuario_a===usuarioId;
       var miEleccion=(soyA?m.eleccion_usuario_a:m.eleccion_usuario_b)||'pendiente';
+      var otroNombre=m.otra_persona_nombre||'(persona sin nombre)';
       if(m.estado==='activo'&&miEleccion==='pendiente'){
-        window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
-        window.matchEsPersistido=true;
-        document.getElementById('scoreHoy').textContent=m.compatibilidad_hoy+'%';
-        document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
-        document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
-        ir(5);
-        // El panel ya marca 'match' de entrada al activarlo (server-side,
-        // en api/admin/matches.js) -- este re-guardado es solo para el
-        // caso en que esta persona haya sido usuario_a/b de un match que
-        // el sistema (a futuro) active directo sin pasar por el admin.
-        guardarTabla('usuarios',{etapa_actual:'match'},'id=eq.'+usuarioId).catch(function(){});
-        return true;
+        pendientes.push({tipo:'decision',label:'Match nuevo con '+otroNombre,match:m});
+      }else if(m.estado==='no_avanza'&&miEleccion==='acepta'){
+        pendientes.push({tipo:'cierre',label:'Esta vez no fue con '+otroNombre,match:m});
+      }else if(m.estado==='activo'&&miEleccion!=='pendiente'){
+        // Ya decidí (acepta o rechaza) pero el match sigue 'activo' porque
+        // la otra persona todavía no contestó.
+        pendientes.push({tipo:'esperando',label:'Esperando respuesta de '+otroNombre,match:m});
       }
-      if(m.estado==='no_avanza'&&miEleccion==='acepta'){
-        window.matchIdParaCerrar=m.id;
-        ir('MatchCerrado');
-        return true;
-      }
-      // Ya decidí (acepta o rechaza) pero el match sigue 'activo' porque la
-      // otra persona todavía no contestó -- sin esto, volver a entrar acá
-      // (recargar, cerrar y volver a loguearse) caía directo a la pantalla
-      // normal de elección de sesión, como si el match no existiera más,
-      // en vez de reflejar que sigue en curso esperando al otro lado.
-      if(m.estado==='activo'&&miEleccion!=='pendiente'){
-        ir('EsperandoRespuestaOtro');
-        return true;
-      }
-    }
+    });
   }catch(e){}
-  return false;
-}
-
-// Se corre solo si chequearMatchPendiente() no encontró nada -- mira si
-// hay una cita en curso (recién creada al mutuo acuerdo, o ya con
-// mensajes) o una cita cerrada cuyo debriefing todavía está pendiente.
-async function chequearCitaPendiente(){
   try{
-    var res=await fetchConSesion(function(){
+    var resC=await fetchConSesion(function(){
       return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
     });
-    if(!res.ok)return false;
-    var data=await res.json();
-    var citas=data.citas||[];
-    for(var i=0;i<citas.length;i++){
-      var c=citas[i];
-      if(!c.match)continue;
-      if(c.estado!=='cerrada'){
-        window.citaActualId=c.id;
-        window.citaModoRevisita=false;
-        ir(7);
-        return true;
-      }
-      // Antes esto miraba match.estado==='mutuamente_aceptado' -- un campo
-      // COMPARTIDO que la primera persona en terminar su debriefing pisa
-      // con 'aceptado'/'rechazado'. Eso tapaba a la segunda persona: su
-      // debriefing seguia pendiente pero el chequeo ya no encontraba nada
-      // porque el estado global habia cambiado. Ahora se mira solo MI
-      // propio campo (debriefing_usuario_a/b), independiente de si la otra
-      // persona ya contesto o no.
-      if(c.estado==='cerrada'){
-        var soyADebriefing=c.match.usuario_a===usuarioId;
-        var miDebriefing=soyADebriefing?c.match.debriefing_usuario_a:c.match.debriefing_usuario_b;
-        if(!miDebriefing){
-          window.matchData={id:c.match.id,compatibilidad_hoy:c.match.compatibilidad_hoy,potencial_construccion:c.match.potencial_construccion,mensaje_dupla:c.match.mensaje_dupla};
-          ir(8);
-          return true;
+    if(resC.ok){
+      var dataC=await resC.json();
+      var citas=dataC.citas||[];
+      citas.forEach(function(c){
+        if(!c.match)return;
+        var otroNombre=c.match.otra_persona_nombre||'(persona sin nombre)';
+        if(c.estado!=='cerrada'){
+          pendientes.push({tipo:'cita',label:'Cita en curso con '+otroNombre,cita:c});
+        }else{
+          // Antes esto miraba match.estado==='mutuamente_aceptado' -- un
+          // campo COMPARTIDO que la primera persona en terminar su
+          // debriefing pisa con 'aceptado'/'rechazado'. Eso tapaba a la
+          // segunda persona. Ahora se mira solo MI propio campo
+          // (debriefing_usuario_a/b), independiente de si la otra persona
+          // ya contestó o no.
+          var soyADebriefing=c.match.usuario_a===usuarioId;
+          var miDebriefing=soyADebriefing?c.match.debriefing_usuario_a:c.match.debriefing_usuario_b;
+          if(!miDebriefing){
+            pendientes.push({tipo:'debriefing',label:'Debriefing pendiente con '+otroNombre,cita:c});
+          }
         }
-      }
+      });
     }
   }catch(e){}
-  return false;
+  return pendientes;
+}
+
+// Centraliza lo que antes estaba repartido en el cuerpo de
+// chequearMatchPendiente/chequearCitaPendiente: setear las variables que
+// necesita cada pantalla y navegar. Para 'decision' pasa primero por el
+// preámbulo antes de revelar el match.
+function entrarAPendiente(item){
+  if(item.tipo==='decision'){ entrarADecisionMatch(item); return; }
+  if(item.tipo==='esperando'){ ir('EsperandoRespuestaOtro'); return; }
+  if(item.tipo==='cierre'){
+    window.matchIdParaCerrar=item.match.id;
+    ir('MatchCerrado');
+    return;
+  }
+  if(item.tipo==='cita'){
+    window.citaActualId=item.cita.id;
+    window.citaModoRevisita=false;
+    ir(7);
+    return;
+  }
+  if(item.tipo==='debriefing'){
+    var m=item.cita.match;
+    window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
+    ir(8);
+    return;
+  }
+}
+
+// Preámbulo breve antes de la animación de "los planetas se alinearon" --
+// antes arrancaba de inmediato, sin ningún momento para asimilar que algo
+// importante está por pasar.
+function entrarADecisionMatch(item){
+  var m=item.match;
+  window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
+  window.matchEsPersistido=true;
+  document.getElementById('scoreHoy').textContent=m.compatibilidad_hoy+'%';
+  document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
+  document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
+  // El panel ya marca 'match' de entrada al activarlo (server-side, en
+  // api/admin/matches.js) -- este re-guardado es solo para el caso en que
+  // esta persona haya sido usuario_a/b de un match que el sistema (a
+  // futuro) active directo sin pasar por el admin.
+  guardarTabla('usuarios',{etapa_actual:'match'},'id=eq.'+usuarioId).catch(function(){});
+  document.getElementById('preambuloMatchTexto').textContent='Hola'+(window.userNombre?' '+window.userNombre:'')+', tenemos algo para mostrarte...';
+  ir('PreambuloMatch');
+  setTimeout(function(){ ir(5); },2500);
+}
+
+function mostrarListaPendientes(pendientes){
+  window.pendientesActuales=pendientes;
+  var estiloBtn='padding:.6rem .9rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer';
+  document.getElementById('listaPendientesLista').innerHTML=pendientes.map(function(item,idx){
+    return '<div style="border:1px solid #2a1f28;border-radius:6px;padding:1rem;margin-bottom:.9rem;display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">'
+      +'<p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem;margin:0">'+esc(item.label)+'</p>'
+      +'<button style="'+estiloBtn+'" onclick="entrarAPendiente(window.pendientesActuales['+idx+'])">Entrar →</button>'
+      +'</div>';
+  }).join('');
+  ir('ListaPendientes');
+}
+
+// Se llama despues de reconocer un cierre ("Entendido" en MatchCerrado) o
+// desde "← Volver" en la pantalla de espera -- antes ahi se iba derecho a
+// la eleccion de sesion, asumiendo que no podia quedar nada mas pendiente.
+// Con matches en paralelo puede haber otras cosas por atender.
+//
+// "esperando" no cuenta como algo que hay que resolver aca -- es solo
+// informativo (ya diste tu respuesta, no hay ninguna accion pendiente de tu
+// lado) y sigue existiendo hasta que la otra persona conteste, sin importar
+// cuantas veces vuelvas a chequear. Si es lo UNICO que queda, forzar a la
+// persona a quedarse mirando esa misma pantalla de nuevo (en vez de dejarla
+// seguir con su vida mientras espera) no tiene sentido -- se la deja pasar
+// a la eleccion de sesion igual. Si hay ademas otra cosa por atender, esa
+// otra cosa sigue apareciendo (sola o en la lista) como corresponde.
+async function continuarTrasAccionDePendiente(){
+  var pendientes=await recolectarPendientes();
+  var accionables=pendientes.filter(function(p){return p.tipo!=='esperando'});
+  if(accionables.length===0){
+    mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
+  }else if(accionables.length===1){
+    entrarAPendiente(accionables[0]);
+  }else{
+    mostrarListaPendientes(accionables);
+  }
 }
 
 // El cierre se dispara reción al confirmar (no al mostrar la pantalla) --
@@ -2021,7 +2095,7 @@ async function continuarTrasCierreMatch(){
     }catch(e){}
     window.matchIdParaCerrar=null;
   }
-  mostrarEleccionSesion(window.usuarioParaSesion,window.pctParaSesion);
+  continuarTrasAccionDePendiente();
 }
 
 // Botones nuevos de e5 (match persistido -- activado por admin o sistema).
@@ -2262,8 +2336,10 @@ async function elegirSesion(tipo){
         // cita sin pasar por activación ni consentimiento mutuo.
         if(perfilGuardado&&perfilGuardado.modulo_fase==='completo'){
           try{
-            var huboMatchPendiente=await chequearMatchPendiente();
-            if(!huboMatchPendiente)ir('Esperando');
+            var pendientesFallback=await recolectarPendientes();
+            if(pendientesFallback.length===0)ir('Esperando');
+            else if(pendientesFallback.length===1)entrarAPendiente(pendientesFallback[0]);
+            else mostrarListaPendientes(pendientesFallback);
           }catch(e){
             ir('Esperando');
           }
