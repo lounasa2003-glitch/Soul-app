@@ -79,7 +79,7 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
 
   const [otraRes, perfilRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara&id=eq.${encodeURIComponent(otraId)}`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada&id=eq.${encodeURIComponent(otraId)}`, { headers }),
     fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers })
   ]);
   const otras = otraRes.ok ? await otraRes.json() : [];
@@ -106,7 +106,10 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({
     nombre: otra.nombre || null,
     edad: calcularEdad(otra.fecha_nacimiento),
-    foto: otra.foto_cara || null,
+    // Solo se manda la foto si la persona autorizó explícitamente que se
+    // muestre en la presentación de un match -- sin esa aprobación, la foto
+    // existe (para el perfil interno) pero no viaja a la otra persona.
+    foto: otra.foto_aprobada ? (otra.foto_cara || null) : null,
     bio
   });
 }

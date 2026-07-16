@@ -343,7 +343,17 @@ function renderHojaDeVida(data){
   document.getElementById('hvEmail').textContent=u.email||'';
 
   // ── DATOS (Capa A) ──
-  var htmlDatos='<div class="campo-grupo">';
+  var htmlDatos='';
+  if(u.foto_cara||u.foto_cuerpo){
+    htmlDatos+='<div class="campo-grupo"><p class="campo-grupo-titulo">Fotos</p>';
+    htmlDatos+='<div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem">';
+    if(u.foto_cara)htmlDatos+='<div><img src="'+u.foto_cara+'" style="width:110px;height:110px;object-fit:cover;border-radius:6px;border:1px solid #2a1f28"><p style="font-size:.7rem;color:#7a6e78;margin-top:.3rem;text-align:center">Cara</p></div>';
+    if(u.foto_cuerpo)htmlDatos+='<div><img src="'+u.foto_cuerpo+'" style="width:110px;height:110px;object-fit:cover;border-radius:6px;border:1px solid #2a1f28"><p style="font-size:.7rem;color:#7a6e78;margin-top:.3rem;text-align:center">Cuerpo</p></div>';
+    htmlDatos+='</div>';
+    htmlDatos+=campoHtml('Autorización para mostrar en match',u.foto_aprobada?'aprobada por la persona':'no aprobada -- no se muestra en la presentación del match');
+    htmlDatos+='</div>';
+  }
+  htmlDatos+='<div class="campo-grupo">';
   htmlDatos+=campoHtml('Nombre',u.nombre);
   htmlDatos+=campoHtml('Email',u.email);
   htmlDatos+=campoHtml('Fecha de nacimiento',u.fecha_nacimiento);

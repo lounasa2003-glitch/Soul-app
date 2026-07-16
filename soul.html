@@ -650,6 +650,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <p class="photo-slot-lbl">Tu cuerpo</p>
           </div>
         </div>
+        <label style="display:flex;align-items:flex-start;gap:.6rem;margin:1.2rem 0;cursor:pointer;text-align:left">
+          <input type="checkbox" id="chkFotoAprobada" onchange="window.fotoAprobada=this.checked" style="margin-top:.2rem">
+          <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;color:#9a8e96;line-height:1.5">Autorizo que mi foto de cara se muestre a la persona con la que tenga un match, como parte de su presentación</span>
+        </label>
         <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%">Continuar →</button>
       </div>
       <div class="step" id="st7">
@@ -1632,6 +1636,7 @@ async function guardarUsuarioYContinuar(){
     negociables: document.getElementById('neg').value||null,
     foto_cara: window.fotoCaraB64||null,
     foto_cuerpo: window.fotoCuerpoB64||null,
+    foto_aprobada: !!window.fotoAprobada,
     consentimiento_aceptado: mainOk,
     etapa_actual: 'chat'
   };
@@ -2623,6 +2628,7 @@ function litPoint(i){
 }
 window.fotoCaraB64=null;
 window.fotoCuerpoB64=null;
+window.fotoAprobada=false;
 
 function loadPhoto(inp,upId,isCara){
   var file=inp.files[0];if(!file)return;
