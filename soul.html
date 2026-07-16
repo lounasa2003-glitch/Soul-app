@@ -360,6 +360,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-title">Matches</p>
       <p class="sesion-opt-desc">Volvé a alguna conversación, o hablá con Soul sobre cómo te fue.</p>
     </div>
+
+    <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
   </div>
 </div>
 
@@ -379,6 +381,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
       <p class="sesion-opt-desc">Retomar los módulos si te falta terminar alguno.</p>
     </div>
+    <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
   </div>
 </div>
 
@@ -697,6 +700,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e4b">
   <div class="chat-wrap">
     <div class="chat-header">
+      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">← Salir</span>
       <div class="chat-orb"></div>
       <div>
         <div class="chat-nm">Soul</div>
@@ -2287,6 +2291,15 @@ function mostrarNavCentral(){
 }
 function retomarModulosDesdeNav(){
   elegirSesion('soul');
+}
+
+// No hay ninguna sesion persistida en localStorage/sessionStorage -- todo
+// (accessToken, usuarioId, historiales en memoria, etc.) vive solo en
+// variables JS de esta carga de pagina. Recargar alcanza para volver limpio
+// a la pantalla de login (e0 ya arranca "activa" por defecto), sin tener que
+// resetear a mano cada variable global una por una.
+function cerrarSesion(){
+  location.reload();
 }
 
 // ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──
