@@ -3142,7 +3142,10 @@ function initCita(){
   citaUltimoCount=0;
   cargarCita();
   if(citaPollTimer)clearInterval(citaPollTimer);
-  citaPollTimer=setInterval(cargarCita,6000);
+  // Antes cada 6s -- se sentia lento ver llegar lo que escribia la otra
+  // persona. 2.5s sigue siendo liviano para el servidor con el volumen
+  // actual del piloto, y se nota bastante mas instantaneo.
+  citaPollTimer=setInterval(cargarCita,2500);
 }
 
 async function cargarCita(){
