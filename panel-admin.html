@@ -337,6 +337,13 @@ var ESTADO_LEGIBLE={
   rechazado:'Rechazado (post-cita)'
 };
 
+var CITA_ESTADO_LEGIBLE_ADMIN={
+  pendiente:'Todavía sin mensajes',
+  activa:'En curso',
+  chequeo_cierre:'Definiendo si siguen',
+  cerrada:'Cerrada'
+};
+
 function renderHojaDeVida(data){
   var u=data.usuario||{};
   document.getElementById('hvNombre').textContent=u.nombre||'(sin nombre)';
@@ -432,13 +439,24 @@ function renderHojaDeVida(data){
   function eleccionLegible(v){
     return v==='acepta'?'Aceptó':v==='rechaza'?'Rechazó':'Todavía no decidió';
   }
-  function matchCardHtml(m,idx,destacado){
+  var TIER_BADGE={
+    1:{txt:'★ Debriefing pendiente',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
+    2:{txt:'★ Cita en curso',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
+    3:{txt:'★ Match activo',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
+    4:{txt:'Pausado',bg:'#2a1f28',color:'#9a8e96'}
+  };
+  function matchCardHtml(m,idx,tier){
     var detailId='matchDetalle'+idx;
+    var destacado=tier&&tier<=3;
     var html='<div class="match-card"'+(destacado?' style="border-color:#c9a84c;box-shadow:0 0 0 1px rgba(201,168,76,.4)"':'')+'>';
-    if(destacado)html+='<p style="color:#07050a;background:linear-gradient(135deg,#8a6e2f,#c9a84c);display:inline-block;padding:.15rem .6rem;border-radius:10px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.5rem">★ Match activo</p>';
+    if(tier&&TIER_BADGE[tier]){
+      var b=TIER_BADGE[tier];
+      html+='<p style="color:'+b.color+';background:'+b.bg+';display:inline-block;padding:.15rem .6rem;border-radius:10px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:.5rem">'+b.txt+'</p>';
+    }
     html+='<p style="color:#c9a84c">Con: '+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
     html+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
     html+=campoHtml('Estado',ESTADO_LEGIBLE[m.estado]||m.estado);
+    if(m.cita)html+=campoHtml('Estado de la cita',CITA_ESTADO_LEGIBLE_ADMIN[m.cita.estado]||m.cita.estado);
     html+=campoHtml('Activado por',m.activado_por);
     if(m.eleccion_usuario_a||m.eleccion_usuario_b){
       html+=campoHtml('Elección de '+esc(data.usuario.nombre||'esta persona'),eleccionLegible(m.usuario_a===data.usuario.id?m.eleccion_usuario_a:m.eleccion_usuario_b));
@@ -469,25 +487,43 @@ function renderHojaDeVida(data){
     return html;
   }
 
+  // Orden de importancia pedido: debriefing pendiente > cita en curso >
+  // match activo > match pausado -- lo primero que aparece es lo mas urgente
+  // de revisar (una cita ya cerrada esperando devolucion pesa mas que un
+  // match recien activado que todavia nadie respondio).
+  function tierDeMatch(m){
+    if(m.cita){
+      if(m.cita.estado==='cerrada'){
+        if(m.estado!=='aceptado'&&m.estado!=='rechazado')return 1; // debriefing pendiente
+      }else{
+        return 2; // cita en curso (pendiente/activa/chequeo_cierre)
+      }
+    }
+    if(m.estado==='activo'||m.estado==='mutuamente_aceptado')return 3;
+    if(m.estado==='pausado')return 4;
+    return 0; // no entra en la escala prioritaria (historial o candidato)
+  }
+
   var matches=data.matches||[];
   var htmlMatches='';
   if(matches.length===0){
     htmlMatches='<p class="cargando">Sin matches todavía.</p>';
   }else{
-    var activos=matches.filter(function(m){return m.estado==='activo'||m.estado==='mutuamente_aceptado'});
-    var historial=matches.filter(function(m){return m.estado==='no_avanza'||m.estado==='cerrado'||m.estado==='aceptado'||m.estado==='rechazado'||m.estado==='pausado'});
+    var prioritarios=matches.filter(function(m){return tierDeMatch(m)>0});
+    prioritarios.sort(function(a,b){return tierDeMatch(a)-tierDeMatch(b)});
+    var historial=matches.filter(function(m){return tierDeMatch(m)===0&&(m.estado==='no_avanza'||m.estado==='cerrado'||m.estado==='aceptado'||m.estado==='rechazado')});
     var candidatos=matches.filter(function(m){return m.estado==='pendiente'});
 
-    if(activos.length>0){
-      activos.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),true)});
+    if(prioritarios.length>0){
+      prioritarios.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),tierDeMatch(m))});
     }
     if(historial.length>0){
       htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:1.2rem">Historial</p>';
-      historial.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),false)});
+      historial.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),0)});
     }
     if(candidatos.length>0){
       htmlMatches+='<p class="campo-grupo-titulo" style="margin-top:1.2rem">Candidatos del ranking (sin activar) — '+candidatos.length+'</p>';
-      candidatos.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),false)});
+      candidatos.forEach(function(m){htmlMatches+=matchCardHtml(m,matches.indexOf(m),0)});
     }
   }
   htmlMatches+='<div style="margin-top:1.5rem"><button class="btn-secundario" onclick="abrirComparador()">Comparar contra otro perfil →</button> ';

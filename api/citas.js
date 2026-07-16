@@ -157,6 +157,14 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   // pasado por el cierre y el debriefing. No se toca el estado (se queda
   // 'cerrada'): asi no se reactiva sola la auto-navegacion de login a la
   // cita ni se pisa el debriefing ya resuelto.
+  // Si cualquiera de las dos personas "eliminó" este match, se corta la
+  // escritura para ambos lados -- sin devolver un motivo explícito (el
+  // cliente ya ignora este error en silencio), para que del otro lado se
+  // sienta como que simplemente dejó de haber respuesta, no un aviso de
+  // "te bloquearon".
+  if (auth.match.eliminado_por) {
+    return res.status(403).json({ error: 'no_disponible' });
+  }
 
   await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
     method: 'POST',

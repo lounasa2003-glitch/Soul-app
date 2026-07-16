@@ -90,9 +90,26 @@ export default async function handler(req, res) {
       otros.forEach(o => { nombrePorId[o.id] = o.nombre || o.email || null; });
     }
 
+    // Se suma el estado de la cita de cada match (si existe) para poder
+    // priorizar la lista en el panel: debriefing pendiente > cita en curso >
+    // match activo > match pausado -- sin esto, el panel solo veia
+    // match.estado y no podia distinguir "esperando que decidan si activan"
+    // de "ya tuvieron la cita y falta el debriefing", que es lo mas urgente
+    // de revisar.
+    let citaPorMatch = {};
+    if (matches.length > 0) {
+      const idsMatches = matches.map(m => m.id);
+      const citasRes = await fetch(
+        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
+        { headers }
+      );
+      const citas = citasRes.ok ? await citasRes.json() : [];
+      citas.forEach(c => { citaPorMatch[c.match_id] = c; });
+    }
+
     const matchesConNombre = matches.map(m => {
       const otraId = m.usuario_a === id ? m.usuario_b : m.usuario_a;
-      return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
+      return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null, cita: citaPorMatch[m.id] || null };
     });
 
     return res.status(200).json({

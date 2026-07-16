@@ -363,7 +363,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
-<!-- ══ NAVEGACIÓN CENTRAL (desde "Atrás" en la cita) ══ -->
+<!-- ══ NAVEGACIÓN CENTRAL (desde "Salir" en la cita) ══ -->
 <div class="etapa" id="eNavCentral">
   <div class="scroll" style="max-width:420px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
     <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.5rem;text-align:center">¿A dónde querés ir?</p>
@@ -833,7 +833,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e7">
   <div class="cita-wrap">
     <div class="cita-header">
-      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Atrás</span>
+      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Salir</span>
       <p class="cita-title">La cita ✦</p>
       <button class="ritmo-btn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
@@ -2232,8 +2232,11 @@ async function mostrarMisMatches(){
       var estadoTxt=MATCH_ESTADO_LEGIBLE[m.estado]||m.estado;
       var cita=citasPorMatch[m.id];
       var html='<div style="border:1px solid #2a1f28;border-radius:6px;padding:1rem;margin-bottom:.9rem">';
-      html+='<p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
-      html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p>';
+      html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem">';
+      html+='<div><p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
+      html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p></div>';
+      html+='<span onclick="eliminarMatch(\''+esc(m.id)+'\',\''+esc(nombre).replace(/'/g,"\\'")+'\')" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.72rem;cursor:pointer;white-space:nowrap;opacity:.7">Eliminar</span>';
+      html+='</div>';
       if(cita){
         html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28">';
         html+='<p style="font-family:\'Inter\',sans-serif;font-size:.7rem;color:#7a6e78;margin-bottom:.5rem">Cita: '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
@@ -2251,6 +2254,18 @@ async function mostrarMisMatches(){
     lista.innerHTML='<p class="auth-err" style="display:block">No pudimos cargar tus matches. Probá de nuevo.</p>';
   }
 }
+// "Eliminar" un match: deja de aparecer en la propia lista y la otra
+// persona no puede volver a escribir (queda como si nunca más respondiera,
+// sin un aviso explícito de bloqueo). No se puede deshacer desde acá.
+async function eliminarMatch(matchId,nombre){
+  if(!confirm('¿Eliminar el match con '+nombre+'? No vas a poder volver a verlo ni retomarlo, y la otra persona ya no va a poder escribirte.'))return;
+  try{
+    await fetchConSesion(function(){
+      return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'eliminarMatch',matchId:matchId})});
+    });
+  }catch(e){}
+  mostrarMisMatches();
+}
 function abrirCitaDesdeM(citaId){
   window.citaActualId=citaId;
   window.citaModoRevisita=true;
@@ -2260,10 +2275,12 @@ function volverDeMisMatches(){
   mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
 }
 
-// Panel de navegación central, accesible desde "Atrás" en la cita -- no se
-// pierde nada al salir: la cita y las conversaciones ya viven server-side,
-// volver a entrar (Matches -> esa cita) las retoma tal cual. Se corta el
-// polling de la cita para no seguir pidiendo en segundo plano sin necesidad.
+// Panel de navegación central, accesible desde "Salir" en la cita -- salir
+// de ahi NO significa cerrar la cita ni dejar de hablar con esa persona,
+// solo alejarse por ahora: la cita y las conversaciones ya viven
+// server-side, volver a entrar (Matches -> esa cita) las retoma tal cual,
+// con todos los mensajes. Se corta el polling de la cita para no seguir
+// pidiendo en segundo plano sin necesidad mientras no se esta mirando.
 function mostrarNavCentral(){
   if(citaPollTimer){clearInterval(citaPollTimer);citaPollTimer=null;}
   ir('NavCentral');
@@ -2296,6 +2313,7 @@ function buildReflexionPrompt(ctx){
 }
 
 async function initReflexionCita(){
+  document.getElementById('reflexionIn').onkeydown=function(e){if(e.key==='Enter')enviarReflexion()};
   document.getElementById('reflexionTitulo').textContent='Pensando en tu cita';
   try{
     var res=await fetchConSesion(function(){

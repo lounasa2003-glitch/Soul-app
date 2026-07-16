@@ -37,12 +37,43 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
     usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
   }
-  const matchesConNombre = matches.map(m => {
-    const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
-    return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
-  });
+  const matchesConNombre = matches
+    // Un match que ESTA persona eliminó deja de aparecer en su propia
+    // lista -- la otra persona (si no fue quien eliminó) lo sigue viendo
+    // igual que antes, ver eliminarMatch() para el resto del efecto.
+    .filter(m => m.eliminado_por !== usuario.usuarioId)
+    .map(m => {
+      const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
+      return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
+    });
 
   return res.status(200).json({ matches: matchesConNombre });
+}
+
+// "Eliminar" un match desde la pantalla de Matches: deja de aparecer en la
+// lista de quien lo eliminó (no en la de la otra persona, que puede seguir
+// viendo el historial) y bloquea cualquier mensaje nuevo entre las dos
+// partes (ver el chequeo de eliminado_por en enviarMensaje, api/citas.js) --
+// "una especie de borrado y bloqueado", sin avisarle explícitamente a la
+// otra persona que fue bloqueada.
+async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
+  const { matchId } = req.body;
+  if (!matchId) return res.status(400).json({ error: 'Falta matchId' });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,eliminado_por&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matches = matchRes.ok ? await matchRes.json() : [];
+  const match = matches[0];
+  if (!match) return res.status(404).json({ error: 'Match no encontrado' });
+  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  if (!match.eliminado_por) {
+    await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ eliminado_por: usuario.usuarioId })
+    });
+  }
+  return res.status(200).json({ ok: true });
 }
 
 const PRESENTACION_PERFIL_PROMPT = `Sos Soul. Vas a presentar a una persona a alguien que está por decidir si quiere conocerla -- todavía no se conocieron. Escribí una bio breve y cálida (2-3 frases), en tercera persona, a partir del perfil real que te paso. Nunca menciones puntajes, módulos, diagnósticos ni jerga técnica -- es una primera impresión humana, no un informe. Si algo del perfil no da para una frase natural, omitilo en vez de forzarlo. Respondé solo con el texto de la bio, sin comillas ni markdown.`;
@@ -237,6 +268,7 @@ export default async function handler(req, res) {
       const { accion } = req.body;
       if (accion === 'elegir') return await elegir(req, res, supabaseUrl, headers, usuario);
       if (accion === 'cerrar') return await cerrar(req, res, supabaseUrl, headers, usuario);
+      if (accion === 'eliminarMatch') return await eliminarMatch(req, res, supabaseUrl, headers, usuario);
       return res.status(400).json({ error: 'Acción no válida' });
     }
     return res.status(405).json({ error: 'Method not allowed' });
