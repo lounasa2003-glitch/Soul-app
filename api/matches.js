@@ -1,4 +1,5 @@
 import { verificarUsuario } from '../lib/authUtil.js';
+import { llamarClaude } from '../lib/anthropicClient.js';
 
 // Fusiona lo que antes eran misMatches.js, elegirMatch.js y cerrarMatch.js
 // en un solo archivo -- el plan Hobby de Vercel permite como maximo 12
@@ -42,6 +43,72 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   });
 
   return res.status(200).json({ matches: matchesConNombre });
+}
+
+const PRESENTACION_PERFIL_PROMPT = `Sos Soul. Vas a presentar a una persona a alguien que está por decidir si quiere conocerla -- todavía no se conocieron. Escribí una bio breve y cálida (2-3 frases), en tercera persona, a partir del perfil real que te paso. Nunca menciones puntajes, módulos, diagnósticos ni jerga técnica -- es una primera impresión humana, no un informe. Si algo del perfil no da para una frase natural, omitilo en vez de forzarlo. Respondé solo con el texto de la bio, sin comillas ni markdown.`;
+
+function calcularEdad(fechaNacimiento) {
+  if (!fechaNacimiento) return null;
+  const nacimiento = new Date(fechaNacimiento);
+  if (isNaN(nacimiento.getTime())) return null;
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const noCumplioAun = hoy.getMonth() < nacimiento.getMonth() ||
+    (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate());
+  if (noCumplioAun) edad--;
+  return edad;
+}
+
+// Introduccion humana de la otra persona (nombre, edad, bio breve, foto)
+// antes de decidir si avanzar con el match -- info parcial e introductoria
+// a proposito, nunca el perfil psicologico completo (eso ya tiene su
+// momento mas adelante en el flujo). Se genera en el momento, sin cachear
+// -- es un llamado unico por decision de match, volumen bajo.
+async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
+  const { presentacionMatchId } = req.query;
+  const matchRes = await fetch(
+    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(presentacionMatchId)}`,
+    { headers }
+  );
+  const matches = matchRes.ok ? await matchRes.json() : [];
+  const match = matches[0];
+  if (!match) return res.status(404).json({ error: 'Match no encontrado' });
+  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
+
+  const [otraRes, perfilRes] = await Promise.all([
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara&id=eq.${encodeURIComponent(otraId)}`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers })
+  ]);
+  const otras = otraRes.ok ? await otraRes.json() : [];
+  const otra = otras[0];
+  if (!otra) return res.status(404).json({ error: 'Perfil no encontrado' });
+  const perfiles = perfilRes.ok ? await perfilRes.json() : [];
+  const perfil = perfiles[0];
+
+  let bio = null;
+  if (perfil && (perfil.grupo1 || perfil.grupo2)) {
+    try {
+      const data = await llamarClaude({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 200,
+        system: PRESENTACION_PERFIL_PROMPT,
+        messages: [{ role: 'user', content: 'Perfil: ' + JSON.stringify({ grupo1: perfil.grupo1, grupo2: perfil.grupo2 }) }]
+      });
+      bio = (data.content || []).map(b => b.text || '').join('').trim() || null;
+    } catch (e) {
+      console.error('Error generando bio de presentación:', e);
+    }
+  }
+
+  return res.status(200).json({
+    nombre: otra.nombre || null,
+    edad: calcularEdad(otra.fecha_nacimiento),
+    foto: otra.foto_cara || null,
+    bio
+  });
 }
 
 async function elegir(req, res, supabaseUrl, headers, usuario) {
@@ -158,6 +225,9 @@ export default async function handler(req, res) {
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
     if (req.method === 'GET') {
+      if (req.query.presentacionMatchId) {
+        return await obtenerPresentacion(req, res, supabaseUrl, headers, usuario);
+      }
       return await listarMisMatches(req, res, supabaseUrl, headers, usuario);
     }
     if (req.method === 'POST') {

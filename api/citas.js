@@ -1,7 +1,8 @@
 import { verificarUsuario } from '../lib/authUtil.js';
-import { llamarClaude } from '../lib/anthropicClient.js';
+import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { notificarMensajeCita } from '../lib/email.js';
+import { EXTRACT_PROMPT } from './analisisExterno.js';
 
 // Endpoint dedicado para la cita virtual asincronica -- mismo motivo que
 // api/matches.js: hace falta que usuario_a Y usuario_b del match puedan
@@ -443,15 +444,124 @@ async function checkinEmocional(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ ok: true });
 }
 
-// Conversacion privada de reflexion sobre una cita puntual -- una por
-// (usuario, match), nunca compartida con la otra persona del match. La IA
-// en si la maneja el cliente llamando directo a /api/chat (mismo streaming
-// que el chat principal); esto solo persiste el historial y devuelve el
-// contexto del match para que el cliente arme el system prompt.
+const PERFIL_VINCULAR_SHAPE = '{"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}';
+
+// Mismo shape que EXTRACT_PROMPT (analisis de conversacion externa), pero
+// aca la fuente es la transcripcion real de la cita virtual entre las dos
+// personas del match -- se extrae por separado para A y para B, porque es
+// una fuente de informacion distinta a lo auto-reportado en el perfil (como
+// se vincula en la practica, no como dice que se vincula).
+const EXTRACT_PROMPT_CITA = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Vas a leer la transcripción real de una cita virtual entre dos personas que hicieron match (marcadas como "A" y "B"; los mensajes de "Soul" son intervenciones de una IA anfitriona, no de ninguna de las dos personas -- no son fuente de perfil, pero te sirven para entender el contexto).
+
+A diferencia de un perfil auto-reportado, esto es evidencia real de cómo cada persona efectivamente se vincula en la práctica. Extraé, por separado para A y para B, un perfil con esta forma. Respondé ÚNICAMENTE con JSON válido sin backticks: {"a":${PERFIL_VINCULAR_SHAPE},"b":${PERFIL_VINCULAR_SHAPE}}
+
+MUY IMPORTANTE -- NO INVENTES: una sola cita casi nunca da para llenar todo. Si un campo no tiene información real y observable en esta charla puntual, su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
+
+const DEVOLUCION_DEBRIEFING_PROMPT = `Sos Soul. Acaba de terminar una cita virtual entre dos personas que hicieron match, y le estás hablando en privado a una de ellas -- esta charla nunca la ve la otra persona. Es el primer mensaje de esta conversación: arrancá vos con una devolución, no esperes a que hable primero.
+
+Tu devolución tiene que:
+- Nombrar con delicadeza cómo puede haber sido el encuentro para ella, dejando lugar a que corrija si no es así.
+- Compartir qué te pareció notar como fortaleza -- de ella, de la otra persona, o del vínculo que se está armando entre las dos -- basado en las señales reales que se ven en la charla (no en lo que cada quien reportó de sí mismo antes de conocerse).
+- Compartir algo que te pareció que podría trabajarse o cuidarse.
+- Preguntarle, al final, si se siente identificada con esa lectura -- la última palabra siempre es de ella.
+
+Regla central, no negociable: nunca presentes esto como diagnóstico ni como verdad -- siempre en tono interpretativo y tentativo ("me pareció notar que...", "tal vez...", "se sintió como si..."). Nunca "sos así" ni "esto fue lo que pasó". Si la evidencia real es escasa (charla corta, poco material), decilo con naturalidad y quedate con lo poco que sí viste, en vez de generalizar.
+
+Más adelante en esta misma conversación (no necesariamente en este primer mensaje) te va a interesar explorar con ella qué le gustó de esta persona, qué sintió que no encajaba, y qué aprendió sobre lo que está buscando -- pero no lo preguntes todo de una, dejá que la charla fluya de a poco.
+
+Mensajes cortos, cálidos, sin markdown, sin listas, nunca como un formulario.`;
+
+async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioId, historial) {
+  await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ match_id: matchId, usuario_id: usuarioId, historial, updated_at: new Date().toISOString() })
+  });
+}
+
+// Primera vez que esta persona abre el debriefing de este match: en vez de
+// un saludo generico, Soul arranca con una devolucion real basada en la
+// cita. Si hace falta, primero extrae las señales de vinculo reales desde
+// los cita_mensajes (una sola vez por match, cacheadas en
+// matches.insights_debriefing_a/b) y despues genera la devolucion
+// personalizada para el lado que esta pidiendo. Cualquier fallo acá cae en
+// un array vacio -- el cliente ya tiene su propio saludo generico de
+// respaldo si el historial llega vacío.
+async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
+  try {
+    let insightsPropio = soyA ? match.insights_debriefing_a : match.insights_debriefing_b;
+
+    if (!insightsPropio) {
+      const citaRes = await fetch(
+        `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
+        { headers }
+      );
+      const citasCerradas = citaRes.ok ? await citaRes.json() : [];
+      const citaCerrada = citasCerradas[0];
+
+      let transcripto = '';
+      if (citaCerrada) {
+        const msgsRes = await fetch(
+          `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
+          { headers }
+        );
+        const msgs = msgsRes.ok ? await msgsRes.json() : [];
+        transcripto = msgs.map(m => {
+          const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
+          return quien + ': ' + m.contenido;
+        }).join('\n');
+      }
+
+      if (transcripto) {
+        const { json } = await llamarClaudeJSON({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1200,
+          system: EXTRACT_PROMPT_CITA,
+          messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
+        });
+        await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
+        });
+        insightsPropio = soyA ? json.a : json.b;
+      }
+    }
+
+    const insumo = {
+      otraPersonaNombre,
+      senalesRealesDeLaCita: insightsPropio || null,
+      fortalezasDetectadasEnLosPerfiles: match.fortalezas || null,
+      desafioDetectadoEnLosPerfiles: match.desafio || null
+    };
+    const data = await llamarClaude({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      system: DEVOLUCION_DEBRIEFING_PROMPT,
+      messages: [{ role: 'user', content: 'Insumo interno (no mostrar en crudo): ' + JSON.stringify(insumo) }]
+    });
+    const texto = (data.content || []).map(b => b.text || '').join('').trim();
+    if (!texto) return [];
+
+    const historialNuevo = [{ role: 'assistant', content: texto }];
+    await guardarHistorialReflexion(supabaseUrl, headers, matchId, usuario.usuarioId, historialNuevo);
+    return historialNuevo;
+  } catch (e) {
+    console.error('Error generando devolución de debriefing:', e);
+    return [];
+  }
+}
+
+// Conversacion privada de reflexion/debriefing sobre una cita puntual -- una
+// por (usuario, match), nunca compartida con la otra persona del match. La
+// IA en si la maneja el cliente llamando directo a /api/chat (mismo
+// streaming que el chat principal); esto persiste el historial (sembrando
+// la devolucion inicial la primera vez) y devuelve el contexto del match
+// para que el cliente arme el system prompt.
 async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   const { reflexionMatchId } = req.query;
   const matchRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio&id=eq.${encodeURIComponent(reflexionMatchId)}`,
+    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio,insights_debriefing_a,insights_debriefing_b&id=eq.${encodeURIComponent(reflexionMatchId)}`,
     { headers }
   );
   const matches = matchRes.ok ? await matchRes.json() : [];
@@ -460,7 +570,8 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
     return res.status(403).json({ error: 'No autorizado' });
   }
-  const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
+  const soyA = match.usuario_a === usuario.usuarioId;
+  const otraId = soyA ? match.usuario_b : match.usuario_a;
   const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=eq.${encodeURIComponent(otraId)}`, { headers });
   const otras = otraRes.ok ? await otraRes.json() : [];
   const otraPersonaNombre = otras[0] ? (otras[0].nombre || otras[0].email || null) : null;
@@ -470,9 +581,13 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
     { headers }
   );
   const reflexiones = reflexionRes.ok ? await reflexionRes.json() : [];
+  let historial = reflexiones[0] ? reflexiones[0].historial : [];
+  if (!historial || historial.length === 0) {
+    historial = await generarDevolucionInicial(supabaseUrl, headers, usuario, match, reflexionMatchId, soyA, otraPersonaNombre);
+  }
 
   return res.status(200).json({
-    historial: reflexiones[0] ? reflexiones[0].historial : [],
+    historial,
     otraPersonaNombre,
     mensajeDupla: match.mensaje_dupla || null,
     fortalezas: match.fortalezas || null,

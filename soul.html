@@ -356,19 +356,38 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
 
-    <div class="sesion-opt" onclick="mostrarMisCitas()">
-      <p class="sesion-opt-title">Tus citas</p>
+    <div class="sesion-opt" onclick="mostrarMisMatches()">
+      <p class="sesion-opt-title">Matches</p>
       <p class="sesion-opt-desc">Volvé a alguna conversación, o hablá con Soul sobre cómo te fue.</p>
     </div>
   </div>
 </div>
 
-<!-- ══ MIS CITAS ══ -->
-<div class="etapa" id="eMisCitas">
+<!-- ══ NAVEGACIÓN CENTRAL (desde "Atrás" en la cita) ══ -->
+<div class="etapa" id="eNavCentral">
+  <div class="scroll" style="max-width:420px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.5rem;text-align:center">¿A dónde querés ir?</p>
+    <div class="sesion-opt" onclick="mostrarMisMatches()">
+      <p class="sesion-opt-title">Matches</p>
+      <p class="sesion-opt-desc">Ver todos tus matches, tus citas y tus debriefings.</p>
+    </div>
+    <div class="sesion-opt" onclick="ir('AnalisisExterno')">
+      <p class="sesion-opt-title">Analizar una conversación</p>
+      <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
+    </div>
+    <div class="sesion-opt" onclick="retomarModulosDesdeNav()">
+      <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
+      <p class="sesion-opt-desc">Retomar los módulos si te falta terminar alguno.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MATCHES (jerarquia: match -> cita -> debriefing) ══ -->
+<div class="etapa" id="eMisMatches">
   <div class="scroll" style="max-width:520px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem;text-align:center">Tus citas</p>
-    <div id="misCitasLista"></div>
-    <button class="btn-back" onclick="volverDeMisCitas()">← Volver</button>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem;text-align:center">Matches</p>
+    <div id="misMatchesLista"></div>
+    <button class="btn-back" onclick="volverDeMisMatches()">← Volver</button>
   </div>
 </div>
 
@@ -718,11 +737,22 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <p class="match-sub">Ahora empieza la parte que ningún algoritmo puede hacer por ustedes.</p>
   <div class="match-msg" id="matchMsg"></div>
   <button class="btn-gold" id="btnPrepararEncuentro" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
-  <div id="matchDecisionBtns" style="display:none;margin-top:1rem;gap:.6rem;justify-content:center;flex-wrap:wrap">
-    <button class="btn-gold" onclick="decidirEnMatch(true)">Quiero conocer a esta persona →</button>
-    <button class="btn-secundario" onclick="decidirEnMatch(false)" style="padding:.9rem 1.2rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.88rem;cursor:pointer">Prefiero esperar otro match</button>
+</div>
+
+<!-- ══ INTRODUCCIÓN DE PERFIL ANTES DE DECIDIR ══ -->
+<div class="etapa" id="ePresentacionMatch">
+  <div style="max-width:420px;margin:0 auto;padding:2rem 1.5rem 3rem;text-align:center;position:relative;z-index:1">
+    <div id="presentacionFotoWrap" style="width:140px;height:140px;border-radius:50%;overflow:hidden;margin:0 auto 1.3rem;border:1px solid rgba(201,168,76,.4);display:flex;align-items:center;justify-content:center;background:rgba(36,26,32,.5)">
+      <img id="presentacionFoto" style="width:100%;height:100%;object-fit:cover;display:none">
+    </div>
+    <p id="presentacionNombre" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.5rem;color:#c9a84c;margin-bottom:.3rem">—</p>
+    <p id="presentacionBio" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.05rem;color:#d8cdd2;line-height:1.7;margin-bottom:1.8rem">Conociendo un poco más...</p>
+    <div id="matchDecisionBtns" style="display:flex;margin-top:1rem;gap:.6rem;justify-content:center;flex-wrap:wrap">
+      <button class="btn-gold" onclick="decidirEnMatch(true)">Quiero conocer a esta persona →</button>
+      <button class="btn-secundario" onclick="decidirEnMatch(false)" style="padding:.9rem 1.2rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.88rem;cursor:pointer">Prefiero esperar otro match</button>
+    </div>
+    <p id="matchDecisionMsg" style="display:none;margin-top:1rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7;text-align:center"></p>
   </div>
-  <p id="matchDecisionMsg" style="display:none;margin-top:1rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7;text-align:center"></p>
 </div>
 
 <!-- ══ MATCH NO AVANZÓ ══ -->
@@ -799,6 +829,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e7">
   <div class="cita-wrap">
     <div class="cita-header">
+      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Atrás</span>
       <p class="cita-title">La cita ✦</p>
       <button class="ritmo-btn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
@@ -829,17 +860,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     </div>
     <div class="eleccion-final" id="eleccionFinal">
       <p id="eleccionMsg"></p>
-      <div id="checkinEmocional" style="margin-top:1.4rem;display:none">
-        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;color:#9a8e96;margin-bottom:.7rem">¿Cómo te sentís ahora, después de esto?</p>
-        <div style="display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center">
-          <div class="chip" onclick="guardarCheckinEmocional('tranquila')">Tranquila/o</div>
-          <div class="chip" onclick="guardarCheckinEmocional('ansiosa_bien')">Un poco ansiosa/o, pero bien</div>
-          <div class="chip" onclick="guardarCheckinEmocional('me_costo')">Me costó bastante</div>
-          <div class="chip" onclick="guardarCheckinEmocional('prefiero_no_decir')">Prefiero no decirlo</div>
-        </div>
-        <p id="checkinGracias" style="display:none;margin-top:.7rem;color:#4ecb71;font-size:.85rem">Gracias por contarlo 🤍</p>
-        <button id="btnSalirDebriefing" style="display:none;margin-top:1.4rem" class="btn-full" onclick="salirDeDebriefing()">Continuar →</button>
-      </div>
     </div>
   </div>
 </div>
@@ -2164,35 +2184,66 @@ var CITA_ESTADO_LEGIBLE={
 // de volver a entrar a cualquiera (incluso cerradas -- se puede seguir
 // escribiendo) o de abrir una conversacion privada de reflexion con Soul
 // sobre esa cita puntual.
-async function mostrarMisCitas(){
-  var lista=document.getElementById('misCitasLista');
+// Estados legibles del match, para la pantalla "Matches" (distinto del
+// estado de la cita, CITA_ESTADO_LEGIBLE, que ya existe).
+var MATCH_ESTADO_LEGIBLE={
+  pendiente:'Candidato (sin activar)',
+  activo:'Esperando decisión',
+  pausado:'Pausado',
+  mutuamente_aceptado:'Match mutuo',
+  no_avanza:'No avanzó',
+  cerrado:'Cerrado',
+  aceptado:'Siguieron construyendo',
+  rechazado:'No siguió'
+};
+
+// Pantalla "Matches": TODOS los matches de la persona (no solo los que ya
+// tienen cita), con la cita y el debriefing anidados debajo de cada uno
+// cuando existen -- Match -> Cita -> Debriefing, cada hilo independiente.
+async function mostrarMisMatches(){
+  var lista=document.getElementById('misMatchesLista');
   lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Cargando...</p>';
-  ir('MisCitas');
+  ir('MisMatches');
   try{
-    var res=await fetchConSesion(function(){
-      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+    var resM=await fetchConSesion(function(){
+      return fetch('/api/matches',{headers:{'Authorization':'Bearer '+accessToken}});
     });
-    var data=await res.json();
-    var citas=(data.citas||[]).filter(function(c){return c.match});
-    if(citas.length===0){
-      lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Todavía no tuviste ninguna cita.</p>';
+    var dataM=await resM.json();
+    var matches=dataM.matches||[];
+    if(matches.length===0){
+      lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Todavía no tenés ningún match.</p>';
       return;
     }
+    var resC=await fetchConSesion(function(){
+      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    var dataC=await resC.json();
+    var citasPorMatch={};
+    (dataC.citas||[]).forEach(function(c){ if(c.match) citasPorMatch[c.match.id]=c; });
+
     var estiloBtn='padding:.6rem .9rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer';
-    lista.innerHTML=citas.map(function(c){
-      var nombre=c.match.otra_persona_nombre||'(persona sin nombre)';
-      var estadoTxt=CITA_ESTADO_LEGIBLE[c.estado]||c.estado;
+    lista.innerHTML=matches.map(function(m){
+      var nombre=m.otra_persona_nombre||'(persona sin nombre)';
+      var estadoTxt=MATCH_ESTADO_LEGIBLE[m.estado]||m.estado;
+      var cita=citasPorMatch[m.id];
       var html='<div style="border:1px solid #2a1f28;border-radius:6px;padding:1rem;margin-bottom:.9rem">';
       html+='<p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
       html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p>';
-      html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
-      html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(c.id)+'\')">Abrir cita →</button>';
-      html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeM(\''+esc(c.match.id)+'\')">Hablar con Soul sobre esto →</button>';
-      html+='</div></div>';
+      if(cita){
+        html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28">';
+        html+='<p style="font-family:\'Inter\',sans-serif;font-size:.7rem;color:#7a6e78;margin-bottom:.5rem">Cita: '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
+        html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
+        html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(cita.id)+'\')">Ver cita →</button>';
+        if(cita.estado==='cerrada'){
+          html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeM(\''+esc(m.id)+'\')">Ver debriefing →</button>';
+        }
+        html+='</div></div>';
+      }
+      html+='</div>';
       return html;
     }).join('');
   }catch(e){
-    lista.innerHTML='<p class="auth-err" style="display:block">No pudimos cargar tus citas. Probá de nuevo.</p>';
+    lista.innerHTML='<p class="auth-err" style="display:block">No pudimos cargar tus matches. Probá de nuevo.</p>';
   }
 }
 function abrirCitaDesdeM(citaId){
@@ -2200,8 +2251,20 @@ function abrirCitaDesdeM(citaId){
   window.citaModoRevisita=true;
   ir(7);
 }
-function volverDeMisCitas(){
+function volverDeMisMatches(){
   mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
+}
+
+// Panel de navegación central, accesible desde "Atrás" en la cita -- no se
+// pierde nada al salir: la cita y las conversaciones ya viven server-side,
+// volver a entrar (Matches -> esa cita) las retoma tal cual. Se corta el
+// polling de la cita para no seguir pidiendo en segundo plano sin necesidad.
+function mostrarNavCentral(){
+  if(citaPollTimer){clearInterval(citaPollTimer);citaPollTimer=null;}
+  ir('NavCentral');
+}
+function retomarModulosDesdeNav(){
+  elegirSesion('soul');
 }
 
 // ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──
@@ -2216,7 +2279,7 @@ function abrirReflexionDesdeM(matchId){
   initReflexionCita();
 }
 function volverDeReflexion(){
-  mostrarMisCitas();
+  mostrarMisMatches();
 }
 
 function buildReflexionPrompt(ctx){
@@ -3080,17 +3143,41 @@ async function extraerYGuardarPerfil(){
     await guardarConversacion();
   }catch(e){console.error('Error extrayendo perfil:',e);}
 }
+// Introduccion humana de la otra persona (nombre, edad, bio, foto) antes de
+// decidir -- se pide ya mismo, en paralelo con la animacion, para que este
+// lista cuando termine (initMatch la espera antes de navegar a la
+// pantalla nueva).
+async function cargarPresentacionMatch(matchId){
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/matches?presentacionMatchId='+encodeURIComponent(matchId),{headers:{'Authorization':'Bearer '+accessToken}});
+    });
+    if(!res.ok)return;
+    var data=await res.json();
+    document.getElementById('presentacionNombre').textContent=data.nombre?(data.nombre+(data.edad?', '+data.edad:'')):'Alguien especial';
+    document.getElementById('presentacionBio').textContent=data.bio||'Soul todavía está conociendo a esta persona.';
+    if(data.foto){
+      var img=document.getElementById('presentacionFoto');
+      img.src=data.foto;
+      img.style.display='block';
+    }
+  }catch(e){}
+}
+
 function initMatch(){
-  // Match persistido (activado por admin o sistema): pide decisión antes de
-  // seguir. Match recién calculado en la misma sesión (todavía no pasó por
-  // activación): sigue directo a preparación, como siempre.
+  // Match persistido (activado por admin o sistema): pide decisión, con una
+  // introducción humana de quién es la otra persona primero. Match recién
+  // calculado en la misma sesión (todavía no pasó por activación): sigue
+  // directo a preparación, como siempre.
   document.getElementById('matchDecisionMsg').style.display='none';
-  if(window.matchEsPersistido){
-    document.getElementById('btnPrepararEncuentro').style.display='none';
-    document.getElementById('matchDecisionBtns').style.display='flex';
-  }else{
-    document.getElementById('btnPrepararEncuentro').style.display='block';
-    document.getElementById('matchDecisionBtns').style.display='none';
+  var esPersistido=window.matchEsPersistido;
+  document.getElementById('btnPrepararEncuentro').style.display=esPersistido?'none':'block';
+  var presentacionLista=null;
+  if(esPersistido&&window.matchData&&window.matchData.id){
+    document.getElementById('presentacionFoto').style.display='none';
+    document.getElementById('presentacionNombre').textContent='—';
+    document.getElementById('presentacionBio').textContent='Conociendo un poco más...';
+    presentacionLista=cargarPresentacionMatch(window.matchData.id);
   }
   var c=document.getElementById('matchCanvas');
   var ctx=c.getContext('2d');
@@ -3120,6 +3207,14 @@ function initMatch(){
       var gg=ctx.createRadialGradient(100,100,0,100,100,24);
       gg.addColorStop(0,'rgba(201,168,76,0.3)');gg.addColorStop(1,'rgba(201,168,76,0)');
       ctx.fillStyle=gg;ctx.fill();
+      if(esPersistido){
+        // Espera a que la presentacion ya este cargada (pedida en paralelo
+        // desde el principio, asi normalmente ya esta lista) antes de
+        // navegar -- recien ahi se pregunta si quiere avanzar.
+        Promise.resolve(presentacionLista).then(function(){
+          setTimeout(function(){ ir('PresentacionMatch'); },400);
+        });
+      }
     }
   },16);
 }
@@ -3339,37 +3434,25 @@ function elegir(si){
   }
   document.getElementById('eleccionFinal').style.display='block';
 
-  if(window.matchData&&window.matchData.id){
+  var matchId=window.matchData&&window.matchData.id;
+  if(matchId){
     // Antes iba por guardarTabla genérico, que solo autoriza escrituras de
     // usuario_a -- si esta persona era usuario_b del match, se perdía en
     // silencio. Pasa por el endpoint dedicado, que autoriza cualquiera de
     // los dos lados.
     fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'elegirDebriefing',matchId:window.matchData.id,eleccion:si?'aceptado':'rechazado'})});
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'elegirDebriefing',matchId:matchId,eleccion:si?'aceptado':'rechazado'})});
     }).catch(function(){});
   }
-  document.getElementById('checkinEmocional').style.display='block';
-}
-
-function guardarCheckinEmocional(valor){
-  document.querySelectorAll('#checkinEmocional .chip').forEach(function(c){c.style.pointerEvents='none';c.style.opacity='.5'});
-  document.getElementById('checkinGracias').style.display='block';
-  // Antes esto era un callejon sin salida -- agradecia y no quedaba ningun
-  // boton ni forma de seguir, la persona quedaba varada en esta pantalla.
-  document.getElementById('btnSalirDebriefing').style.display='block';
-  if(window.matchData&&window.matchData.id){
-    fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'checkinEmocional',matchId:window.matchData.id,valor:valor})});
-    }).catch(function(){});
+  // Antes acá se mostraban 4 chips de checkin y un botón "Continuar" que
+  // llevaba de vuelta al chat -- un callejón sin salida sin conexión real
+  // con lo que acababa de pasar. Ahora, tras un instante para que se lea el
+  // mensaje, entra directo a la conversación de debriefing con Soul (misma
+  // conversación que "Hablar con Soul sobre esto"), que arranca sola con una
+  // devolución basada en la cita real.
+  if(matchId){
+    setTimeout(function(){ abrirReflexionDesdeM(matchId); },2200);
   }
-}
-
-function salirDeDebriefing(){
-  // Antes esto llevaba a la eleccion de sesion (Hablar con Soul / Analizar)
-  // -- despues de elegir "quiero seguir construyendo" o "necesito pensarlo
-  // mas", volver a preguntar "que queres hacer" se sentia como si el
-  // debriefing no hubiera pasado a ningun lado. Va directo al chat con Soul.
-  ir(4);
 }
 </script>
 
