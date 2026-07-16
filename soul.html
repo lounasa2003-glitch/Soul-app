@@ -2791,7 +2791,7 @@ async function enviarAlChat(txt){
     // mensaje de golpe). El primer pedazo que llega saca los puntitos y crea
     // la burbuja; despues solo se actualiza su texto.
     var soulEl=null;
-    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory},function(parcial){
+    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory,rapido:true},function(parcial){
       if(!soulEl){hideTyping();soulEl=addMsg('soul',parcial);}
       else{soulEl.textContent=parcial;scrollAlFondo('chatArea');}
     });

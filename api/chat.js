@@ -4,6 +4,13 @@ import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 
 const MODELO_FIJO = 'claude-sonnet-4-6';
+// Probando este modelo mas chico/rapido solo para la charla informal
+// ("Hablar con Soul", enviarAlChat en soul.html) -- modulos, espejo y la
+// reflexion post-cita siguen con Sonnet, que es donde mas importa la
+// sutileza. El cliente pide esto explicitamente con "rapido:true" en el
+// body -- ningun otro llamado a /api/chat manda ese flag, asi que nada mas
+// se ve afectado.
+const MODELO_RAPIDO = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS_TOPE = 1500;
 const LIMITE_CHAT = 30;
 const VENTANA_CHAT_SEGUNDOS = 300;
@@ -84,7 +91,7 @@ export default async function handler(req, res) {
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: MODELO_FIJO,
+          model: req.body.rapido ? MODELO_RAPIDO : MODELO_FIJO,
           max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
           system: systemConCache(system),
           messages,
