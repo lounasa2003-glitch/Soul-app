@@ -333,8 +333,8 @@ var ESTADO_LEGIBLE={
   mutuamente_aceptado:'Match mutuo ✓',
   no_avanza:'No avanzó',
   cerrado:'Cerrado',
-  aceptado:'Aceptado (post-cita)',
-  rechazado:'Rechazado (post-cita)'
+  aceptado:'Siguieron construyendo (post-cita)',
+  rechazado:'No continuó (post-cita)'
 };
 
 var CITA_ESTADO_LEGIBLE_ADMIN={
@@ -437,7 +437,7 @@ function renderHojaDeVida(data){
   // resueltos, y al final los candidatos que salieron del ranking pero
   // todavía nadie activó.
   function eleccionLegible(v){
-    return v==='acepta'?'Aceptó':v==='rechaza'?'Rechazó':'Todavía no decidió';
+    return v==='acepta'?'Aceptó':v==='rechaza'?'Decidió no avanzar':'Todavía no decidió';
   }
   var TIER_BADGE={
     1:{txt:'★ Debriefing pendiente',bg:'linear-gradient(135deg,#8a6e2f,#c9a84c)',color:'#07050a'},
@@ -476,9 +476,18 @@ function renderHojaDeVida(data){
     var refinamientoPropio=m.usuario_a===data.usuario.id?m.refinamiento_a:m.refinamiento_b;
     if(refinamientoPropio){
       html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Debriefing -- lo que compartió '+esc(data.usuario.nombre||'esta persona')+'</p>';
-      html+=campoHtml('Qué le gustó',refinamientoPropio.que_le_gusto);
-      html+=campoHtml('Qué no encajó',refinamientoPropio.que_no_encajo);
-      html+=campoHtml('Qué aprendió que busca',refinamientoPropio.que_aprendio);
+      html+=campoHtml('Cómo se sintió / resumen',refinamientoPropio.resumen_experiencia);
+      html+=campoHtml('Qué disfrutó',refinamientoPropio.que_disfruto);
+      html+=campoHtml('Momento de desconexión',refinamientoPropio.momento_desconexion);
+      html+=campoHtml('Emoción durante la cita',refinamientoPropio.emocion_durante);
+      html+=campoHtml('Emoción al recordarla',refinamientoPropio.emocion_al_recordar);
+      html+=campoHtml('Qué descubrió sobre sí misma',refinamientoPropio.aprendizaje_sobre_si);
+      html+=campoHtml('Qué descubrió sobre el vínculo que busca',refinamientoPropio.aprendizaje_sobre_vinculo);
+      html+=campoHtml('Qué haría igual / diferente',refinamientoPropio.intencion_futura);
+      html+=campoHtml('¿Quiere volver a hablar con esta persona?',refinamientoPropio.quiere_volver_a_verla===true?'Sí':refinamientoPropio.quiere_volver_a_verla===false?'No':null);
+      html+=campoHtml('Compatibilidad percibida (1-10)',refinamientoPropio.compatibilidad_percibida);
+      if(refinamientoPropio.aspectos_valorados&&refinamientoPropio.aspectos_valorados.length)html+=campoHtml('Aspectos que valoró',refinamientoPropio.aspectos_valorados);
+      html+=campoHtml('Qué sintió que faltó',refinamientoPropio.que_falto);
       if(refinamientoPropio.creencia_limitante){
         html+=campoHtml('Posible creencia limitante',refinamientoPropio.creencia_limitante);
         html+=campoHtml('Módulo sugerido',refinamientoPropio.modulo_sugerido||'ninguno con claridad suficiente');

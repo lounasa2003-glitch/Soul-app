@@ -465,42 +465,52 @@ A diferencia de un perfil auto-reportado, esto es evidencia real de cómo cada p
 
 MUY IMPORTANTE -- NO INVENTES: una sola cita casi nunca da para llenar todo. Si un campo no tiene información real y observable en esta charla puntual, su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
 
-const DEVOLUCION_DEBRIEFING_PROMPT = `Sos Soul. Acaba de terminar una cita virtual entre dos personas que hicieron match, y le estás hablando en privado a una de ellas -- esta charla nunca la ve la otra persona. Es el primer mensaje de esta conversación: arrancá vos con una devolución, no esperes a que hable primero.
+// Mensaje de apertura del debriefing -- ya NO es una devolucion inmediata
+// (eso ahora pasa solo al final, ver CIERRE_REFLEXION_PROMPT). Arranca la
+// secuencia guiada de preguntas: registro de la experiencia (categoria 1).
+// Todo el debriefing esta pensado para durar 3-5 minutos en total, no un
+// analisis exhaustivo -- por eso arranca directo con la pregunta, sin
+// vueltas.
+function debriefingAperturaPrompt(otraPersonaNombre) {
+  return `Sos Soul. Acaba de terminar una cita virtual entre dos personas que hicieron match, y le hablás en privado a una de ellas -- esta charla nunca la ve la otra persona. Es un espacio breve de reflexión (3 a 5 minutos en total, no un análisis exhaustivo) para ayudarla a poner en palabras cómo fue el encuentro con ${otraPersonaNombre || 'la otra persona'}.
 
-Tu devolución tiene que:
-- Nombrar con delicadeza cómo puede haber sido el encuentro para ella, dejando lugar a que corrija si no es así.
-- Compartir qué te pareció notar como fortaleza -- de ella, de la otra persona, o del vínculo que se está armando entre las dos -- basado en las señales reales que se ven en la charla (no en lo que cada quien reportó de sí mismo antes de conocerse).
-- Compartir algo que te pareció que podría trabajarse o cuidarse.
-- Preguntarle, al final, si se siente identificada con esa lectura -- la última palabra siempre es de ella.
+Es el primer mensaje: arrancá vos, con calidez y curiosidad genuina, preguntando cómo se siente después del encuentro y, en el mismo mensaje, si tuviera que describir la cita con tres palabras, cuáles elegiría. Un solo mensaje corto, sin markdown, sin listas, nunca como un formulario.`;
+}
 
-Regla central, no negociable: nunca presentes esto como diagnóstico ni como verdad -- siempre en tono interpretativo y tentativo ("me pareció notar que...", "tal vez...", "se sintió como si..."). Nunca "sos así" ni "esto fue lo que pasó". Si la evidencia real es escasa (charla corta, poco material), decilo con naturalidad y quedate con lo poco que sí viste, en vez de generalizar.
-
-Más adelante en esta misma conversación (no necesariamente en este primer mensaje) te va a interesar explorar con ella qué le gustó de esta persona, qué sintió que no encajaba, y qué aprendió sobre lo que está buscando -- pero no lo preguntes todo de una, dejá que la charla fluya de a poco.
-
-Si en algún momento se asoma una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino, ej. "si me muestro así me van a lastimar", "siempre termino siendo quien más pone"), no la nombres como diagnóstico -- reflejala con delicadeza, como una pregunta abierta, dejando que ella misma la reconozca o la corrija.
-
-Mensajes cortos, cálidos, sin markdown, sin listas, nunca como un formulario.`;
+// Guía completa de la secuencia para el resto de la conversación (ver
+// buildReflexionPrompt en soul.html) -- documentada acá para que quede
+// junto al resto de los prompts de debriefing aunque el texto real que se
+// arma vive del lado del cliente.
 
 // Cierre de la conversacion de debriefing -- se dispara al llegar al tope de
 // mensajes (ver TOPE_MENSAJES_REFLEXION en soul.html) para que esto no siga
-// para siempre gastando tokens. Hace dos cosas en una sola llamada: extrae
-// lo que se pudo juntar de las preguntas de afinado (para mejorar matching a
-// futuro) y una posible creencia limitante propia -- si encaja con alguno de
-// los modulos ya existentes, lo sugiere de forma natural en el mensaje de
-// cierre (nunca como obligacion). Todo lo que no se toco de forma real y
-// concreta en la charla queda en null, nunca inventado.
-const CIERRE_REFLEXION_PROMPT = `Sos Soul. Esta conversación privada de debriefing sobre una cita real llegó a su límite de tiempo. Tu tarea ahora es doble:
+// para siempre gastando tokens. Una sola llamada que hace dos cosas: extrae
+// lo que se pudo juntar de las 7 categorias de la guia (para mejorar
+// matching a futuro y detectar una posible creencia limitante) y escribe
+// UNA sola reflexion breve de cierre -- nunca un analisis exhaustivo. Todo
+// lo que no se toco de forma real y concreta en la charla queda en null,
+// nunca inventado.
+const CIERRE_REFLEXION_PROMPT = `Sos Soul. Esta conversación privada de debriefing sobre una cita real llegó a su cierre. Tu tarea es doble:
 
-1. Leé toda la conversación y extraé, SOLO si se tocó de forma real y concreta (si no, dejalo en null -- nunca inventes ni fuerces una lectura):
-- que_le_gusto: qué dijo que le gustó de esta persona.
-- que_no_encajo: qué sintió que no encajaba o le costó.
-- que_aprendio: qué aprendió sobre lo que está buscando en un vínculo, a partir de esta experiencia puntual.
-- creencia_limitante: si en algún momento se asomó una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino), describila en una frase corta y neutra. Si no apareció nada así de concreto, null.
-- modulo_sugerido: SOLO si hay una creencia_limitante clara y encaja con uno de estos cuatro, el nombre EXACTO (nunca inventes otro nombre ni otro texto): "Apertura al compromiso" (tensión entre libertad y compromiso), "Autonomía emocional" (depender del vínculo para el propio bienestar), "Poder personal" (verse como receptor pasivo de lo que pasa en los vínculos, no como parte activa), "Coherencia interna" (distancia entre lo que dice que valora y cómo actúa). Si no hay creencia limitante clara o no calza con ninguno, null.
+1. Leé toda la conversación y extraé, SOLO si se tocó de forma real y concreta (si no, dejalo en null o en el valor vacío que corresponda -- nunca inventes ni fuerces una lectura):
+- resumen_experiencia: cómo dijo que se sintió después del encuentro, y las tres palabras que usó para describirlo (si las dio).
+- que_disfruto: qué momentos disfrutó más, o en qué sintió mayor conexión.
+- momento_desconexion: si hubo algún momento de desconexión, cuál.
+- emocion_durante: qué emoción predominó durante la cita.
+- emocion_al_recordar: qué emoción aparece ahora al recordarla.
+- aprendizaje_sobre_si: qué descubrió sobre sí misma en esta cita.
+- aprendizaje_sobre_vinculo: qué descubrió sobre el tipo de vínculo que quiere construir.
+- creencia_limitante: si se asomó una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino), describila en una frase corta y neutra. Si no, null.
+- modulo_sugerido: SOLO si hay creencia_limitante clara y encaja con uno de estos cuatro, el nombre EXACTO (nunca inventes otro nombre ni otro texto): "Apertura al compromiso" (tensión entre libertad y compromiso), "Autonomía emocional" (depender del vínculo para el propio bienestar), "Poder personal" (verse como receptor pasivo de lo que pasa en los vínculos), "Coherencia interna" (distancia entre lo que dice que valora y cómo actúa). Si no, null.
+- intencion_futura: qué haría igual y qué elegiría hacer diferente en una próxima cita.
+- quiere_volver_a_verla: true si dijo que le gustaría volver a hablar con esta persona, false si dijo que no, null si no quedó claro o no se llegó a preguntar.
+- compatibilidad_percibida: el número del 1 al 10 que dio, o null si no lo dio.
+- aspectos_valorados: array con los aspectos que nombró que valoró más (ej. ["escucha","humor"]), o array vacío si no se llegó a esa parte.
+- que_falto: qué sintió que faltó, o null.
 
-2. Escribí un mensaje de cierre cálido (2-4 frases), agradeciendo haber pensado esto juntos. Si hay modulo_sugerido, mencioná la invitación a retomar ese trabajo de forma natural y sin presión, en tono interpretativo ("me pareció que podría servirte pensar un poco más..."), sin decir la palabra "módulo" ni sonar clínico o a diagnóstico.
+2. Escribí UNA sola reflexión breve de cierre (2-3 frases, nunca una lista ni un análisis exhaustivo -- una sola devolución bien elegida genera más impacto que diez observaciones). Ejemplo de tono correcto: "Hoy apareció una búsqueda genuina de conexión, pero también la necesidad de confirmar rápidamente si la otra persona era 'la indicada'. Tal vez en el próximo encuentro puedas explorar la curiosidad antes que la conclusión." Siempre interpretativo y tentativo ("me pareció que...", "tal vez..."), nunca "sos así" ni una verdad. Si hay modulo_sugerido, podés tejer la invitación a seguir explorando eso ahí mismo, de forma natural y sin presión, sin decir la palabra "módulo" ni sonar clínico. Si la conversación fue corta y hay poco material real, quedate con lo poco que sí apareció en vez de generalizar.
 
-Respondé ÚNICAMENTE con JSON válido sin backticks: {"que_le_gusto":null,"que_no_encajo":null,"que_aprendio":null,"creencia_limitante":null,"modulo_sugerido":null,"mensaje_cierre":""}`;
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"resumen_experiencia":null,"que_disfruto":null,"momento_desconexion":null,"emocion_durante":null,"emocion_al_recordar":null,"aprendizaje_sobre_si":null,"aprendizaje_sobre_vinculo":null,"creencia_limitante":null,"modulo_sugerido":null,"intencion_futura":null,"quiere_volver_a_verla":null,"compatibilidad_percibida":null,"aspectos_valorados":[],"que_falto":null,"mensaje_cierre":""}`;
 
 async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioId, historial) {
   await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
@@ -510,66 +520,67 @@ async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioI
   });
 }
 
-// Primera vez que esta persona abre el debriefing de este match: en vez de
-// un saludo generico, Soul arranca con una devolucion real basada en la
-// cita. Si hace falta, primero extrae las señales de vinculo reales desde
-// los cita_mensajes (una sola vez por match, cacheadas en
-// matches.insights_debriefing_a/b) y despues genera la devolucion
-// personalizada para el lado que esta pidiendo. Cualquier fallo acá cae en
-// un array vacio -- el cliente ya tiene su propio saludo generico de
-// respaldo si el historial llega vacío.
-async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
-  try {
-    let insightsPropio = soyA ? match.insights_debriefing_a : match.insights_debriefing_b;
-
-    if (!insightsPropio) {
+// Extrae las señales reales de vinculo desde los cita_mensajes (una sola
+// vez por match, cacheadas en matches.insights_debriefing_a/b) -- sigue
+// alimentando el algoritmo de compatibilidad con evidencia real de como se
+// vincula cada persona en la practica, aparte de lo que se recolecta en la
+// conversacion guiada del debriefing. Se dispara "fire and forget" (no
+// bloquea el primer mensaje del debriefing, que ahora es una pregunta fija
+// y no depende de esto) y cualquier fallo queda solo logueado.
+function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId) {
+  if (match.insights_debriefing_a || match.insights_debriefing_b) return;
+  (async () => {
+    try {
       const citaRes = await fetch(
         `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
         { headers }
       );
       const citasCerradas = citaRes.ok ? await citaRes.json() : [];
       const citaCerrada = citasCerradas[0];
+      if (!citaCerrada) return;
 
-      let transcripto = '';
-      if (citaCerrada) {
-        const msgsRes = await fetch(
-          `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
-          { headers }
-        );
-        const msgs = msgsRes.ok ? await msgsRes.json() : [];
-        transcripto = msgs.map(m => {
-          const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
-          return quien + ': ' + m.contenido;
-        }).join('\n');
-      }
+      const msgsRes = await fetch(
+        `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
+        { headers }
+      );
+      const msgs = msgsRes.ok ? await msgsRes.json() : [];
+      const transcripto = msgs.map(m => {
+        const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
+        return quien + ': ' + m.contenido;
+      }).join('\n');
+      if (!transcripto) return;
 
-      if (transcripto) {
-        const { json } = await llamarClaudeJSON({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 1200,
-          system: EXTRACT_PROMPT_CITA,
-          messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
-        });
-        await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
-          method: 'PATCH',
-          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
-        });
-        insightsPropio = soyA ? json.a : json.b;
-      }
+      const { json } = await llamarClaudeJSON({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1200,
+        system: EXTRACT_PROMPT_CITA,
+        messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
+      });
+      await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
+      });
+    } catch (e) {
+      console.error('Error extrayendo insights de la cita en segundo plano:', e);
     }
+  })();
+}
 
-    const insumo = {
-      otraPersonaNombre,
-      senalesRealesDeLaCita: insightsPropio || null,
-      fortalezasDetectadasEnLosPerfiles: match.fortalezas || null,
-      desafioDetectadoEnLosPerfiles: match.desafio || null
-    };
+// Primera vez que esta persona abre el debriefing de este match: Soul
+// arranca con la primera pregunta de la secuencia guiada (registro de la
+// experiencia), no con una devolucion -- la devolucion (una sola reflexion
+// breve) ahora pasa recien al cierre, ver cerrarReflexion(). Cualquier
+// fallo acá cae en un array vacio -- el cliente ya tiene su propio saludo
+// generico de respaldo si el historial llega vacío.
+async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
+  extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId);
+  try {
     const data = await llamarClaude({
       model: 'claude-sonnet-4-6',
-      max_tokens: 500,
-      system: DEVOLUCION_DEBRIEFING_PROMPT,
-      messages: [{ role: 'user', content: 'Insumo interno (no mostrar en crudo): ' + JSON.stringify(insumo) }]
+      max_tokens: 200,
+      system: debriefingAperturaPrompt(otraPersonaNombre),
+      messages: [{ role: 'user', content: 'Arrancá la conversación.' }]
     });
     const texto = (data.content || []).map(b => b.text || '').join('').trim();
     if (!texto) return [];
@@ -578,7 +589,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ma
     await guardarHistorialReflexion(supabaseUrl, headers, matchId, usuario.usuarioId, historialNuevo);
     return historialNuevo;
   } catch (e) {
-    console.error('Error generando devolución de debriefing:', e);
+    console.error('Error generando apertura de debriefing:', e);
     return [];
   }
 }
@@ -649,11 +660,16 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
 
   const MODULOS_VALIDOS = ['Apertura al compromiso', 'Autonomía emocional', 'Poder personal', 'Coherencia interna'];
   const transcripto = historial.map(m => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
-  let resultado = { que_le_gusto: null, que_no_encajo: null, que_aprendio: null, creencia_limitante: null, modulo_sugerido: null, mensaje_cierre: null };
+  let resultado = {
+    resumen_experiencia: null, que_disfruto: null, momento_desconexion: null, emocion_durante: null, emocion_al_recordar: null,
+    aprendizaje_sobre_si: null, aprendizaje_sobre_vinculo: null, creencia_limitante: null, modulo_sugerido: null,
+    intencion_futura: null, quiere_volver_a_verla: null, compatibilidad_percibida: null, aspectos_valorados: [], que_falto: null,
+    mensaje_cierre: null
+  };
   try {
     const { json } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
-      max_tokens: 500,
+      max_tokens: 700,
       system: CIERRE_REFLEXION_PROMPT,
       messages: [{ role: 'user', content: transcripto }]
     });
@@ -666,11 +682,20 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const mensajeCierre = resultado.mensaje_cierre || 'Gracias por pensar esto conmigo. Quedo cerca para cuando quieras seguir hablando de esto.';
 
   const refinamiento = {
-    que_le_gusto: resultado.que_le_gusto || null,
-    que_no_encajo: resultado.que_no_encajo || null,
-    que_aprendio: resultado.que_aprendio || null,
+    resumen_experiencia: resultado.resumen_experiencia || null,
+    que_disfruto: resultado.que_disfruto || null,
+    momento_desconexion: resultado.momento_desconexion || null,
+    emocion_durante: resultado.emocion_durante || null,
+    emocion_al_recordar: resultado.emocion_al_recordar || null,
+    aprendizaje_sobre_si: resultado.aprendizaje_sobre_si || null,
+    aprendizaje_sobre_vinculo: resultado.aprendizaje_sobre_vinculo || null,
     creencia_limitante: resultado.creencia_limitante || null,
-    modulo_sugerido: resultado.modulo_sugerido || null
+    modulo_sugerido: resultado.modulo_sugerido || null,
+    intencion_futura: resultado.intencion_futura || null,
+    quiere_volver_a_verla: typeof resultado.quiere_volver_a_verla === 'boolean' ? resultado.quiere_volver_a_verla : null,
+    compatibilidad_percibida: typeof resultado.compatibilidad_percibida === 'number' ? resultado.compatibilidad_percibida : null,
+    aspectos_valorados: Array.isArray(resultado.aspectos_valorados) ? resultado.aspectos_valorados : [],
+    que_falto: resultado.que_falto || null
   };
   await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
     method: 'PATCH',
