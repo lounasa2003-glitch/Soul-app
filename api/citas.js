@@ -9,9 +9,6 @@ import { EXTRACT_PROMPT } from './analisisExterno.js';
 // leer/escribir sobre un recurso compartido entre los dos, y el /api/leer
 // o /api/guardar genericos solo autorizan por una columna fija.
 
-const BUCKET_AUDIO = 'cita-audio';
-const EXPIRACION_URL_FIRMADA = 3600; // 1h, de sobra para una sesion de cita
-
 // Si el destinatario polleo la cita hace menos de esto, esta mirando la
 // pantalla ahora mismo -- no hace falta mandarle un mail. Si no, se le avisa
 // pero como maximo una vez por este margen (evita mandar un mail por cada
@@ -20,17 +17,6 @@ const ACTIVO_MS = 2 * 60 * 1000;
 const COOLDOWN_EMAIL_MS = 20 * 60 * 1000;
 
 const PROMPT_BASE = `Sos Soul, presente en la cita virtual entre dos personas que hicieron match. Tu rol acá es de directora invisible: interviniste solo cuando hace falta, en mensajes cortos, cálidos, sin markdown ni listas, nunca como un bot de soporte. Nunca revelás que alguien te pidió algo -- lo que decís tiene que sonar como si fuera tu propia ocurrencia, participando naturalmente del momento.`;
-
-async function firmarUrlLectura(supabaseUrl, headers, path) {
-  const res = await fetch(`${supabaseUrl}/storage/v1/object/sign/${BUCKET_AUDIO}/${path}`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expiresIn: EXPIRACION_URL_FIRMADA })
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.signedURL ? `${supabaseUrl}/storage/v1${data.signedURL}` : null;
-}
 
 async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuarioId) {
   const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(citaId)}`, { headers });
@@ -103,15 +89,7 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
   );
   const mensajes = mensajesRes.ok ? await mensajesRes.json() : [];
 
-  const mensajesConUrl = await Promise.all(mensajes.map(async (m) => {
-    if (m.tipo === 'audio' && m.contenido) {
-      const url = await firmarUrlLectura(supabaseUrl, headers, m.contenido);
-      return { ...m, audioUrl: url };
-    }
-    return m;
-  }));
-
-  return res.status(200).json({ cita: auth.cita, soyA: auth.soyA, mensajes: mensajesConUrl });
+  return res.status(200).json({ cita: auth.cita, soyA: auth.soyA, mensajes });
 }
 
 async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, remitenteId) {
@@ -145,9 +123,28 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   });
 }
 
+// Consentimiento explícito para que Soul pueda analizar la conversación de
+// la cita -- se pregunta una sola vez por persona, al entrar a un encuentro
+// nuevo. Si no contesta antes de que la cita cierre, cuenta como "no": el
+// default es siempre no-analizar, nunca al revés.
+async function consentirAnalisis(req, res, supabaseUrl, headers, usuario) {
+  const { citaId, consiente } = req.body;
+  if (!citaId || typeof consiente !== 'boolean') return res.status(400).json({ error: 'Faltan datos' });
+  const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
+  if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
+
+  const campoPropio = auth.soyA ? 'consiente_analisis_a' : 'consiente_analisis_b';
+  await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ [campoPropio]: consiente })
+  });
+  return res.status(200).json({ ok: true });
+}
+
 async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   const { citaId, tipo, contenido } = req.body;
-  if (!citaId || (tipo !== 'texto' && tipo !== 'audio') || !contenido) {
+  if (!citaId || tipo !== 'texto' || !contenido) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
   const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
@@ -190,26 +187,6 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   }
 
   return res.status(200).json({ ok: true });
-}
-
-async function audioUploadUrl(req, res, supabaseUrl, headers, usuario) {
-  const { citaId } = req.body;
-  if (!citaId) return res.status(400).json({ error: 'Falta citaId' });
-  const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
-  if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
-
-  const path = `${citaId}/${usuario.usuarioId}-${Date.now()}.webm`;
-  const signRes = await fetch(`${supabaseUrl}/storage/v1/object/upload/sign/${BUCKET_AUDIO}/${encodeURIComponent(path)}`, {
-    method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
-  });
-  if (!signRes.ok) {
-    console.error('Error firmando subida de audio:', signRes.status, await signRes.text());
-    return res.status(500).json({ error: 'No se pudo preparar la subida de audio' });
-  }
-  const data = await signRes.json();
-  return res.status(200).json({ uploadUrl: `${supabaseUrl}/storage/v1${data.url}`, path });
 }
 
 function promptGenerarTema(refsA, refsB, transcripto) {
@@ -342,6 +319,14 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ [campoPropio]: respuesta, estado: 'cerrada' })
     });
+    // Mensaje compartido de cierre -- lo ven las dos personas en la cita
+    // misma, marcando que el encuentro en vivo terminó (distinto del
+    // debriefing privado que viene después, uno por persona).
+    await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ cita_id: citaId, usuario_id: null, tipo: 'texto', contenido: 'Gracias por encontrarse. No hace falta decidir el resto de la historia hoy. Solo pregúntense si les gustaría volver a conversar.' })
+    }).catch(() => {});
     await generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, auth.match);
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(auth.match.usuario_a)}`, {
@@ -815,7 +800,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { accion } = req.body;
       if (accion === 'mensaje') return await enviarMensaje(req, res, supabaseUrl, headers, usuario);
-      if (accion === 'audioUploadUrl') return await audioUploadUrl(req, res, supabaseUrl, headers, usuario);
+      if (accion === 'consentirAnalisis') return await consentirAnalisis(req, res, supabaseUrl, headers, usuario);
       if (accion === 'ayudaPrivada') return await pedirAyuda(req, res, supabaseUrl, headers, usuario);
       if (accion === 'responderCierre') return await responderCierre(req, res, supabaseUrl, headers, usuario);
       if (accion === 'elegirDebriefing') return await elegirDebriefing(req, res, supabaseUrl, headers, usuario);

@@ -195,11 +195,28 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
   // aplicamos para 'match': no depende de que ninguna de las dos vuelva a
   // loguearse para que el panel y el chequeo de login reflejen esto.
   if (estadoResultante === 'mutuamente_aceptado') {
-    await fetch(`${supabaseUrl}/rest/v1/citas`, {
-      method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ match_id: matchId })
-    }).catch(() => {});
+    try {
+      const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({ match_id: matchId })
+      });
+      const citas = citaRes.ok ? await citaRes.json() : [];
+      const citaCreada = citas[0];
+      // Primer mensaje de la sala -- encuadra el momento antes de que
+      // cualquiera de las dos personas escriba algo. Mismo texto que se usa
+      // al abrir cada encuentro nuevo dentro de la Sala de Encuentros (ver
+      // decidirSalaEncuentros en api/citas.js).
+      if (citaCreada) {
+        await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ cita_id: citaCreada.id, usuario_id: null, tipo: 'texto', contenido: 'No busquen impresionar. Intenten descubrir si disfrutan conversar.' })
+        });
+      }
+    } catch (e) {
+      console.error('Error creando la cita o su mensaje de apertura:', e);
+    }
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {
         method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },

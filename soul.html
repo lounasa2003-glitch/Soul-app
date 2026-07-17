@@ -850,9 +850,18 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar la cita</div>
       </div>
     </div>
+    <div id="consentimientoCita" style="display:none;padding:.8rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(201,168,76,.08)">
+      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#d8cdd2;line-height:1.6;margin-bottom:.6rem">Al finalizar la cita, Soul puede analizar la conversación para ayudarte a conocerte mejor y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
+      <div style="display:flex;gap:.6rem">
+        <button onclick="responderConsentimientoCita(true)" style="padding:.5rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.72rem;font-weight:600;cursor:pointer">Sí, acepto</button>
+        <button onclick="responderConsentimientoCita(false)" style="padding:.5rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Prefiero que no</button>
+      </div>
+    </div>
     <div class="cita-area" id="citaArea"></div>
+    <div id="citaSugerenciaProfundizar" style="display:none;padding:.5rem 1.2rem;text-align:center">
+      <span onclick="usarSugerenciaProfundizar()" style="color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer;border:1px solid rgba(201,168,76,.4);border-radius:12px;padding:.4rem .9rem">¿Quieren una pregunta para profundizar?</span>
+    </div>
     <div class="cita-input-area">
-      <button class="send-btn" id="citaMicBtn" onclick="toggleGrabacionAudio()" style="background:none;border:1px solid rgba(201,168,76,.4)">🎙</button>
       <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en la cita...">
       <button class="send-btn" id="citaSendBtn" onclick="sendCita()">→</button>
     </div>
@@ -3330,17 +3339,48 @@ function esc(s){
 }
 var citaPollTimer=null;
 var citaUltimoCount=0;
-var citaGrabador=null,citaChunksAudio=[],citaGrabando=false,citaSegGrabando=0,citaTimerGrabacion=null;
+var citaTimerSugerencia=null;
+var citaSugerenciaMostrada=false;
+var citaConsentimientoRespondido=false;
+// 10 minutos reales en producción -- expuesto como variable (no una
+// constante inline) para poder pisarlo desde un test sin esperar de
+// verdad.
+var MS_SUGERENCIA_PROFUNDIZAR=10*60*1000;
 
 function initCita(){
   document.getElementById('citaIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendCita()});
   citaUltimoCount=0;
+  document.getElementById('consentimientoCita').style.display='none';
+  document.getElementById('citaSugerenciaProfundizar').style.display='none';
+  citaSugerenciaMostrada=false;
+  citaConsentimientoRespondido=false;
   cargarCita();
   if(citaPollTimer)clearInterval(citaPollTimer);
   // Antes cada 6s -- se sentia lento ver llegar lo que escribia la otra
   // persona. 2.5s sigue siendo liviano para el servidor con el volumen
   // actual del piloto, y se nota bastante mas instantaneo.
   citaPollTimer=setInterval(cargarCita,2500);
+  if(citaTimerSugerencia)clearTimeout(citaTimerSugerencia);
+  if(!window.citaModoRevisita){
+    citaTimerSugerencia=setTimeout(mostrarSugerenciaProfundizar,MS_SUGERENCIA_PROFUNDIZAR);
+  }
+}
+function mostrarSugerenciaProfundizar(){
+  if(citaSugerenciaMostrada)return;
+  citaSugerenciaMostrada=true;
+  var el=document.getElementById('citaSugerenciaProfundizar');
+  if(el)el.style.display='block';
+}
+function usarSugerenciaProfundizar(){
+  document.getElementById('citaSugerenciaProfundizar').style.display='none';
+  pedirAyudaPrivada('generar_tema');
+}
+function responderConsentimientoCita(valor){
+  citaConsentimientoRespondido=true;
+  document.getElementById('consentimientoCita').style.display='none';
+  fetchConSesion(function(){
+    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'consentirAnalisis',citaId:window.citaActualId,consiente:valor})});
+  }).catch(function(){});
 }
 
 async function cargarCita(){
@@ -3353,6 +3393,16 @@ async function cargarCita(){
     var data=await res.json();
     window.citaSoyA=data.soyA;
     renderCita(data.cita,data.mensajes);
+    // Consentimiento para el analisis posterior -- se pregunta una sola vez
+    // por persona, mientras la cita siga en curso (no tiene sentido
+    // preguntarlo revisitando una ya cerrada, ese analisis ya paso o no
+    // paso).
+    var miConsentimiento=window.citaSoyA?data.cita.consiente_analisis_a:data.cita.consiente_analisis_b;
+    if(miConsentimiento===null&&!citaConsentimientoRespondido&&data.cita.estado!=='cerrada'&&!window.citaModoRevisita){
+      document.getElementById('consentimientoCita').style.display='block';
+    }else{
+      document.getElementById('consentimientoCita').style.display='none';
+    }
     // Si vine desde "Mis citas" a revisitar una cita que ya estaba cerrada
     // de antes, NO hay que mandar a debriefing -- eso es solo para cuando
     // la cita se cierra recien ahora, en vivo. Sin este chequeo, con solo
@@ -3386,13 +3436,7 @@ function renderCita(cita,mensajes){
       var esMio=esMensajeMio(m);
       var div2=document.createElement('div');
       div2.className='cita-msg '+(esMio?'yo':'otro')+(esUltimoTramoNuevo?' nuevo':'');
-      if(m.tipo==='audio'&&m.audioUrl){
-        var audio=document.createElement('audio');
-        audio.controls=true;audio.src=m.audioUrl;audio.style.cssText='max-width:100%';
-        div2.appendChild(audio);
-      }else{
-        div2.textContent=m.contenido;
-      }
+      div2.textContent=m.contenido;
       area.appendChild(div2);
     }
   });
@@ -3452,69 +3496,6 @@ async function responderCierreCita(respuesta){
       return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'responderCierre',citaId:window.citaActualId,respuesta:respuesta})});
     });
   }catch(e){}
-  cargarCita();
-}
-
-// ── Grabación de audio ──
-async function toggleGrabacionAudio(){
-  if(citaGrabando){
-    citaGrabador.stop();
-    return;
-  }
-  try{
-    var stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    citaGrabador=new MediaRecorder(stream);
-    citaChunksAudio=[];
-    citaGrabador.ondataavailable=function(e){if(e.data.size>0)citaChunksAudio.push(e.data)};
-    citaGrabador.onstop=async function(){
-      stream.getTracks().forEach(function(t){t.stop()});
-      citaGrabando=false;
-      clearInterval(citaTimerGrabacion);
-      document.getElementById('citaMicBtn').textContent='🎙';
-      document.getElementById('citaMicBtn').style.color='';
-      var blob=new Blob(citaChunksAudio,{type:'audio/webm'});
-      await subirAudioCita(blob);
-    };
-    citaGrabador.start();
-    citaGrabando=true;
-    citaSegGrabando=0;
-    document.getElementById('citaMicBtn').style.color='#d98a9e';
-    document.getElementById('citaMicBtn').textContent='■';
-    citaTimerGrabacion=setInterval(function(){
-      citaSegGrabando++;
-      var m=Math.floor(citaSegGrabando/60),s=citaSegGrabando%60;
-      document.getElementById('citaMicBtn').textContent='■ '+(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
-    },1000);
-  }catch(e){
-    // Mensaje no bloqueante -- un alert() acá frena todo el JS de la
-    // pestaña hasta que alguien lo cierra, algo particularmente molesto en
-    // mobile si el permiso de micrófono quedó denegado.
-    mostrarAvisoCita('No pudimos acceder al micrófono. Revisá los permisos del navegador.');
-  }
-}
-
-function mostrarAvisoCita(texto){
-  var btn=document.getElementById('citaMicBtn');
-  var original=btn.textContent;
-  btn.title=texto;
-  btn.textContent='⚠';
-  setTimeout(function(){btn.textContent=original;},3000);
-}
-
-async function subirAudioCita(blob){
-  try{
-    var resUrl=await fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'audioUploadUrl',citaId:window.citaActualId})});
-    });
-    var dataUrl=await resUrl.json();
-    if(!resUrl.ok||!dataUrl.uploadUrl)throw new Error('sin_url_firmada');
-    await fetch(dataUrl.uploadUrl,{method:'PUT',headers:{'Content-Type':'audio/webm'},body:blob});
-    await fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'audio',contenido:dataUrl.path})});
-    });
-  }catch(e){
-    mostrarAvisoCita('No se pudo subir el audio. Probá de nuevo.');
-  }
   cargarCita();
 }
 
