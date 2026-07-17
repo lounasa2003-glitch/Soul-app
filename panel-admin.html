@@ -482,25 +482,16 @@ function renderHojaDeVida(data){
     // Lo que se recolecto en el debriefing conversacional -- por lado, solo
     // existe una vez que esa persona cerro su propia conversacion de
     // reflexion (ver cerrarReflexion en api/citas.js).
+    // Debriefing corto (Nivel 1) -- shape chico: resumen autoreportado +
+    // hasta 2 observaciones objetivas (solo si hubo consentimiento de las
+    // dos partes para analizar la cita, ver consiente_analisis_a/b).
     var refinamientoPropio=m.usuario_a===data.usuario.id?m.refinamiento_a:m.refinamiento_b;
     if(refinamientoPropio){
       html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Debriefing -- lo que compartió '+esc(data.usuario.nombre||'esta persona')+'</p>';
-      html+=campoHtml('Cómo se sintió / resumen',refinamientoPropio.resumen_experiencia);
-      html+=campoHtml('Qué disfrutó',refinamientoPropio.que_disfruto);
-      html+=campoHtml('Momento de desconexión',refinamientoPropio.momento_desconexion);
-      html+=campoHtml('Emoción durante la cita',refinamientoPropio.emocion_durante);
-      html+=campoHtml('Emoción al recordarla',refinamientoPropio.emocion_al_recordar);
-      html+=campoHtml('Qué descubrió sobre sí misma',refinamientoPropio.aprendizaje_sobre_si);
-      html+=campoHtml('Qué descubrió sobre el vínculo que busca',refinamientoPropio.aprendizaje_sobre_vinculo);
-      html+=campoHtml('Qué haría igual / diferente',refinamientoPropio.intencion_futura);
-      html+=campoHtml('¿Quiere volver a hablar con esta persona?',refinamientoPropio.quiere_volver_a_verla===true?'Sí':refinamientoPropio.quiere_volver_a_verla===false?'No':null);
-      html+=campoHtml('Compatibilidad percibida (1-10)',refinamientoPropio.compatibilidad_percibida);
-      if(refinamientoPropio.aspectos_valorados&&refinamientoPropio.aspectos_valorados.length)html+=campoHtml('Aspectos que valoró',refinamientoPropio.aspectos_valorados);
-      html+=campoHtml('Qué sintió que faltó',refinamientoPropio.que_falto);
-      if(refinamientoPropio.creencia_limitante){
-        html+=campoHtml('Posible creencia limitante',refinamientoPropio.creencia_limitante);
-        html+=campoHtml('Módulo sugerido',refinamientoPropio.modulo_sugerido||'ninguno con claridad suficiente');
-      }
+      html+=campoHtml('Cómo se sintió / resumen',refinamientoPropio.resumen_breve);
+      html+=campoHtml('Qué descubrió sobre sí misma',refinamientoPropio.aprendizaje);
+      html+=campoHtml('Fortaleza observada (IA, con consentimiento)',refinamientoPropio.fortaleza_observada);
+      html+=campoHtml('Algo para explorar (IA, con consentimiento)',refinamientoPropio.algo_para_explorar);
     }
     if(m.analisis_por_variable){
       var av=m.analisis_por_variable;

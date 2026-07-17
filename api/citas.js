@@ -438,18 +438,25 @@ async function checkinEmocional(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ ok: true });
 }
 
-const PERFIL_VINCULAR_SHAPE = '{"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}';
+// Shape de dinamica relacional -- reemplaza el viejo PERFIL_VINCULAR_SHAPE
+// (grupo1-4, prestado del analizador de conversaciones externas). El foco
+// ya no es QUE se dijo (temas, contenido) sino COMO se vincularon: balance
+// de la conversacion, si construyeron temas juntos o cada uno fue por su
+// lado, y patrones personales -- siempre como evidencia a reflejar, nunca
+// como diagnostico.
+const DINAMICA_RELACIONAL_SHAPE = '{"conversacion":{"balance_hablar_preguntar":null,"curiosidad_genuina":null,"profundidad":null,"fluidez":null},"vinculacion":{"construccion_conjunta_temas":null,"respondio_o_cambio_tema":null,"hubo_validacion_emocional":null,"interes_reciproco":null},"patrones_personales":{"necesidad_aprobacion":null,"tendencia_idealizar_rapido":null,"evitacion_temas_personales":null,"exceso_autopresentacion":null,"miedo_al_rechazo":null,"rigidez_expectativas":null}}';
 
-// Mismo shape que EXTRACT_PROMPT (analisis de conversacion externa), pero
-// aca la fuente es la transcripcion real de la cita virtual entre las dos
-// personas del match -- se extrae por separado para A y para B, porque es
-// una fuente de informacion distinta a lo auto-reportado en el perfil (como
-// se vincula en la practica, no como dice que se vincula).
-const EXTRACT_PROMPT_CITA = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Vas a leer la transcripción real de una cita virtual entre dos personas que hicieron match (marcadas como "A" y "B"; los mensajes de "Soul" son intervenciones de una IA anfitriona, no de ninguna de las dos personas -- no son fuente de perfil, pero te sirven para entender el contexto).
+// Esta extraccion SOLO se dispara si las dos personas dieron su
+// consentimiento explicito (ver consiente_analisis_a/b, Etapa 1) -- es la
+// fuente real detras de las 2 observaciones del debriefing (Nivel 1) y de
+// la acumulacion de patrones a lo largo del tiempo (Nivel 2).
+const DINAMICA_RELACIONAL_PROMPT = `Sos un sistema de análisis de dinámica vincular basado en coaching ontológico. Vas a leer la transcripción real de una cita virtual entre dos personas que hicieron match (marcadas como "A" y "B"; los mensajes de "Soul" son intervenciones de una IA anfitriona, no de ninguna de las dos personas -- no son fuente de perfil, pero te sirven para entender el contexto).
 
-A diferencia de un perfil auto-reportado, esto es evidencia real de cómo cada persona efectivamente se vincula en la práctica. Extraé, por separado para A y para B, un perfil con esta forma. Respondé ÚNICAMENTE con JSON válido sin backticks: {"a":${PERFIL_VINCULAR_SHAPE},"b":${PERFIL_VINCULAR_SHAPE}}
+El foco NO es qué temas hablaron -- es CÓMO se vincularon: la dinámica de la conversación, si construyeron algo juntos, y qué patrones personales de vincularse aparecieron (nunca como diagnóstico, solo como evidencia observable para reflejar después con delicadeza).
 
-MUY IMPORTANTE -- NO INVENTES: una sola cita casi nunca da para llenar todo. Si un campo no tiene información real y observable en esta charla puntual, su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
+Extraé, por separado para A y para B, un perfil con esta forma. Respondé ÚNICAMENTE con JSON válido sin backticks: {"a":${DINAMICA_RELACIONAL_SHAPE},"b":${DINAMICA_RELACIONAL_SHAPE}}
+
+MUY IMPORTANTE -- NO INVENTES: una sola cita casi nunca da para llenar todo. Si un campo no tiene evidencia real y observable en esta charla puntual, su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
 
 // Resumen objetivo de la cita en si (distinto del refinamiento del
 // debriefing, que es autopercepcion de cada persona, y de
@@ -502,52 +509,20 @@ async function generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, ma
   }
 }
 
-// Mensaje de apertura del debriefing -- ya NO es una devolucion inmediata
-// (eso ahora pasa solo al final, ver CIERRE_REFLEXION_PROMPT). Arranca la
-// secuencia guiada de preguntas: registro de la experiencia (categoria 1).
-// Todo el debriefing esta pensado para durar 3-5 minutos en total, no un
-// analisis exhaustivo -- por eso arranca directo con la pregunta, sin
-// vueltas.
+// Mensaje de apertura del debriefing corto (Nivel 1) -- primera de las 2
+// preguntas que se conservan (ver CIERRE_DEBRIEFING_CORTO_PROMPT para el
+// cierre, mas abajo, y buildReflexionPrompt en soul.html para la segunda
+// pregunta).
 function debriefingAperturaPrompt(otraPersonaNombre) {
-  return `Sos Soul. Acaba de terminar una cita virtual entre dos personas que hicieron match, y le hablás en privado a una de ellas -- esta charla nunca la ve la otra persona. Es un espacio breve de reflexión (3 a 5 minutos en total, no un análisis exhaustivo) para ayudarla a poner en palabras cómo fue el encuentro con ${otraPersonaNombre || 'la otra persona'}.
+  return `Sos Soul. Acaba de terminar una cita virtual entre dos personas que hicieron match, y le hablás en privado a una de ellas -- esta charla nunca la ve la otra persona. Es un chequeo brevísimo (no un análisis exhaustivo, no dura más que un par de mensajes) para pensar juntas cómo fue el encuentro con ${otraPersonaNombre || 'la otra persona'}.
 
 Es el primer mensaje: arrancá vos, con calidez y curiosidad genuina, preguntando cómo se siente después del encuentro y, en el mismo mensaje, si tuviera que describir la cita con tres palabras, cuáles elegiría. Un solo mensaje corto, sin markdown, sin listas, nunca como un formulario.`;
 }
 
-// Guía completa de la secuencia para el resto de la conversación (ver
-// buildReflexionPrompt en soul.html) -- documentada acá para que quede
-// junto al resto de los prompts de debriefing aunque el texto real que se
-// arma vive del lado del cliente.
-
-// Cierre de la conversacion de debriefing -- se dispara al llegar al tope de
-// mensajes (ver TOPE_MENSAJES_REFLEXION en soul.html) para que esto no siga
-// para siempre gastando tokens. Una sola llamada que hace dos cosas: extrae
-// lo que se pudo juntar de las 7 categorias de la guia (para mejorar
-// matching a futuro y detectar una posible creencia limitante) y escribe
-// UNA sola reflexion breve de cierre -- nunca un analisis exhaustivo. Todo
-// lo que no se toco de forma real y concreta en la charla queda en null,
-// nunca inventado.
-const CIERRE_REFLEXION_PROMPT = `Sos Soul. Esta conversación privada de debriefing sobre una cita real llegó a su cierre. Tu tarea es doble:
-
-1. Leé toda la conversación y extraé, SOLO si se tocó de forma real y concreta (si no, dejalo en null o en el valor vacío que corresponda -- nunca inventes ni fuerces una lectura):
-- resumen_experiencia: cómo dijo que se sintió después del encuentro, y las tres palabras que usó para describirlo (si las dio).
-- que_disfruto: qué momentos disfrutó más, o en qué sintió mayor conexión.
-- momento_desconexion: si hubo algún momento de desconexión, cuál.
-- emocion_durante: qué emoción predominó durante la cita.
-- emocion_al_recordar: qué emoción aparece ahora al recordarla.
-- aprendizaje_sobre_si: qué descubrió sobre sí misma en esta cita.
-- aprendizaje_sobre_vinculo: qué descubrió sobre el tipo de vínculo que quiere construir.
-- creencia_limitante: si se asomó una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino), describila en una frase corta y neutra. Si no, null.
-- modulo_sugerido: SOLO si hay creencia_limitante clara y encaja con uno de estos cuatro, el nombre EXACTO (nunca inventes otro nombre ni otro texto): "Apertura al compromiso" (tensión entre libertad y compromiso), "Autonomía emocional" (depender del vínculo para el propio bienestar), "Poder personal" (verse como receptor pasivo de lo que pasa en los vínculos), "Coherencia interna" (distancia entre lo que dice que valora y cómo actúa). Si no, null.
-- intencion_futura: qué haría igual y qué elegiría hacer diferente en una próxima cita.
-- quiere_volver_a_verla: true si dijo que le gustaría volver a hablar con esta persona, false si dijo que no, null si no quedó claro o no se llegó a preguntar.
-- compatibilidad_percibida: el número del 1 al 10 que dio, o null si no lo dio.
-- aspectos_valorados: array con los aspectos que nombró que valoró más (ej. ["escucha","humor"]), o array vacío si no se llegó a esa parte.
-- que_falto: qué sintió que faltó, o null.
-
-2. Escribí UNA sola reflexión breve de cierre (2-3 frases, nunca una lista ni un análisis exhaustivo -- una sola devolución bien elegida genera más impacto que diez observaciones). Ejemplo de tono correcto: "Hoy apareció una búsqueda genuina de conexión, pero también la necesidad de confirmar rápidamente si la otra persona era 'la indicada'. Tal vez en el próximo encuentro puedas explorar la curiosidad antes que la conclusión." Siempre interpretativo y tentativo ("me pareció que...", "tal vez..."), nunca "sos así" ni una verdad. Si hay modulo_sugerido, podés tejer la invitación a seguir explorando eso ahí mismo, de forma natural y sin presión, sin decir la palabra "módulo" ni sonar clínico. Si la conversación fue corta y hay poco material real, quedate con lo poco que sí apareció en vez de generalizar.
-
-Respondé ÚNICAMENTE con JSON válido sin backticks: {"resumen_experiencia":null,"que_disfruto":null,"momento_desconexion":null,"emocion_durante":null,"emocion_al_recordar":null,"aprendizaje_sobre_si":null,"aprendizaje_sobre_vinculo":null,"creencia_limitante":null,"modulo_sugerido":null,"intencion_futura":null,"quiere_volver_a_verla":null,"compatibilidad_percibida":null,"aspectos_valorados":[],"que_falto":null,"mensaje_cierre":""}`;
+// La segunda y última pregunta del debriefing corto (Nivel 1) se arma del
+// lado del cliente (buildReflexionPrompt en soul.html), igual que la
+// apertura de arriba se manda como primer mensaje pero el resto de la
+// charla la maneja /api/chat directo con streaming -- ver ese archivo.
 
 async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioId, historial) {
   await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
@@ -566,16 +541,20 @@ async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioI
 // real no es confiable en un entorno serverless -- mismo motivo que
 // generarResumenCitaEnSegundoPlano, mas arriba. Cualquier fallo queda solo
 // logueado.
-async function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId) {
-  if (match.insights_debriefing_a || match.insights_debriefing_b) return;
+async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, matchId) {
+  if (match.insights_debriefing_a || match.insights_debriefing_b) return null;
   try {
     const citaRes = await fetch(
-      `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
+      `${supabaseUrl}/rest/v1/citas?select=id,consiente_analisis_a,consiente_analisis_b&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
       { headers }
     );
     const citasCerradas = citaRes.ok ? await citaRes.json() : [];
     const citaCerrada = citasCerradas[0];
-    if (!citaCerrada) return;
+    if (!citaCerrada) return null;
+    // Sin consentimiento explícito de las dos personas, no se analiza --
+    // default siempre "no" (ver Etapa 1: si alguna no contestó, queda null,
+    // que acá también cuenta como "no").
+    if (citaCerrada.consiente_analisis_a !== true || citaCerrada.consiente_analisis_b !== true) return null;
 
     const msgsRes = await fetch(
       `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
@@ -586,12 +565,12 @@ async function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, ma
       const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
       return quien + ': ' + m.contenido;
     }).join('\n');
-    if (!transcripto) return;
+    if (!transcripto) return null;
 
     const { json } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
-      system: EXTRACT_PROMPT_CITA,
+      system: DINAMICA_RELACIONAL_PROMPT,
       messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
     });
     await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
@@ -599,8 +578,10 @@ async function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, ma
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
     });
+    return json;
   } catch (e) {
-    console.error('Error extrayendo insights de la cita:', e);
+    console.error('Error extrayendo dinámica relacional de la cita:', e);
+    return null;
   }
 }
 
@@ -611,7 +592,7 @@ async function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, ma
 // fallo acá cae en un array vacio -- el cliente ya tiene su propio saludo
 // generico de respaldo si el historial llega vacío.
 async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
-  await extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId);
+  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, matchId);
   try {
     const data = await llamarClaude({
       model: 'claude-sonnet-4-6',
@@ -678,15 +659,35 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   });
 }
 
-// Cierre de la conversacion de debriefing al llegar al tope de mensajes
-// (TOPE_MENSAJES_REFLEXION en soul.html) -- una sola llamada mas a Claude,
-// no una charla sin techo: extrae lo que se pudo juntar de afinado de
-// matching + una posible creencia limitante con su modulo sugerido, y
-// devuelve el mensaje de cierre para mostrar como ultimo mensaje de Soul.
+// Cierre del debriefing corto (Nivel 1) -- se dispara apenas la persona
+// contesta la segunda pregunta (ver TOPE_MENSAJES_REFLEXION=2 en
+// soul.html), nunca una charla larga. Combina dos fuentes: lo que la
+// persona autoreportó en esta charla (resumen_breve, aprendizaje) y --
+// SOLO si hubo consentimiento de las dos partes -- el analisis objetivo de
+// dinamica relacional ya extraido (insights_debriefing_a/b), del que salen
+// las 2 observaciones (fortaleza_observada, algo_para_explorar). Sin
+// consentimiento, esas dos quedan en null y el cierre es solo calido.
+const CIERRE_DEBRIEFING_CORTO_PROMPT = `Sos Soul. Esta conversación breve de debriefing después de una cita real llegó a su cierre. Tenés dos fuentes:
+
+1. Lo que la persona te contó en esta charla (cómo se sintió, tres palabras, qué descubrió sobre sí misma).
+2. Un análisis aparte de la dinámica real de cómo se vinculó en la cita (te lo paso como JSON en el mensaje -- puede venir vacío/null si no hubo consentimiento para analizarlo; en ese caso NO inventes observaciones de contenido).
+
+Tu tarea es doble:
+
+1. Extraé, solo si es real y concreto (si no, null):
+- resumen_breve: cómo dijo que se sintió + las tres palabras que usó, en una frase.
+- aprendizaje: qué descubrió sobre sí misma, en una frase. Null si no llegó a contestar eso.
+- fortaleza_observada: SOLO si hay análisis de dinámica disponible (fuente 2) -- una fortaleza concreta que viste en cómo se vinculó (ej. "hiciste varias preguntas abiertas que ayudaron a que la conversación avanzara"). Null si no hay análisis disponible.
+- algo_para_explorar: SOLO si hay análisis de dinámica disponible -- algo puntual para que se pregunte a sí misma, en tono de pregunta abierta, nunca diagnóstico (ej. "cuando apareció un tema personal, cambiaste de conversación rápido -- ¿fue una elección consciente?"). Null si no hay análisis disponible.
+
+2. Escribí el mensaje de cierre (2-3 frases como mucho, nunca una lista): si hay fortaleza_observada y algo_para_explorar, decilas ahí, siempre interpretativo ("me pareció notar que...", "tal vez..."), nunca "sos así" ni una verdad. Si no hay análisis disponible (sin consentimiento), cerrá con calidez simple a partir de lo que te contó, sin inventar observaciones de contenido.
+
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"resumen_breve":null,"aprendizaje":null,"fortaleza_observada":null,"algo_para_explorar":null,"mensaje_cierre":""}`;
+
 async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const { matchId, historial } = req.body;
   if (!matchId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,insights_debriefing_a,insights_debriefing_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -694,45 +695,29 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     return res.status(403).json({ error: 'No autorizado' });
   }
   const soyA = match.usuario_a === usuario.usuarioId;
+  const dinamicaPropia = soyA ? match.insights_debriefing_a : match.insights_debriefing_b;
 
-  const MODULOS_VALIDOS = ['Apertura al compromiso', 'Autonomía emocional', 'Poder personal', 'Coherencia interna'];
   const transcripto = historial.map(m => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
-  let resultado = {
-    resumen_experiencia: null, que_disfruto: null, momento_desconexion: null, emocion_durante: null, emocion_al_recordar: null,
-    aprendizaje_sobre_si: null, aprendizaje_sobre_vinculo: null, creencia_limitante: null, modulo_sugerido: null,
-    intencion_futura: null, quiere_volver_a_verla: null, compatibilidad_percibida: null, aspectos_valorados: [], que_falto: null,
-    mensaje_cierre: null
-  };
+  let resultado = { resumen_breve: null, aprendizaje: null, fortaleza_observada: null, algo_para_explorar: null, mensaje_cierre: null };
   try {
     const { json } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
-      max_tokens: 700,
-      system: CIERRE_REFLEXION_PROMPT,
-      messages: [{ role: 'user', content: transcripto }]
+      max_tokens: 500,
+      system: CIERRE_DEBRIEFING_CORTO_PROMPT,
+      messages: [{ role: 'user', content: 'Conversación:\n' + transcripto + '\n\nAnálisis de dinámica (fuente 2, puede ser null): ' + JSON.stringify(dinamicaPropia || null) }]
     });
     resultado = json;
-    if (!MODULOS_VALIDOS.includes(resultado.modulo_sugerido)) resultado.modulo_sugerido = null;
   } catch (e) {
-    console.error('Error cerrando reflexión de debriefing:', e);
+    console.error('Error cerrando debriefing corto:', e);
   }
 
-  const mensajeCierre = resultado.mensaje_cierre || 'Gracias por pensar esto conmigo. Quedo cerca para cuando quieras seguir hablando de esto.';
+  const mensajeCierre = resultado.mensaje_cierre || 'Gracias por pensar esto conmigo.';
 
   const refinamiento = {
-    resumen_experiencia: resultado.resumen_experiencia || null,
-    que_disfruto: resultado.que_disfruto || null,
-    momento_desconexion: resultado.momento_desconexion || null,
-    emocion_durante: resultado.emocion_durante || null,
-    emocion_al_recordar: resultado.emocion_al_recordar || null,
-    aprendizaje_sobre_si: resultado.aprendizaje_sobre_si || null,
-    aprendizaje_sobre_vinculo: resultado.aprendizaje_sobre_vinculo || null,
-    creencia_limitante: resultado.creencia_limitante || null,
-    modulo_sugerido: resultado.modulo_sugerido || null,
-    intencion_futura: resultado.intencion_futura || null,
-    quiere_volver_a_verla: typeof resultado.quiere_volver_a_verla === 'boolean' ? resultado.quiere_volver_a_verla : null,
-    compatibilidad_percibida: typeof resultado.compatibilidad_percibida === 'number' ? resultado.compatibilidad_percibida : null,
-    aspectos_valorados: Array.isArray(resultado.aspectos_valorados) ? resultado.aspectos_valorados : [],
-    que_falto: resultado.que_falto || null
+    resumen_breve: resultado.resumen_breve || null,
+    aprendizaje: resultado.aprendizaje || null,
+    fortaleza_observada: resultado.fortaleza_observada || null,
+    algo_para_explorar: resultado.algo_para_explorar || null
   };
   await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
     method: 'PATCH',
