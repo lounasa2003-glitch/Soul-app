@@ -460,16 +460,6 @@ function renderHojaDeVida(data){
     html+='<p style="color:#c9a84c">Con: '+esc(m.otra_persona_nombre||'(persona sin nombre)')+'</p>';
     html+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
     html+=campoHtml('Estado',ESTADO_LEGIBLE[m.estado]||m.estado);
-    if(m.cita)html+=campoHtml('Estado de la cita',CITA_ESTADO_LEGIBLE_ADMIN[m.cita.estado]||m.cita.estado);
-    if(m.cita&&m.cita.resumen_ia){
-      var r=m.cita.resumen_ia;
-      html+='<p class="campo-grupo-titulo" style="margin-top:.6rem">Resumen de la cita (IA)</p>';
-      html+=campoHtml('Qué pasó',r.resumen);
-      html+=campoHtml('Tono general',r.tono_general);
-      html+=campoHtml('Reciprocidad',r.nivel_reciprocidad);
-      if(r.temas_principales&&r.temas_principales.length)html+=campoHtml('Temas principales',r.temas_principales);
-      if(r.senales_de_tension)html+=campoHtml('Señales de tensión',r.senales_de_tension);
-    }
     html+=campoHtml('Activado por',m.activado_por);
     if(m.eleccion_usuario_a||m.eleccion_usuario_b){
       html+=campoHtml('Elección de '+esc(data.usuario.nombre||'esta persona'),eleccionLegible(m.usuario_a===data.usuario.id?m.eleccion_usuario_a:m.eleccion_usuario_b));
@@ -479,20 +469,32 @@ function renderHojaDeVida(data){
     if(m.mensaje_dupla)html+=campoHtml('Mensaje para la dupla',m.mensaje_dupla);
     if(m.fortalezas&&m.fortalezas.length)html+=campoHtml('Fortalezas',m.fortalezas);
     if(m.desafio)html+=campoHtml('Desafío',m.desafio);
-    // Lo que se recolecto en el debriefing conversacional -- por lado, solo
-    // existe una vez que esa persona cerro su propia conversacion de
-    // reflexion (ver cerrarReflexion en api/citas.js).
-    // Debriefing corto (Nivel 1) -- shape chico: resumen autoreportado +
-    // hasta 2 observaciones objetivas (solo si hubo consentimiento de las
-    // dos partes para analizar la cita, ver consiente_analisis_a/b).
-    var refinamientoPropio=m.usuario_a===data.usuario.id?m.refinamiento_a:m.refinamiento_b;
-    if(refinamientoPropio){
-      html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Debriefing -- lo que compartió '+esc(data.usuario.nombre||'esta persona')+'</p>';
-      html+=campoHtml('Cómo se sintió / resumen',refinamientoPropio.resumen_breve);
-      html+=campoHtml('Qué descubrió sobre sí misma',refinamientoPropio.aprendizaje);
-      html+=campoHtml('Fortaleza observada (IA, con consentimiento)',refinamientoPropio.fortaleza_observada);
-      html+=campoHtml('Algo para explorar (IA, con consentimiento)',refinamientoPropio.algo_para_explorar);
-    }
+    // Sala de Encuentros: puede haber varios encuentros (citas) por match,
+    // cada uno con su propio resumen objetivo y su propio debriefing corto
+    // (Nivel 1) -- se muestran todos, numerados en orden cronologico, mas
+    // reciente primero.
+    var citasDelMatch=m.citas||(m.cita?[m.cita]:[]);
+    citasDelMatch.slice().reverse().forEach(function(cita,idxInv){
+      var numero=citasDelMatch.length-idxInv;
+      html+='<div style="margin-top:.8rem;padding-top:.6rem;border-top:1px dashed #2a1f28">';
+      html+='<p class="campo-grupo-titulo">Encuentro '+numero+' -- '+esc(CITA_ESTADO_LEGIBLE_ADMIN[cita.estado]||cita.estado)+'</p>';
+      if(cita.resumen_ia){
+        var r=cita.resumen_ia;
+        html+=campoHtml('Qué pasó (IA)',r.resumen);
+        html+=campoHtml('Tono general',r.tono_general);
+        html+=campoHtml('Reciprocidad',r.nivel_reciprocidad);
+        if(r.temas_principales&&r.temas_principales.length)html+=campoHtml('Temas principales',r.temas_principales);
+        if(r.senales_de_tension)html+=campoHtml('Señales de tensión',r.senales_de_tension);
+      }
+      var refinamientoPropio=m.usuario_a===data.usuario.id?cita.refinamiento_a:cita.refinamiento_b;
+      if(refinamientoPropio){
+        html+=campoHtml('Debriefing -- cómo se sintió',refinamientoPropio.resumen_breve);
+        html+=campoHtml('Debriefing -- qué descubrió sobre sí misma',refinamientoPropio.aprendizaje);
+        html+=campoHtml('Fortaleza observada (IA, con consentimiento)',refinamientoPropio.fortaleza_observada);
+        html+=campoHtml('Algo para explorar (IA, con consentimiento)',refinamientoPropio.algo_para_explorar);
+      }
+      html+='</div>';
+    });
     if(m.analisis_por_variable){
       var av=m.analisis_por_variable;
       html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Análisis por variable</p>';

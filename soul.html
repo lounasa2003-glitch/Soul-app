@@ -868,16 +868,17 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
-<!-- ══ ETAPA 8 — ELECCIÓN MUTUA ══ -->
+<!-- ══ ETAPA 8 — SALA DE ENCUENTROS: DECISIÓN DE 3 CAMINOS ══ -->
 <div class="etapa" id="e8">
   <div class="eleccion-wrap">
     <div class="eleccion-orb"></div>
-    <h2 class="eleccion-title">Tomáte un minuto.</h2>
-    <p class="eleccion-sub">No respondas desde la emoción del momento.</p>
-    <div class="eleccion-pregunta">¿Cómo te sentiste siendo vos mismo/a con esta persona?</div>
-    <div class="eleccion-btns" id="eleccionBtns">
-      <button class="btn-si" onclick="elegir(true)">Quiero seguir construyendo →</button>
-      <button class="btn-no" onclick="elegir(false)">Necesito pensarlo más</button>
+    <h2 class="eleccion-title">Un momento antes de decidir.</h2>
+    <p class="eleccion-sub">No hace falta decidir el resto de la historia hoy.</p>
+    <div class="eleccion-pregunta">¿Qué te gustaría que pase de acá en más?</div>
+    <div class="eleccion-btns" id="eleccionBtns" style="flex-direction:column;gap:.7rem">
+      <button class="btn-si" onclick="decidirSala('seguir_soul')">Agendar otro encuentro en Soul →</button>
+      <button class="btn-si" onclick="decidirSala('intercambiar')" style="background:none;border:1px solid rgba(201,168,76,.5);color:#c9a84c">Intercambiar datos y seguir por fuera</button>
+      <button class="btn-no" onclick="decidirSala('cerrar')">Cerrar el vínculo</button>
     </div>
     <div class="eleccion-final" id="eleccionFinal">
       <p id="eleccionMsg"></p>
@@ -2014,21 +2015,28 @@ async function recolectarPendientes(){
     if(resC.ok){
       var dataC=await resC.json();
       var citas=dataC.citas||[];
+      // Con la Sala de Encuentros puede haber varias citas (encuentros) por
+      // match -- solo la MAS RECIENTE puede estar pendiente de algo. Una
+      // cerrada mas vieja ya se resolvio (decision_a/b se resetean al
+      // resolverse), asi que mirar todas por igual daria falsos positivos.
+      var masRecientePorMatch={};
       citas.forEach(function(c){
         if(!c.match)return;
+        var actual=masRecientePorMatch[c.match.id];
+        if(!actual||new Date(c.created_at)>new Date(actual.created_at))masRecientePorMatch[c.match.id]=c;
+      });
+      Object.keys(masRecientePorMatch).forEach(function(mid){
+        var c=masRecientePorMatch[mid];
         var otroNombre=c.match.otra_persona_nombre||'(persona sin nombre)';
         if(c.estado!=='cerrada'){
           pendientes.push({tipo:'cita',label:'Cita en curso con '+otroNombre,cita:c});
         }else{
-          // Antes esto miraba match.estado==='mutuamente_aceptado' -- un
-          // campo COMPARTIDO que la primera persona en terminar su
-          // debriefing pisa con 'aceptado'/'rechazado'. Eso tapaba a la
-          // segunda persona. Ahora se mira solo MI propio campo
-          // (debriefing_usuario_a/b), independiente de si la otra persona
-          // ya contestó o no.
-          var soyADebriefing=c.match.usuario_a===usuarioId;
-          var miDebriefing=soyADebriefing?c.match.debriefing_usuario_a:c.match.debriefing_usuario_b;
-          if(!miDebriefing){
+          // Decision de la Sala de Encuentros (seguir en Soul / intercambiar
+          // / cerrar) -- por lado, independiente de si la otra persona ya
+          // contesto o no (mismo patron que eleccion_usuario_a/b).
+          var soyADecision=c.match.usuario_a===usuarioId;
+          var miDecision=soyADecision?c.match.decision_a:c.match.decision_b;
+          if(!miDecision){
             pendientes.push({tipo:'debriefing',label:'Debriefing pendiente con '+otroNombre,cita:c});
           }
         }
@@ -2059,6 +2067,7 @@ function entrarAPendiente(item){
   if(item.tipo==='debriefing'){
     var m=item.cita.match;
     window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
+    window.citaActualId=item.cita.id;
     ir(8);
     return;
   }
@@ -2238,30 +2247,42 @@ async function mostrarMisMatches(){
       return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
     });
     var dataC=await resC.json();
+    // Sala de Encuentros: puede haber varias citas (encuentros) por match --
+    // se agrupan todas, no solo la ultima, y se numeran en orden
+    // cronologico para que quede claro cual es cual.
     var citasPorMatch={};
-    (dataC.citas||[]).forEach(function(c){ if(c.match) citasPorMatch[c.match.id]=c; });
+    (dataC.citas||[]).forEach(function(c){
+      if(!c.match)return;
+      if(!citasPorMatch[c.match.id])citasPorMatch[c.match.id]=[];
+      citasPorMatch[c.match.id].push(c);
+    });
+    Object.keys(citasPorMatch).forEach(function(mid){
+      citasPorMatch[mid].sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at)});
+    });
 
     var estiloBtn='padding:.6rem .9rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer';
     lista.innerHTML=matches.map(function(m){
       var nombre=m.otra_persona_nombre||'(persona sin nombre)';
       var estadoTxt=MATCH_ESTADO_LEGIBLE[m.estado]||m.estado;
-      var cita=citasPorMatch[m.id];
+      var citasDelMatch=citasPorMatch[m.id]||[];
       var html='<div style="border:1px solid #2a1f28;border-radius:6px;padding:1rem;margin-bottom:.9rem">';
       html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem">';
       html+='<div><p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
       html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p></div>';
       html+='<span onclick="eliminarMatch(\''+esc(m.id)+'\',\''+esc(nombre).replace(/'/g,"\\'")+'\')" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.72rem;cursor:pointer;white-space:nowrap;opacity:.7">Eliminar</span>';
       html+='</div>';
-      if(cita){
-        html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28">';
-        html+='<p style="font-family:\'Inter\',sans-serif;font-size:.7rem;color:#7a6e78;margin-bottom:.5rem">Cita: '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
+      // Mas reciente primero, pero numerado en orden real de cuando pasaron.
+      citasDelMatch.slice().reverse().forEach(function(cita,idxInv){
+        var numero=citasDelMatch.length-idxInv;
+        html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28;margin-top:.5rem">';
+        html+='<p style="font-family:\'Inter\',sans-serif;font-size:.7rem;color:#7a6e78;margin-bottom:.5rem">Encuentro '+numero+': '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
         html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
         html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(cita.id)+'\')">Ver cita →</button>';
         if(cita.estado==='cerrada'){
-          html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeM(\''+esc(m.id)+'\')">Ver debriefing →</button>';
+          html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeCita(\''+esc(cita.id)+'\')">Ver debriefing →</button>';
         }
         html+='</div></div>';
-      }
+      });
       html+='</div>';
       return html;
     }).join('');
@@ -2314,8 +2335,11 @@ function cerrarSesion(){
 }
 
 // ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──
+// Con la Sala de Encuentros, el debriefing es por CITA (encuentro puntual),
+// no por match -- un mismo match puede tener varios encuentros, cada uno
+// con su propio debriefing independiente.
 var reflexionHistory=[];
-var reflexionMatchIdActual=null;
+var reflexionCitaIdActual=null;
 var reflexionIntercambios=0;
 var reflexionCerrada=false;
 // Debriefing corto (Nivel 1): exactamente 2 preguntas (apertura + una de
@@ -2325,8 +2349,8 @@ var reflexionCerrada=false;
 // la charla.
 var TOPE_MENSAJES_REFLEXION=2;
 
-function abrirReflexionDesdeM(matchId){
-  reflexionMatchIdActual=matchId;
+function abrirReflexionDesdeCita(citaId){
+  reflexionCitaIdActual=citaId;
   reflexionHistory=[];
   reflexionIntercambios=0;
   reflexionCerrada=false;
@@ -2354,7 +2378,7 @@ async function initReflexionCita(){
   document.getElementById('reflexionTitulo').textContent='Pensando en tu cita';
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/citas?reflexionMatchId='+encodeURIComponent(reflexionMatchIdActual),{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/citas?reflexionCitaId='+encodeURIComponent(reflexionCitaIdActual),{headers:{'Authorization':'Bearer '+accessToken}});
     });
     var data=await res.json();
     if(!res.ok){
@@ -2404,7 +2428,7 @@ function addReflexionMsg(tipo,txt){
 }
 function guardarReflexionHistorial(){
   fetchConSesion(function(){
-    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'guardarReflexion',matchId:reflexionMatchIdActual,historial:reflexionHistory})});
+    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'guardarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
   }).catch(function(){});
 }
 async function enviarReflexion(){
@@ -2428,7 +2452,7 @@ async function enviarReflexion(){
   if(reflexionIntercambios>=TOPE_MENSAJES_REFLEXION){
     try{
       var resCierre=await fetchConSesion(function(){
-        return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrarReflexion',matchId:reflexionMatchIdActual,historial:reflexionHistory})});
+        return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
       });
       var dataCierre=await resCierre.json();
       var t=document.getElementById('reflexionTyping');if(t)t.remove();
@@ -3497,37 +3521,34 @@ async function responderCierreCita(respuesta){
 // ── ELECCIÓN MUTUA ──
 // Antes esto era puramente cosmético -- no quedaba ningún registro real de
 // si la persona aceptó o prefirió no seguir. Ahora se persiste en el match
-// (aceptado/rechazado + cuándo), que es la base de datos real que el
-// módulo "Capacidad de volver a elegir" va a necesitar más adelante para
-// poder comparar a la persona consigo misma en el tiempo.
-function elegir(si){
+// (decision_a/b), y recien cuando las DOS ya contestaron el servidor
+// resuelve (cerrar > intercambiar > seguir_soul) y crea el proximo
+// encuentro si corresponde -- ver decidirSalaEncuentros en api/citas.js.
+// Cada persona contesta sin ver la respuesta de la otra.
+function decidirSala(decision){
   document.getElementById('eleccionBtns').style.display='none';
   var msg=document.getElementById('eleccionMsg');
-  if(si){
-    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7">Que puedas querer seguir después de todo lo que sintiste — eso no es poco.<br><br>Soul va a acompañar lo que viene.</span>';
+  if(decision==='seguir_soul'){
+    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7">Que puedas querer seguir después de todo lo que sintiste — eso no es poco.<br><br>Si la otra persona también elige seguir, Soul va a abrir el próximo encuentro.</span>';
+  }else if(decision==='intercambiar'){
+    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#c9a84c;line-height:1.7">Buena señal. El resto de la historia ya no necesita pasar por acá.</span>';
   }else{
-    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#d8cdd2;line-height:1.7">Está bien. Lo que viviste hoy tiene valor aunque no continúe.<br><br>Soul va a estar cuando estés lista/o para seguir.</span>';
+    msg.innerHTML='<span style="font-family:\'Cormorant Garamond\',serif;font-style:italic;font-size:1rem;color:#d8cdd2;line-height:1.7">Está bien. Lo que viviste hoy tiene valor aunque no continúe.<br><br>Soul va a estar cuando quieras conocer a alguien más.</span>';
   }
   document.getElementById('eleccionFinal').style.display='block';
 
   var matchId=window.matchData&&window.matchData.id;
   if(matchId){
-    // Antes iba por guardarTabla genérico, que solo autoriza escrituras de
-    // usuario_a -- si esta persona era usuario_b del match, se perdía en
-    // silencio. Pasa por el endpoint dedicado, que autoriza cualquiera de
-    // los dos lados.
     fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'elegirDebriefing',matchId:matchId,eleccion:si?'aceptado':'rechazado'})});
+      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'decidirSalaEncuentros',matchId:matchId,decision:decision})});
     }).catch(function(){});
   }
-  // Antes acá se mostraban 4 chips de checkin y un botón "Continuar" que
-  // llevaba de vuelta al chat -- un callejón sin salida sin conexión real
-  // con lo que acababa de pasar. Ahora, tras un instante para que se lea el
-  // mensaje, entra directo a la conversación de debriefing con Soul (misma
-  // conversación que "Hablar con Soul sobre esto"), que arranca sola con una
-  // devolución basada en la cita real.
-  if(matchId){
-    setTimeout(function(){ abrirReflexionDesdeM(matchId); },2200);
+  // Independiente de la decision sobre el vinculo, esta persona entra a su
+  // propio debriefing privado sobre la cita puntual que acaba de tener
+  // (no sobre el match en general -- cada encuentro tiene el suyo).
+  var citaId=window.citaActualId;
+  if(citaId){
+    setTimeout(function(){ abrirReflexionDesdeCita(citaId); },2200);
   }
 }
 </script>

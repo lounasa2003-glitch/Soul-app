@@ -90,26 +90,38 @@ export default async function handler(req, res) {
       otros.forEach(o => { nombrePorId[o.id] = o.nombre || o.email || null; });
     }
 
-    // Se suma el estado de la cita de cada match (si existe) para poder
-    // priorizar la lista en el panel: debriefing pendiente > cita en curso >
-    // match activo > match pausado -- sin esto, el panel solo veia
-    // match.estado y no podia distinguir "esperando que decidan si activan"
-    // de "ya tuvieron la cita y falta el debriefing", que es lo mas urgente
-    // de revisar.
-    let citaPorMatch = {};
+    // Se suman TODAS las citas (encuentros) de cada match, no solo la
+    // ultima -- con la Sala de Encuentros un match puede tener varios
+    // encuentros, cada uno con su propio estado, resumen y debriefing. Se
+    // ordenan cronologicamente para que el panel pueda mostrar "Encuentro 1,
+    // 2, 3..." igual que la pantalla de Matches de la persona.
+    let citasPorMatch = {};
     if (matches.length > 0) {
       const idsMatches = matches.map(m => m.id);
       const citasRes = await fetch(
-        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,resumen_ia&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
+        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,resumen_ia,refinamiento_a,refinamiento_b,consiente_analisis_a,consiente_analisis_b&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})&order=created_at.asc`,
         { headers }
       );
       const citas = citasRes.ok ? await citasRes.json() : [];
-      citas.forEach(c => { citaPorMatch[c.match_id] = c; });
+      citas.forEach(c => {
+        if (!citasPorMatch[c.match_id]) citasPorMatch[c.match_id] = [];
+        citasPorMatch[c.match_id].push(c);
+      });
     }
 
     const matchesConNombre = matches.map(m => {
       const otraId = m.usuario_a === id ? m.usuario_b : m.usuario_a;
-      return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null, cita: citaPorMatch[m.id] || null };
+      const citasDelMatch = citasPorMatch[m.id] || [];
+      return {
+        ...m,
+        otra_persona_id: otraId,
+        otra_persona_nombre: nombrePorId[otraId] || null,
+        citas: citasDelMatch,
+        // Se mantiene "cita" (singular, la mas reciente) por compatibilidad
+        // con el resto del panel que solo necesita saber el estado actual
+        // para priorizar la lista -- ver tierDeMatch en panel-admin.html.
+        cita: citasDelMatch.length > 0 ? citasDelMatch[citasDelMatch.length - 1] : null
+      };
     });
 
     return res.status(200).json({

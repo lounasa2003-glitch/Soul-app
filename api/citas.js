@@ -43,7 +43,7 @@ async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuarioId) {
 async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
   const matchesRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,fortalezas,desafio,debriefing_usuario_a,debriefing_usuario_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
+    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,fortalezas,desafio,decision_a,decision_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
     { headers }
   );
   const matches = matchesRes.ok ? await matchesRes.json() : [];
@@ -149,11 +149,14 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   }
   const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
   if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
-  // Antes esto bloqueaba escribir si la cita ya estaba 'cerrada' -- ahora se
-  // puede reabrir para seguir la charla desde "Mis citas" aunque ya haya
-  // pasado por el cierre y el debriefing. No se toca el estado (se queda
-  // 'cerrada'): asi no se reactiva sola la auto-navegacion de login a la
-  // cita ni se pisa el debriefing ya resuelto.
+  // Con la Sala de Encuentros, cada encuentro es una fila propia en citas
+  // -- una vez cerrada queda cerrada para siempre (antes se podia reabrir
+  // para seguir escribiendo ahi mismo). El proximo encuentro, si ambas
+  // partes eligen seguir en Soul, es una fila NUEVA (ver
+  // decidirSalaEncuentros), no esta misma reabierta.
+  if (auth.cita.estado === 'cerrada') {
+    return res.status(409).json({ error: 'cita_cerrada', mensaje: 'Este encuentro ya cerró.' });
+  }
   // Si cualquiera de las dos personas "eliminó" este match, se corta la
   // escritura para ambos lados -- sin devolver un motivo explícito (el
   // cliente ya ignora este error en silencio), para que del otro lado se
@@ -366,26 +369,27 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ estado: 'activa' });
 }
 
-// Mismo trabajo que antes hacian elegir()/guardarCheckinEmocional sobre
-// 'matches' directo con guardarTabla generico -- eso solo autoriza
-// escrituras de usuario_a, asi que usuario_b nunca podia guardar su propia
-// eleccion de debriefing. Se pasa por este endpoint, autorizando por
-// cualquiera de los dos lados.
-// Antes esto escribia derecho a matches.estado -- un campo unico
-// compartido -- asi que en cuanto la PRIMERA persona completaba su
-// debriefing, matches.estado dejaba de ser 'mutuamente_aceptado' y el
-// chequeo de login de la SEGUNDA persona (que buscaba justo ese valor)
-// ya no encontraba nada: caia derecho a la eleccion de sesion normal,
-// como si su debriefing pendiente no existiera. Se guarda la eleccion de
-// cada lado por separado (mismo patron que eleccion_usuario_a/b en la
-// decision del match) y el estado final solo se resuelve cuando las DOS
-// ya contestaron.
-async function elegirDebriefing(req, res, supabaseUrl, headers, usuario) {
-  const { matchId, eleccion } = req.body;
-  if (!matchId || (eleccion !== 'aceptado' && eleccion !== 'rechazado')) {
-    return res.status(400).json({ error: 'Faltan datos o elección inválida' });
+// Reemplaza elegirDebriefing (2 botones fijos aceptado/rechazado) por la
+// decision de 3 caminos de la Sala de Encuentros. Cada lado contesta por
+// separado, sin ver la respuesta de la otra persona (mismo patron que
+// eleccion_usuario_a/b en la decision del match) -- recien cuando las DOS
+// ya contestaron se resuelve:
+// - si cualquiera eligio 'cerrar', el vinculo cierra (estado interno
+//   'rechazado' -- nunca se muestra esa palabra, ver el resto de la app).
+// - si no, y cualquiera eligio 'intercambiar', se resuelve a eso: exponer
+//   contacto no bloquea que ademas sigan usando Soul si quieren, asi que es
+//   la opcion mas inclusiva cuando hay diferencia de preferencia (estado
+//   interno 'aceptado' -- construyeron algo, solo que se lleva la charla
+//   afuera).
+// - si las DOS eligieron 'seguir_soul', se crea un encuentro nuevo (fila
+//   nueva en citas, mismo mensaje de apertura que el primero) y el match
+//   sigue activo tal cual estaba.
+async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
+  const { matchId, decision } = req.body;
+  if (!matchId || !['seguir_soul', 'intercambiar', 'cerrar'].includes(decision)) {
+    return res.status(400).json({ error: 'Faltan datos o decisión inválida' });
   }
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,debriefing_usuario_a,debriefing_usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,decision_a,decision_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -393,23 +397,54 @@ async function elegirDebriefing(req, res, supabaseUrl, headers, usuario) {
   const soyB = match.usuario_b === usuario.usuarioId;
   if (!soyA && !soyB) return res.status(403).json({ error: 'No autorizado' });
 
-  const campoPropio = soyA ? 'debriefing_usuario_a' : 'debriefing_usuario_b';
-  const campoAjeno = soyA ? 'debriefing_usuario_b' : 'debriefing_usuario_a';
+  const campoPropio = soyA ? 'decision_a' : 'decision_b';
+  const campoAjeno = soyA ? 'decision_b' : 'decision_a';
   const ajena = match[campoAjeno];
 
-  const datosPatch = { [campoPropio]: eleccion };
   if (ajena) {
-    // Las dos ya contestaron -- recien ahi se resuelve el estado final.
-    datosPatch.estado = (eleccion === 'aceptado' && ajena === 'aceptado') ? 'aceptado' : 'rechazado';
-    datosPatch.fecha_respuesta = new Date().toISOString();
+    let resultado;
+    if (decision === 'cerrar' || ajena === 'cerrar') resultado = 'cerrar';
+    else if (decision === 'intercambiar' || ajena === 'intercambiar') resultado = 'intercambiar';
+    else resultado = 'seguir_soul';
+
+    const datosPatch = { decision_a: null, decision_b: null };
+    if (resultado === 'cerrar') datosPatch.estado = 'rechazado';
+    else if (resultado === 'intercambiar') datosPatch.estado = 'aceptado';
+    await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(datosPatch)
+    });
+
+    if (resultado === 'seguir_soul') {
+      try {
+        const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify({ match_id: matchId })
+        });
+        const citas = citaRes.ok ? await citaRes.json() : [];
+        const citaCreada = citas[0];
+        if (citaCreada) {
+          await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({ cita_id: citaCreada.id, usuario_id: null, tipo: 'texto', contenido: 'No busquen impresionar. Intenten descubrir si disfrutan conversar.' })
+          });
+        }
+      } catch (e) {
+        console.error('Error creando el próximo encuentro:', e);
+      }
+    }
+  } else {
+    await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ [campoPropio]: decision })
+    });
   }
-  await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
-    method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-    body: JSON.stringify(datosPatch)
-  });
-  // Mi parte del debriefing ya termino -- vuelvo a 'chat', el estado normal
-  // de espera/conversacion (antes quedaba en 'debriefing' para siempre).
+
+  // Mi parte ya termino -- vuelvo a 'chat', el estado normal de espera.
   await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
     method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ etapa_actual: 'chat' })
@@ -524,11 +559,11 @@ Es el primer mensaje: arrancá vos, con calidez y curiosidad genuina, preguntand
 // apertura de arriba se manda como primer mensaje pero el resto de la
 // charla la maneja /api/chat directo con streaming -- ver ese archivo.
 
-async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioId, historial) {
-  await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
+async function guardarHistorialReflexion(supabaseUrl, headers, citaId, usuarioId, historial) {
+  await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=cita_id,usuario_id`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ match_id: matchId, usuario_id: usuarioId, historial, updated_at: new Date().toISOString() })
+    body: JSON.stringify({ cita_id: citaId, usuario_id: usuarioId, historial, updated_at: new Date().toISOString() })
   });
 }
 
@@ -541,23 +576,19 @@ async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioI
 // real no es confiable en un entorno serverless -- mismo motivo que
 // generarResumenCitaEnSegundoPlano, mas arriba. Cualquier fallo queda solo
 // logueado.
-async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, matchId) {
-  if (match.insights_debriefing_a || match.insights_debriefing_b) return null;
+// Toma la cita ya resuelta (con id, consiente_analisis_a/b,
+// insights_debriefing_a/b) en vez de buscarla por matchId -- con la Sala de
+// Encuentros puede haber varias citas por match, y esta extraccion es
+// siempre sobre UNA cita puntual, la que se esta debriefeando.
+async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita) {
+  if (cita.insights_debriefing_a || cita.insights_debriefing_b) return null;
+  // Sin consentimiento explícito de las dos personas, no se analiza --
+  // default siempre "no" (ver Etapa 1: si alguna no contestó, queda null,
+  // que acá también cuenta como "no").
+  if (cita.consiente_analisis_a !== true || cita.consiente_analisis_b !== true) return null;
   try {
-    const citaRes = await fetch(
-      `${supabaseUrl}/rest/v1/citas?select=id,consiente_analisis_a,consiente_analisis_b&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
-      { headers }
-    );
-    const citasCerradas = citaRes.ok ? await citaRes.json() : [];
-    const citaCerrada = citasCerradas[0];
-    if (!citaCerrada) return null;
-    // Sin consentimiento explícito de las dos personas, no se analiza --
-    // default siempre "no" (ver Etapa 1: si alguna no contestó, queda null,
-    // que acá también cuenta como "no").
-    if (citaCerrada.consiente_analisis_a !== true || citaCerrada.consiente_analisis_b !== true) return null;
-
     const msgsRes = await fetch(
-      `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
+      `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(cita.id)}&tipo=eq.texto&order=created_at.asc`,
       { headers }
     );
     const msgs = msgsRes.ok ? await msgsRes.json() : [];
@@ -573,7 +604,7 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
       system: DINAMICA_RELACIONAL_PROMPT,
       messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
     });
-    await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+    await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(cita.id)}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
@@ -585,14 +616,13 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
   }
 }
 
-// Primera vez que esta persona abre el debriefing de este match: Soul
-// arranca con la primera pregunta de la secuencia guiada (registro de la
-// experiencia), no con una devolucion -- la devolucion (una sola reflexion
-// breve) ahora pasa recien al cierre, ver cerrarReflexion(). Cualquier
-// fallo acá cae en un array vacio -- el cliente ya tiene su propio saludo
-// generico de respaldo si el historial llega vacío.
-async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
-  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, matchId);
+// Primera vez que esta persona abre el debriefing de esta cita puntual:
+// Soul arranca con la primera pregunta -- la devolucion (2 observaciones)
+// pasa recien al cierre, ver cerrarReflexion(). Cualquier fallo acá cae en
+// un array vacio -- el cliente ya tiene su propio saludo generico de
+// respaldo si el historial llega vacío.
+async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, cita, soyA, otraPersonaNombre) {
+  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita);
   try {
     const data = await llamarClaude({
       model: 'claude-sonnet-4-6',
@@ -604,7 +634,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ma
     if (!texto) return [];
 
     const historialNuevo = [{ role: 'assistant', content: texto }];
-    await guardarHistorialReflexion(supabaseUrl, headers, matchId, usuario.usuarioId, historialNuevo);
+    await guardarHistorialReflexion(supabaseUrl, headers, cita.id, usuario.usuarioId, historialNuevo);
     return historialNuevo;
   } catch (e) {
     console.error('Error generando apertura de debriefing:', e);
@@ -612,16 +642,23 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ma
   }
 }
 
-// Conversacion privada de reflexion/debriefing sobre una cita puntual -- una
-// por (usuario, match), nunca compartida con la otra persona del match. La
-// IA en si la maneja el cliente llamando directo a /api/chat (mismo
-// streaming que el chat principal); esto persiste el historial (sembrando
-// la devolucion inicial la primera vez) y devuelve el contexto del match
-// para que el cliente arme el system prompt.
+// Conversacion privada de reflexion/debriefing sobre UNA cita puntual --
+// una por (usuario, cita), nunca compartida con la otra persona del match.
+// Con la Sala de Encuentros, cada encuentro (fila de citas) tiene su propio
+// debriefing independiente, aunque sean del mismo match. La IA en si la
+// maneja el cliente llamando directo a /api/chat (mismo streaming que el
+// chat principal); esto persiste el historial (sembrando la devolucion
+// inicial la primera vez) y devuelve el contexto para que el cliente arme
+// el system prompt.
 async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
-  const { reflexionMatchId } = req.query;
+  const { reflexionCitaId } = req.query;
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(reflexionCitaId)}`, { headers });
+  const citasFila = citaRes.ok ? await citaRes.json() : [];
+  const cita = citasFila[0];
+  if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
+
   const matchRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio,insights_debriefing_a,insights_debriefing_b,refinamiento_a,refinamiento_b&id=eq.${encodeURIComponent(reflexionMatchId)}`,
+    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio&id=eq.${encodeURIComponent(cita.match_id)}`,
     { headers }
   );
   const matches = matchRes.ok ? await matchRes.json() : [];
@@ -637,13 +674,13 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   const otraPersonaNombre = otras[0] ? (otras[0].nombre || otras[0].email || null) : null;
 
   const reflexionRes = await fetch(
-    `${supabaseUrl}/rest/v1/cita_reflexiones?select=historial&match_id=eq.${encodeURIComponent(reflexionMatchId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
+    `${supabaseUrl}/rest/v1/cita_reflexiones?select=historial&cita_id=eq.${encodeURIComponent(reflexionCitaId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
     { headers }
   );
   const reflexiones = reflexionRes.ok ? await reflexionRes.json() : [];
   let historial = reflexiones[0] ? reflexiones[0].historial : [];
   if (!historial || historial.length === 0) {
-    historial = await generarDevolucionInicial(supabaseUrl, headers, usuario, match, reflexionMatchId, soyA, otraPersonaNombre);
+    historial = await generarDevolucionInicial(supabaseUrl, headers, usuario, match, cita, soyA, otraPersonaNombre);
   }
 
   return res.status(200).json({
@@ -655,7 +692,7 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
     // Si ya se cerro (ver cerrarReflexion), el cliente muestra el
     // historial pero no deja seguir escribiendo -- evita otra ronda de
     // extraccion sobre una conversacion que ya se sintetizo.
-    cerrada: !!(soyA ? match.refinamiento_a : match.refinamiento_b)
+    cerrada: !!(soyA ? cita.refinamiento_a : cita.refinamiento_b)
   });
 }
 
@@ -685,9 +722,13 @@ Tu tarea es doble:
 Respondé ÚNICAMENTE con JSON válido sin backticks: {"resumen_breve":null,"aprendizaje":null,"fortaleza_observada":null,"algo_para_explorar":null,"mensaje_cierre":""}`;
 
 async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
-  const { matchId, historial } = req.body;
-  if (!matchId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,insights_debriefing_a,insights_debriefing_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const { citaId, historial } = req.body;
+  if (!citaId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,insights_debriefing_a,insights_debriefing_b&id=eq.${encodeURIComponent(citaId)}`, { headers });
+  const citasFila = citaRes.ok ? await citaRes.json() : [];
+  const cita = citasFila[0];
+  if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(cita.match_id)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -695,7 +736,7 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     return res.status(403).json({ error: 'No autorizado' });
   }
   const soyA = match.usuario_a === usuario.usuarioId;
-  const dinamicaPropia = soyA ? match.insights_debriefing_a : match.insights_debriefing_b;
+  const dinamicaPropia = soyA ? cita.insights_debriefing_a : cita.insights_debriefing_b;
 
   const transcripto = historial.map(m => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
   let resultado = { resumen_breve: null, aprendizaje: null, fortaleza_observada: null, algo_para_explorar: null, mensaje_cierre: null };
@@ -719,34 +760,39 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     fortaleza_observada: resultado.fortaleza_observada || null,
     algo_para_explorar: resultado.algo_para_explorar || null
   };
-  await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+  await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [soyA ? 'refinamiento_a' : 'refinamiento_b']: refinamiento })
   });
 
   const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
-  await guardarHistorialReflexion(supabaseUrl, headers, matchId, usuario.usuarioId, historialFinal);
+  await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario.usuarioId, historialFinal);
 
   return res.status(200).json({ mensajeCierre });
 }
 
 async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {
-  const { matchId, historial } = req.body;
-  if (!matchId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const { citaId, historial } = req.body;
+  if (!citaId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id&id=eq.${encodeURIComponent(citaId)}`, { headers });
+  const citasFila = citaRes.ok ? await citaRes.json() : [];
+  const cita = citasFila[0];
+  if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(cita.match_id)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
   if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
     return res.status(403).json({ error: 'No autorizado' });
   }
-  // Upsert por (match_id, usuario_id) -- el cliente siempre manda el
-  // historial completo, no hace falta trackear un id de fila.
-  const upsertRes = await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
+  // Upsert por (cita_id, usuario_id) -- el cliente siempre manda el
+  // historial completo, no hace falta trackear un id de fila. Cada
+  // encuentro (fila de citas) tiene su propio debriefing independiente.
+  const upsertRes = await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=cita_id,usuario_id`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ match_id: matchId, usuario_id: usuario.usuarioId, historial, updated_at: new Date().toISOString() })
+    body: JSON.stringify({ cita_id: citaId, usuario_id: usuario.usuarioId, historial, updated_at: new Date().toISOString() })
   });
   if (!upsertRes.ok) {
     console.error('Error guardando reflexion:', upsertRes.status, await upsertRes.text());
@@ -770,7 +816,7 @@ export default async function handler(req, res) {
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
     if (req.method === 'GET') {
-      if (req.query.reflexionMatchId) {
+      if (req.query.reflexionCitaId) {
         return await obtenerReflexion(req, res, supabaseUrl, headers, usuario);
       }
       // Marca de presencia: mientras el cliente este polleando la cita
@@ -788,7 +834,7 @@ export default async function handler(req, res) {
       if (accion === 'consentirAnalisis') return await consentirAnalisis(req, res, supabaseUrl, headers, usuario);
       if (accion === 'ayudaPrivada') return await pedirAyuda(req, res, supabaseUrl, headers, usuario);
       if (accion === 'responderCierre') return await responderCierre(req, res, supabaseUrl, headers, usuario);
-      if (accion === 'elegirDebriefing') return await elegirDebriefing(req, res, supabaseUrl, headers, usuario);
+      if (accion === 'decidirSalaEncuentros') return await decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario);
       if (accion === 'checkinEmocional') return await checkinEmocional(req, res, supabaseUrl, headers, usuario);
       if (accion === 'guardarReflexion') return await guardarReflexion(req, res, supabaseUrl, headers, usuario);
       if (accion === 'cerrarReflexion') return await cerrarReflexion(req, res, supabaseUrl, headers, usuario);
