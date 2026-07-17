@@ -609,6 +609,22 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
     });
+    // Se guarda tambien en historial_relacional, una fila por persona --
+    // es lo que Nivel 2 (ver cerrarReflexion) va a leer para buscar
+    // patrones consistentes a lo largo de varias citas, de cualquier
+    // match, no solo esta. Reusa el mismo resultado, no llama a Claude de
+    // nuevo. Con await por el mismo motivo que el resto de este archivo:
+    // fire-and-forget no es confiable en serverless.
+    await Promise.all([
+      json.a ? fetch(`${supabaseUrl}/rest/v1/historial_relacional`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ usuario_id: match.usuario_a, cita_id: cita.id, match_id: cita.match_id, senales: json.a })
+      }) : Promise.resolve(),
+      json.b ? fetch(`${supabaseUrl}/rest/v1/historial_relacional`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ usuario_id: match.usuario_b, cita_id: cita.id, match_id: cita.match_id, senales: json.b })
+      }) : Promise.resolve()
+    ]).catch(() => {});
     return json;
   } catch (e) {
     console.error('Error extrayendo dinámica relacional de la cita:', e);
@@ -721,6 +737,54 @@ Tu tarea es doble:
 
 Respondé ÚNICAMENTE con JSON válido sin backticks: {"resumen_breve":null,"aprendizaje":null,"fortaleza_observada":null,"algo_para_explorar":null,"mensaje_cierre":""}`;
 
+// Nivel 2: patron acumulado a lo largo de varias citas (de cualquier
+// match), no una lectura de un solo encuentro -- un encuentro puntual
+// puede depender demasiado de la otra persona para ser confiable. Se
+// dispara cada NIVEL2_UMBRAL citas (5, 10, 15...) analizadas con
+// consentimiento, leyendo la tabla historial_relacional (una fila por
+// persona por cita, llenada en extraerDinamicaRelacionalEnSegundoPlano).
+const NIVEL2_UMBRAL = 5;
+
+const NIVEL2_PROMPT = `Sos Soul. Vas a leer las señales reales de dinámica relacional de las últimas citas de esta persona (a través de distintos matches, no de uno solo) y buscar si aparece un patrón CONSISTENTE que se repite en más de un encuentro -- nunca a partir de un solo dato aislado.
+
+Si hay un patrón real y consistente, escribí un mensaje breve (2-3 frases), en tono interpretativo y de espejo ("en tus últimas conversaciones apareció..."), nunca como diagnóstico ni una verdad absoluta. Si no hay nada consistente entre los encuentros, o la evidencia es débil o aislada, respondé con mensaje null -- no fuerces una lectura que no está.
+
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"mensaje":null}`;
+
+async function revisarNivel2(supabaseUrl, headers, usuarioId) {
+  try {
+    const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=ultimo_nivel2_mostrado&id=eq.${encodeURIComponent(usuarioId)}`, { headers });
+    const usuarios = uRes.ok ? await uRes.json() : [];
+    const ultimoMostrado = usuarios[0] ? (usuarios[0].ultimo_nivel2_mostrado || 0) : 0;
+
+    const hrRes = await fetch(`${supabaseUrl}/rest/v1/historial_relacional?select=senales,created_at&usuario_id=eq.${encodeURIComponent(usuarioId)}&order=created_at.asc`, { headers });
+    const filas = hrRes.ok ? await hrRes.json() : [];
+    const proximoUmbral = ultimoMostrado + NIVEL2_UMBRAL;
+    if (filas.length < proximoUmbral) return null;
+
+    const ultimasSenales = filas.slice(-10).map(f => f.senales);
+    const { json } = await llamarClaudeJSON({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      system: NIVEL2_PROMPT,
+      messages: [{ role: 'user', content: JSON.stringify(ultimasSenales) }]
+    });
+
+    // Se marca como mostrado el umbral que se acaba de cruzar, tenga o no
+    // patron real -- no tiene sentido re-evaluar el mismo tramo de citas
+    // la proxima vez.
+    await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuarioId)}`, {
+      method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ ultimo_nivel2_mostrado: proximoUmbral })
+    });
+
+    return json.mensaje || null;
+  } catch (e) {
+    console.error('Error revisando Nivel 2:', e);
+    return null;
+  }
+}
+
 async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const { citaId, historial } = req.body;
   if (!citaId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
@@ -767,9 +831,11 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   });
 
   const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
+  const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario.usuarioId);
+  if (mensajeNivel2) historialFinal.push({ role: 'assistant', content: mensajeNivel2 });
   await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario.usuarioId, historialFinal);
 
-  return res.status(200).json({ mensajeCierre });
+  return res.status(200).json({ mensajeCierre, mensajeNivel2 });
 }
 
 async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {

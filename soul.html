@@ -2459,6 +2459,13 @@ async function enviarReflexion(){
       var mensaje=dataCierre.mensajeCierre||'Gracias por pensar esto conmigo.';
       addReflexionMsg('soul',mensaje);
       reflexionHistory.push({role:'assistant',content:mensaje});
+      // Nivel 2: si esta cita cruzo el umbral de citas acumuladas, viene un
+      // segundo mensaje con un patron a lo largo del tiempo (no de esta
+      // cita puntual) -- se muestra aparte, como una segunda burbuja.
+      if(dataCierre.mensajeNivel2){
+        addReflexionMsg('soul',dataCierre.mensajeNivel2);
+        reflexionHistory.push({role:'assistant',content:dataCierre.mensajeNivel2});
+      }
     }catch(e){
       var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
       addReflexionMsg('soul','Gracias por pensar esto conmigo.');
