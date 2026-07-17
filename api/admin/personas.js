@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     if (matches.length > 0) {
       const idsMatches = matches.map(m => m.id);
       const citasRes = await fetch(
-        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
+        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,resumen_ia&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
         { headers }
       );
       const citas = citasRes.ok ? await citasRes.json() : [];

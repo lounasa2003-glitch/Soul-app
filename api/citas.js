@@ -342,6 +342,7 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ [campoPropio]: respuesta, estado: 'cerrada' })
     });
+    await generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, auth.match);
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(auth.match.usuario_a)}`, {
         method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
@@ -465,6 +466,57 @@ A diferencia de un perfil auto-reportado, esto es evidencia real de cómo cada p
 
 MUY IMPORTANTE -- NO INVENTES: una sola cita casi nunca da para llenar todo. Si un campo no tiene información real y observable en esta charla puntual, su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Es preferible un campo en null a uno con contenido inventado.`;
 
+// Resumen objetivo de la cita en si (distinto del refinamiento del
+// debriefing, que es autopercepcion de cada persona, y de
+// insights_debriefing_a/b, que es perfil vincular por persona) -- pensado
+// para que la administradora entienda rapido que paso en una cita puntual
+// sin tener que leer todo el chat. Se genera una sola vez, al cerrarse la
+// cita (ver responderCierre), y queda cacheado en citas.resumen_ia.
+const RESUMEN_CITA_PROMPT = `Sos un sistema de análisis para el equipo de Soul (una plataforma de vínculos basada en coaching ontológico). Vas a leer la transcripción real de una cita virtual entre dos personas que hicieron match (marcadas como "A" y "B"; los mensajes de "Soul" son intervenciones de una IA anfitriona que a veces interviene). Esto lo va a leer la administradora de la plataforma, no ninguna de las dos personas -- podés ser directo y objetivo, no hace falta el tono cálido/interpretativo que usa Soul con las personas.
+
+Armá un resumen objetivo y neutro de la cita. Nunca uses lenguaje que suene a juicio o descarte (nunca "rechazo", "fracasó", etc. -- si la cita fue incómoda o corta, describilo neutral, ej. "la conversación no profundizó" en vez de "no hubo química").
+
+Respondé ÚNICAMENTE con JSON válido sin backticks:
+{"resumen":"2-4 frases narrativas y objetivas de qué pasó en la cita","temas_principales":["tema1","tema2"],"tono_general":"frase breve, ej. cálido y fluido desde el inicio","nivel_reciprocidad":"frase breve sobre el balance de participación entre las dos personas, ej. equilibrado, o A llevó la mayor parte de la conversación","senales_de_tension":null}
+
+Si la charla fue muy corta y no da para una lectura real, decilo así en "resumen" (ej. "La charla fue muy breve, no da para más lectura que eso") y dejá "temas_principales" como array vacío y "senales_de_tension" en null -- nunca inventes contenido para llenar el JSON.`;
+
+// Se llama con await desde responderCierre, aunque agregue unos segundos a
+// esa respuesta -- un "fire and forget" real (sin esperar la promesa) no es
+// confiable en un entorno serverless, el contexto de ejecucion no sigue
+// vivo garantizado despues de responder y la llamada puede cortarse antes
+// de terminar (mismo motivo ya documentado en avisarSiDesconectado, mas
+// arriba en este archivo). Cualquier fallo queda solo logueado, nunca
+// tira error hacia el que esta cerrando la cita.
+async function generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, match) {
+  try {
+    const msgsRes = await fetch(
+      `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaId)}&tipo=eq.texto&order=created_at.asc`,
+      { headers }
+    );
+    const msgs = msgsRes.ok ? await msgsRes.json() : [];
+    const transcripto = msgs.map(m => {
+      const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
+      return quien + ': ' + m.contenido;
+    }).join('\n');
+    if (!transcripto) return;
+
+    const { json } = await llamarClaudeJSON({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      system: RESUMEN_CITA_PROMPT,
+      messages: [{ role: 'user', content: transcripto }]
+    });
+    await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ resumen_ia: json })
+    });
+  } catch (e) {
+    console.error('Error generando resumen de cita:', e);
+  }
+}
+
 // Mensaje de apertura del debriefing -- ya NO es una devolucion inmediata
 // (eso ahora pasa solo al final, ver CIERRE_REFLEXION_PROMPT). Arranca la
 // secuencia guiada de preguntas: registro de la experiencia (categoria 1).
@@ -524,47 +576,47 @@ async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioI
 // vez por match, cacheadas en matches.insights_debriefing_a/b) -- sigue
 // alimentando el algoritmo de compatibilidad con evidencia real de como se
 // vincula cada persona en la practica, aparte de lo que se recolecta en la
-// conversacion guiada del debriefing. Se dispara "fire and forget" (no
-// bloquea el primer mensaje del debriefing, que ahora es una pregunta fija
-// y no depende de esto) y cualquier fallo queda solo logueado.
-function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId) {
+// conversacion guiada del debriefing. Se llama con await (agrega unos
+// segundos al primer mensaje del debriefing) porque un "fire and forget"
+// real no es confiable en un entorno serverless -- mismo motivo que
+// generarResumenCitaEnSegundoPlano, mas arriba. Cualquier fallo queda solo
+// logueado.
+async function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId) {
   if (match.insights_debriefing_a || match.insights_debriefing_b) return;
-  (async () => {
-    try {
-      const citaRes = await fetch(
-        `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
-        { headers }
-      );
-      const citasCerradas = citaRes.ok ? await citaRes.json() : [];
-      const citaCerrada = citasCerradas[0];
-      if (!citaCerrada) return;
+  try {
+    const citaRes = await fetch(
+      `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(matchId)}&estado=eq.cerrada&order=created_at.desc&limit=1`,
+      { headers }
+    );
+    const citasCerradas = citaRes.ok ? await citaRes.json() : [];
+    const citaCerrada = citasCerradas[0];
+    if (!citaCerrada) return;
 
-      const msgsRes = await fetch(
-        `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
-        { headers }
-      );
-      const msgs = msgsRes.ok ? await msgsRes.json() : [];
-      const transcripto = msgs.map(m => {
-        const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
-        return quien + ': ' + m.contenido;
-      }).join('\n');
-      if (!transcripto) return;
+    const msgsRes = await fetch(
+      `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(citaCerrada.id)}&tipo=eq.texto&order=created_at.asc`,
+      { headers }
+    );
+    const msgs = msgsRes.ok ? await msgsRes.json() : [];
+    const transcripto = msgs.map(m => {
+      const quien = m.usuario_id === null ? 'Soul' : (m.usuario_id === match.usuario_a ? 'A' : 'B');
+      return quien + ': ' + m.contenido;
+    }).join('\n');
+    if (!transcripto) return;
 
-      const { json } = await llamarClaudeJSON({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1200,
-        system: EXTRACT_PROMPT_CITA,
-        messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
-      });
-      await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
-        method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-        body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
-      });
-    } catch (e) {
-      console.error('Error extrayendo insights de la cita en segundo plano:', e);
-    }
-  })();
+    const { json } = await llamarClaudeJSON({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1200,
+      system: EXTRACT_PROMPT_CITA,
+      messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
+    });
+    await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
+    });
+  } catch (e) {
+    console.error('Error extrayendo insights de la cita:', e);
+  }
 }
 
 // Primera vez que esta persona abre el debriefing de este match: Soul
@@ -574,7 +626,7 @@ function extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId)
 // fallo acá cae en un array vacio -- el cliente ya tiene su propio saludo
 // generico de respaldo si el historial llega vacío.
 async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, matchId, soyA, otraPersonaNombre) {
-  extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId);
+  await extraerInsightsCitaEnSegundoPlano(supabaseUrl, headers, match, matchId);
   try {
     const data = await llamarClaude({
       model: 'claude-sonnet-4-6',

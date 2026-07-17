@@ -461,6 +461,15 @@ function renderHojaDeVida(data){
     html+='<div class="match-scores"><div><div class="match-score">'+esc(m.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(m.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
     html+=campoHtml('Estado',ESTADO_LEGIBLE[m.estado]||m.estado);
     if(m.cita)html+=campoHtml('Estado de la cita',CITA_ESTADO_LEGIBLE_ADMIN[m.cita.estado]||m.cita.estado);
+    if(m.cita&&m.cita.resumen_ia){
+      var r=m.cita.resumen_ia;
+      html+='<p class="campo-grupo-titulo" style="margin-top:.6rem">Resumen de la cita (IA)</p>';
+      html+=campoHtml('Qué pasó',r.resumen);
+      html+=campoHtml('Tono general',r.tono_general);
+      html+=campoHtml('Reciprocidad',r.nivel_reciprocidad);
+      if(r.temas_principales&&r.temas_principales.length)html+=campoHtml('Temas principales',r.temas_principales);
+      if(r.senales_de_tension)html+=campoHtml('Señales de tensión',r.senales_de_tension);
+    }
     html+=campoHtml('Activado por',m.activado_por);
     if(m.eleccion_usuario_a||m.eleccion_usuario_b){
       html+=campoHtml('Elección de '+esc(data.usuario.nombre||'esta persona'),eleccionLegible(m.usuario_a===data.usuario.id?m.eleccion_usuario_a:m.eleccion_usuario_b));
