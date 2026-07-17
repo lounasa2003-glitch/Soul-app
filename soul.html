@@ -2307,10 +2307,20 @@ function cerrarSesion(){
 // ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──
 var reflexionHistory=[];
 var reflexionMatchIdActual=null;
+var reflexionIntercambios=0;
+var reflexionCerrada=false;
+// Mismo espiritu que el tope de modulos (UMBRAL_MODO_CIERRE/
+// TOPE_MENSAJES_POR_MODULO) pero mas corto -- esto es pensar UNA cita
+// puntual, no un modulo entero, y no puede quedar abierto para siempre
+// gastando tokens de a un mensaje por vez.
+var UMBRAL_CIERRE_REFLEXION=8;
+var TOPE_MENSAJES_REFLEXION=12;
 
 function abrirReflexionDesdeM(matchId){
   reflexionMatchIdActual=matchId;
   reflexionHistory=[];
+  reflexionIntercambios=0;
+  reflexionCerrada=false;
   document.getElementById('reflexionArea').innerHTML='';
   ir('ReflexionCita');
   initReflexionCita();
@@ -2320,15 +2330,21 @@ function volverDeReflexion(){
 }
 
 function buildReflexionPrompt(ctx){
-  var partes=[`Sos Soul. Esta es una conversación privada -- la persona con la que hablás la tuvo una cita con ${ctx.otraPersonaNombre||'la otra persona'}, y quiere pensarla con vos. Esta charla nunca la ve la otra persona del match, es un espacio solo de ella. No apures a ninguna conclusión ni dés un veredicto sobre si "conviene" seguir o no -- ayudá a que ella misma vea con más claridad qué sintió, qué le gustó, qué le costó. Mensajes cortos, cálidos, sin markdown, sin listas.`];
+  var partes=[`Sos Soul. Esta es una conversación privada -- la persona con la que hablás tuvo una cita con ${ctx.otraPersonaNombre||'la otra persona'}, y quiere pensarla con vos. Esta charla nunca la ve la otra persona del match, es un espacio solo de ella. No apures a ninguna conclusión ni dés un veredicto sobre si "conviene" seguir o no -- ayudá a que ella misma vea con más claridad qué sintió, qué le gustó, qué le costó.`];
+  partes.push('En algún momento de esta charla (sin forzarlo, cuando fluya natural, nunca como un formulario) te interesa que queden tocadas estas tres cosas: qué le gustó de esta persona, qué sintió que no encajaba, y qué aprendió sobre lo que está buscando en un vínculo a partir de esta experiencia puntual.');
+  partes.push('Si en algún momento se asoma una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino, ej. "si me muestro así me van a lastimar", "siempre termino siendo quien más pone"), no la nombres como diagnóstico -- reflejala con delicadeza, como una pregunta abierta, dejando que ella misma la reconozca o la corrija.');
+  if(ctx.modoCierre)partes.push('La conversación ya lleva bastante -- si sentís que ya se dijo lo importante, empezá a cerrar con calidez en los próximos mensajes, sin cortar abrupto.');
   if(ctx.mensajeDupla)partes.push('Contexto del match (lo que Soul ya vio en los dos perfiles): '+ctx.mensajeDupla);
   if(ctx.fortalezas&&ctx.fortalezas.length)partes.push('Fortalezas detectadas de la pareja: '+ctx.fortalezas.join(' / '));
   if(ctx.desafio)partes.push('Desafío detectado: '+ctx.desafio);
+  partes.push('Mensajes cortos, cálidos, sin markdown, sin listas.');
   return partes.join('\n\n');
 }
 
 async function initReflexionCita(){
   document.getElementById('reflexionIn').onkeydown=function(e){if(e.key==='Enter')enviarReflexion()};
+  document.getElementById('reflexionIn').style.display='';
+  document.getElementById('reflexionSendBtn').style.display='';
   document.getElementById('reflexionTitulo').textContent='Pensando en tu cita';
   try{
     var res=await fetchConSesion(function(){
@@ -2342,6 +2358,8 @@ async function initReflexionCita(){
     window.reflexionContexto=data;
     if(data.otraPersonaNombre)document.getElementById('reflexionTitulo').textContent='Pensando en tu cita con '+data.otraPersonaNombre;
     reflexionHistory=data.historial||[];
+    reflexionIntercambios=reflexionHistory.filter(function(m){return m.role==='user'}).length;
+    reflexionCerrada=!!data.cerrada;
     var area=document.getElementById('reflexionArea');
     area.innerHTML='';
     reflexionHistory.forEach(function(m){
@@ -2356,10 +2374,21 @@ async function initReflexionCita(){
       reflexionHistory.push({role:'assistant',content:saludo});
       guardarReflexionHistorial();
     }
+    if(reflexionCerrada)cerrarConversacionReflexion();
     scrollAlFondo('reflexionArea');
   }catch(e){
     document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.</p>';
   }
+}
+function cerrarConversacionReflexion(){
+  reflexionCerrada=true;
+  document.getElementById('reflexionIn').style.display='none';
+  document.getElementById('reflexionSendBtn').style.display='none';
+  var nota=document.createElement('p');
+  nota.style.cssText='text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;margin-top:.8rem';
+  nota.textContent='Esta conversación se cerró acá.';
+  document.getElementById('reflexionArea').appendChild(nota);
+  scrollAlFondo('reflexionArea');
 }
 function addReflexionMsg(tipo,txt){
   var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
@@ -2373,34 +2402,60 @@ function guardarReflexionHistorial(){
   }).catch(function(){});
 }
 async function enviarReflexion(){
+  if(reflexionCerrada)return;
   var inp=document.getElementById('reflexionIn');
   var txt=inp.value.trim();if(!txt)return;
   inp.value='';
   document.getElementById('reflexionSendBtn').disabled=true;
   addReflexionMsg('user',txt);
   reflexionHistory.push({role:'user',content:txt});
+  reflexionIntercambios++;
   var typing=document.createElement('div');
   typing.className='msg soul typing';typing.id='reflexionTyping';
   typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
   document.getElementById('reflexionArea').appendChild(typing);
   scrollAlFondo('reflexionArea');
+
+  // Tope duro: en vez de otra vuelta de chat libre, una unica llamada que
+  // cierra la charla (extrae afinado + posible creencia limitante y devuelve
+  // el mensaje de cierre) -- asi esto nunca queda abierto para siempre.
+  if(reflexionIntercambios>=TOPE_MENSAJES_REFLEXION){
+    try{
+      var resCierre=await fetchConSesion(function(){
+        return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrarReflexion',matchId:reflexionMatchIdActual,historial:reflexionHistory})});
+      });
+      var dataCierre=await resCierre.json();
+      var t=document.getElementById('reflexionTyping');if(t)t.remove();
+      var mensaje=dataCierre.mensajeCierre||'Gracias por pensar esto conmigo.';
+      addReflexionMsg('soul',mensaje);
+      reflexionHistory.push({role:'assistant',content:mensaje});
+    }catch(e){
+      var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
+      addReflexionMsg('soul','Gracias por pensar esto conmigo.');
+    }
+    cerrarConversacionReflexion();
+    document.getElementById('reflexionSendBtn').disabled=false;
+    return;
+  }
+
   try{
     var soulEl=null;
-    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory},function(parcial){
+    var ctxConCierre=Object.assign({},window.reflexionContexto||{},{modoCierre:reflexionIntercambios>=UMBRAL_CIERRE_REFLEXION});
+    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(ctxConCierre),messages:reflexionHistory},function(parcial){
       if(!soulEl){
-        var t=document.getElementById('reflexionTyping');if(t)t.remove();
+        var t3=document.getElementById('reflexionTyping');if(t3)t3.remove();
         soulEl=addReflexionMsg('soul',parcial);
       }else{
         soulEl.textContent=parcial;scrollAlFondo('reflexionArea');
       }
     });
     var reply=limpiarMarkdown(crudo);
-    var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
+    var t4=document.getElementById('reflexionTyping');if(t4)t4.remove();
     if(soulEl)soulEl.textContent=reply;else addReflexionMsg('soul',reply);
     reflexionHistory.push({role:'assistant',content:reply});
     guardarReflexionHistorial();
   }catch(e){
-    var t3=document.getElementById('reflexionTyping');if(t3)t3.remove();
+    var t5=document.getElementById('reflexionTyping');if(t5)t5.remove();
     addReflexionMsg('soul',e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?');
   }finally{
     document.getElementById('reflexionSendBtn').disabled=false;

@@ -477,7 +477,30 @@ Regla central, no negociable: nunca presentes esto como diagnóstico ni como ver
 
 Más adelante en esta misma conversación (no necesariamente en este primer mensaje) te va a interesar explorar con ella qué le gustó de esta persona, qué sintió que no encajaba, y qué aprendió sobre lo que está buscando -- pero no lo preguntes todo de una, dejá que la charla fluya de a poco.
 
+Si en algún momento se asoma una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino, ej. "si me muestro así me van a lastimar", "siempre termino siendo quien más pone"), no la nombres como diagnóstico -- reflejala con delicadeza, como una pregunta abierta, dejando que ella misma la reconozca o la corrija.
+
 Mensajes cortos, cálidos, sin markdown, sin listas, nunca como un formulario.`;
+
+// Cierre de la conversacion de debriefing -- se dispara al llegar al tope de
+// mensajes (ver TOPE_MENSAJES_REFLEXION en soul.html) para que esto no siga
+// para siempre gastando tokens. Hace dos cosas en una sola llamada: extrae
+// lo que se pudo juntar de las preguntas de afinado (para mejorar matching a
+// futuro) y una posible creencia limitante propia -- si encaja con alguno de
+// los modulos ya existentes, lo sugiere de forma natural en el mensaje de
+// cierre (nunca como obligacion). Todo lo que no se toco de forma real y
+// concreta en la charla queda en null, nunca inventado.
+const CIERRE_REFLEXION_PROMPT = `Sos Soul. Esta conversación privada de debriefing sobre una cita real llegó a su límite de tiempo. Tu tarea ahora es doble:
+
+1. Leé toda la conversación y extraé, SOLO si se tocó de forma real y concreta (si no, dejalo en null -- nunca inventes ni fuerces una lectura):
+- que_le_gusto: qué dijo que le gustó de esta persona.
+- que_no_encajo: qué sintió que no encajaba o le costó.
+- que_aprendio: qué aprendió sobre lo que está buscando en un vínculo, a partir de esta experiencia puntual.
+- creencia_limitante: si en algún momento se asomó una creencia limitante propia sobre los vínculos (un supuesto rígido que se pone en el camino), describila en una frase corta y neutra. Si no apareció nada así de concreto, null.
+- modulo_sugerido: SOLO si hay una creencia_limitante clara y encaja con uno de estos cuatro, el nombre EXACTO (nunca inventes otro nombre ni otro texto): "Apertura al compromiso" (tensión entre libertad y compromiso), "Autonomía emocional" (depender del vínculo para el propio bienestar), "Poder personal" (verse como receptor pasivo de lo que pasa en los vínculos, no como parte activa), "Coherencia interna" (distancia entre lo que dice que valora y cómo actúa). Si no hay creencia limitante clara o no calza con ninguno, null.
+
+2. Escribí un mensaje de cierre cálido (2-4 frases), agradeciendo haber pensado esto juntos. Si hay modulo_sugerido, mencioná la invitación a retomar ese trabajo de forma natural y sin presión, en tono interpretativo ("me pareció que podría servirte pensar un poco más..."), sin decir la palabra "módulo" ni sonar clínico o a diagnóstico.
+
+Respondé ÚNICAMENTE con JSON válido sin backticks: {"que_le_gusto":null,"que_no_encajo":null,"que_aprendio":null,"creencia_limitante":null,"modulo_sugerido":null,"mensaje_cierre":""}`;
 
 async function guardarHistorialReflexion(supabaseUrl, headers, matchId, usuarioId, historial) {
   await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=match_id,usuario_id`, {
@@ -569,7 +592,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ma
 async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   const { reflexionMatchId } = req.query;
   const matchRes = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio,insights_debriefing_a,insights_debriefing_b&id=eq.${encodeURIComponent(reflexionMatchId)}`,
+    `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio,insights_debriefing_a,insights_debriefing_b,refinamiento_a,refinamiento_b&id=eq.${encodeURIComponent(reflexionMatchId)}`,
     { headers }
   );
   const matches = matchRes.ok ? await matchRes.json() : [];
@@ -599,8 +622,66 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
     otraPersonaNombre,
     mensajeDupla: match.mensaje_dupla || null,
     fortalezas: match.fortalezas || null,
-    desafio: match.desafio || null
+    desafio: match.desafio || null,
+    // Si ya se cerro (ver cerrarReflexion), el cliente muestra el
+    // historial pero no deja seguir escribiendo -- evita otra ronda de
+    // extraccion sobre una conversacion que ya se sintetizo.
+    cerrada: !!(soyA ? match.refinamiento_a : match.refinamiento_b)
   });
+}
+
+// Cierre de la conversacion de debriefing al llegar al tope de mensajes
+// (TOPE_MENSAJES_REFLEXION en soul.html) -- una sola llamada mas a Claude,
+// no una charla sin techo: extrae lo que se pudo juntar de afinado de
+// matching + una posible creencia limitante con su modulo sugerido, y
+// devuelve el mensaje de cierre para mostrar como ultimo mensaje de Soul.
+async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
+  const { matchId, historial } = req.body;
+  if (!matchId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matches = matchRes.ok ? await matchRes.json() : [];
+  const match = matches[0];
+  if (!match) return res.status(404).json({ error: 'Match no encontrado' });
+  if (match.usuario_a !== usuario.usuarioId && match.usuario_b !== usuario.usuarioId) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+  const soyA = match.usuario_a === usuario.usuarioId;
+
+  const MODULOS_VALIDOS = ['Apertura al compromiso', 'Autonomía emocional', 'Poder personal', 'Coherencia interna'];
+  const transcripto = historial.map(m => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
+  let resultado = { que_le_gusto: null, que_no_encajo: null, que_aprendio: null, creencia_limitante: null, modulo_sugerido: null, mensaje_cierre: null };
+  try {
+    const { json } = await llamarClaudeJSON({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 500,
+      system: CIERRE_REFLEXION_PROMPT,
+      messages: [{ role: 'user', content: transcripto }]
+    });
+    resultado = json;
+    if (!MODULOS_VALIDOS.includes(resultado.modulo_sugerido)) resultado.modulo_sugerido = null;
+  } catch (e) {
+    console.error('Error cerrando reflexión de debriefing:', e);
+  }
+
+  const mensajeCierre = resultado.mensaje_cierre || 'Gracias por pensar esto conmigo. Quedo cerca para cuando quieras seguir hablando de esto.';
+
+  const refinamiento = {
+    que_le_gusto: resultado.que_le_gusto || null,
+    que_no_encajo: resultado.que_no_encajo || null,
+    que_aprendio: resultado.que_aprendio || null,
+    creencia_limitante: resultado.creencia_limitante || null,
+    modulo_sugerido: resultado.modulo_sugerido || null
+  };
+  await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ [soyA ? 'refinamiento_a' : 'refinamiento_b']: refinamiento })
+  });
+
+  const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
+  await guardarHistorialReflexion(supabaseUrl, headers, matchId, usuario.usuarioId, historialFinal);
+
+  return res.status(200).json({ mensajeCierre });
 }
 
 async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {
@@ -663,6 +744,7 @@ export default async function handler(req, res) {
       if (accion === 'elegirDebriefing') return await elegirDebriefing(req, res, supabaseUrl, headers, usuario);
       if (accion === 'checkinEmocional') return await checkinEmocional(req, res, supabaseUrl, headers, usuario);
       if (accion === 'guardarReflexion') return await guardarReflexion(req, res, supabaseUrl, headers, usuario);
+      if (accion === 'cerrarReflexion') return await cerrarReflexion(req, res, supabaseUrl, headers, usuario);
       return res.status(400).json({ error: 'Acción no válida' });
     }
     return res.status(405).json({ error: 'Method not allowed' });

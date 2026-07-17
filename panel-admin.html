@@ -470,6 +470,20 @@ function renderHojaDeVida(data){
     if(m.mensaje_dupla)html+=campoHtml('Mensaje para la dupla',m.mensaje_dupla);
     if(m.fortalezas&&m.fortalezas.length)html+=campoHtml('Fortalezas',m.fortalezas);
     if(m.desafio)html+=campoHtml('Desafío',m.desafio);
+    // Lo que se recolecto en el debriefing conversacional -- por lado, solo
+    // existe una vez que esa persona cerro su propia conversacion de
+    // reflexion (ver cerrarReflexion en api/citas.js).
+    var refinamientoPropio=m.usuario_a===data.usuario.id?m.refinamiento_a:m.refinamiento_b;
+    if(refinamientoPropio){
+      html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Debriefing -- lo que compartió '+esc(data.usuario.nombre||'esta persona')+'</p>';
+      html+=campoHtml('Qué le gustó',refinamientoPropio.que_le_gusto);
+      html+=campoHtml('Qué no encajó',refinamientoPropio.que_no_encajo);
+      html+=campoHtml('Qué aprendió que busca',refinamientoPropio.que_aprendio);
+      if(refinamientoPropio.creencia_limitante){
+        html+=campoHtml('Posible creencia limitante',refinamientoPropio.creencia_limitante);
+        html+=campoHtml('Módulo sugerido',refinamientoPropio.modulo_sugerido||'ninguno con claridad suficiente');
+      }
+    }
     if(m.analisis_por_variable){
       var av=m.analisis_por_variable;
       html+='<p class="campo-grupo-titulo" style="margin-top:.8rem">Análisis por variable</p>';
