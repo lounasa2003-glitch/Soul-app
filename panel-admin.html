@@ -113,12 +113,14 @@ a{color:inherit}
         <button class="subtab" onclick="mostrarSubtab('modulos',this)">Módulos</button>
         <button class="subtab" onclick="mostrarSubtab('conversacion',this)">Conversación con Soul</button>
         <button class="subtab" onclick="mostrarSubtab('matches',this)">Matches</button>
+        <button class="subtab" onclick="mostrarSubtab('seguridad',this)">Seguridad</button>
       </div>
       <div id="subtabDatos"></div>
       <div id="subtabPerfil" class="oculto"></div>
       <div id="subtabModulos" class="oculto"></div>
       <div id="subtabConversacion" class="oculto"></div>
       <div id="subtabMatches" class="oculto"></div>
+      <div id="subtabSeguridad" class="oculto"></div>
     </div>
   </div>
 </div>
@@ -256,7 +258,7 @@ async function abrirHojaDeVida(id){
 function mostrarSubtab(nombre,el){
   document.querySelectorAll('.subtab').forEach(function(b){b.classList.remove('activo')});
   el.classList.add('activo');
-  ['datos','perfil','modulos','conversacion','matches'].forEach(function(n){
+  ['datos','perfil','modulos','conversacion','matches','seguridad'].forEach(function(n){
     document.getElementById('subtab'+n.charAt(0).toUpperCase()+n.slice(1)).classList.toggle('oculto',n!==nombre);
   });
 }
@@ -562,6 +564,20 @@ function renderHojaDeVida(data){
   htmlMatches+='<div id="comparadorResultado"></div>';
   htmlMatches+='<div id="rankingResultado" style="margin-top:1rem;display:none"></div></div>';
   document.getElementById('subtabMatches').innerHTML=htmlMatches;
+
+  // ── SEGURIDAD (intentos de fuga/inyección del system prompt) ──
+  var intentosFuga=data.intentosFuga||[];
+  var htmlSeguridad='';
+  if(intentosFuga.length===0){
+    htmlSeguridad='<p class="cargando">Sin intentos detectados.</p>';
+  }else{
+    htmlSeguridad+='<p style="font-size:.85rem;color:#5a5058;margin-bottom:.8rem">Mensajes que el sistema detectó como intento de ver/alterar las instrucciones de Soul, y que respondió sin consultar al modelo.</p>';
+    intentosFuga.forEach(function(it){
+      var fecha=new Date(it.created_at).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      htmlSeguridad+='<div class="campo"><div class="campo-nombre">'+esc(fecha)+(it.endpoint?' — '+esc(it.endpoint):'')+'</div><div class="campo-valor">'+esc(it.mensaje)+'</div></div>';
+    });
+  }
+  document.getElementById('subtabSeguridad').innerHTML=htmlSeguridad;
 }
 
 function toggleTranscripto(cual){

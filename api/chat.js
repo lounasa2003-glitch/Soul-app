@@ -2,6 +2,7 @@ import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude, systemConCache } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
+import { detectarIntentoDeFuga, RESPUESTA_INTENTO_FUGA, registrarIntentoFuga } from '../lib/seguridadPrompt.js';
 
 const MODELO_FIJO = 'claude-sonnet-4-6';
 // Probando este modelo mas chico/rapido solo para la charla informal
@@ -73,6 +74,28 @@ export default async function handler(req, res) {
           body: JSON.stringify({ modulo_fase: moduloFase })
         });
       }
+    }
+
+    // Filtro server-side de intentos de fuga/inyeccion -- corta ANTES de
+    // gastar un llamado al modelo si el ultimo mensaje de la persona matchea
+    // un patron comun (ver lib/seguridadPrompt.js). Complementa el bloque de
+    // blindaje que ya esta al final de todos los prompts conversacionales,
+    // no lo reemplaza -- esto es lo que evita ademas gastar tokens en cada
+    // intento evidente. Se revisa solo el ultimo mensaje de la persona.
+    const ultimoMensaje = Array.isArray(messages) ? [...messages].reverse().find((m) => m.role === 'user') : null;
+    const textoUltimoMensaje = ultimoMensaje && typeof ultimoMensaje.content === 'string'
+      ? ultimoMensaje.content
+      : (ultimoMensaje && Array.isArray(ultimoMensaje.content) ? ultimoMensaje.content.map((b) => b.text || '').join(' ') : '');
+
+    if (detectarIntentoDeFuga(textoUltimoMensaje)) {
+      await registrarIntentoFuga(usuario.usuarioId, textoUltimoMensaje, contexto || 'chat');
+      if (req.body.stream) {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.write(RESPUESTA_INTENTO_FUGA);
+        res.end();
+        return;
+      }
+      return res.status(200).json({ content: [{ type: 'text', text: RESPUESTA_INTENTO_FUGA }], usage: { input_tokens: 0, output_tokens: 0 } });
     }
 
     // El chat principal pide streaming (stream:true en el body) para que la

@@ -53,17 +53,19 @@ export default async function handler(req, res) {
     }
 
     // ── Hoja de vida completa ──
-    const [usuarioRes, perfilRes, convRes, matchesRes] = await Promise.all([
+    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?select=*&id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/conversaciones?select=*&usuario_id=eq.${idEnc}`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/intentos_fuga_prompt?select=*&usuario_id=eq.${idEnc}&order=created_at.desc`, { headers })
     ]);
 
     const usuarios = usuarioRes.ok ? await usuarioRes.json() : [];
     const perfiles = perfilRes.ok ? await perfilRes.json() : [];
     const conversaciones = convRes.ok ? await convRes.json() : [];
     const matches = matchesRes.ok ? await matchesRes.json() : [];
+    const intentosFuga = intentosFugaRes.ok ? await intentosFugaRes.json() : [];
 
     if (!usuarios[0]) {
       return res.status(404).json({ error: 'No encontrada' });
@@ -128,7 +130,8 @@ export default async function handler(req, res) {
       usuario: usuarios[0],
       perfil: perfiles.length > 0 ? perfiles[perfiles.length - 1] : null,
       conversacion: conversaciones.length > 0 ? conversaciones[conversaciones.length - 1] : null,
-      matches: matchesConNombre
+      matches: matchesConNombre,
+      intentosFuga
     });
   } catch (error) {
     console.error('Error en /api/admin/personas:', error);
