@@ -1776,6 +1776,18 @@ window.addEventListener('DOMContentLoaded',function(){
   }
 });
 
+// La sesion no se persiste en ningun lado (localStorage/sessionStorage) --
+// vive solo en variables JS de la carga actual. Pero el navegador puede
+// restaurar la pagina desde el bfcache (back-forward cache) al volver a
+// entrar -- ej. despues de "atras" o al reabrir una pestana suspendida --
+// mostrando por un instante el DOM tal cual quedo la ultima vez (con la
+// pantalla que estuviera activa entonces, no el login) antes de asentarse.
+// Forzar una recarga real cuando eso pasa evita ese parpadeo con contenido
+// de otra pantalla.
+window.addEventListener('pageshow',function(e){
+  if(e.persisted)location.reload();
+});
+
 async function confirmarNuevaPassword(){
   var pass=document.getElementById('nuevaPassInput').value;
   var errEl=document.getElementById('nuevaPassErr');
