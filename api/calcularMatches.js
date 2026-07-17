@@ -52,6 +52,21 @@ export default async function handler(req, res) {
     );
     const otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
 
+    // Evita generar un match duplicado con alguien con quien ya existe uno
+    // (en cualquier estado) -- sin este chequeo, reintentar el pipeline
+    // (ej. el boton "Reintentar" tras un error en un paso posterior) podia
+    // volver a correr calcularMatches() y crear una fila nueva con la misma
+    // persona, gastando Claude de nuevo y ensuciando el listado de matches.
+    const yaMatcheadosRes = await fetch(
+      `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuarioId)},usuario_b.eq.${encodeURIComponent(usuarioId)})`,
+      { headers }
+    );
+    const yaMatcheados = yaMatcheadosRes.ok ? await yaMatcheadosRes.json() : [];
+    const idsYaMatcheados = new Set(
+      yaMatcheados.map((m) => (m.usuario_a === usuarioId ? m.usuario_b : m.usuario_a))
+    );
+    const otrosPerfilesSinMatch = otrosPerfiles.filter((p) => !idsYaMatcheados.has(p.usuario_id));
+
     let matchEncontrado = false;
     let matchData = null;
     // Este endpoint puede hacer varias llamadas a Claude (una por cada otro
@@ -59,7 +74,7 @@ export default async function handler(req, res) {
     // en vez de sumar una escritura a Supabase por cada comparacion.
     let totalInputTokens = 0, totalOutputTokens = 0;
 
-    for (const otro of otrosPerfiles) {
+    for (const otro of otrosPerfilesSinMatch) {
       const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
         max_tokens: 1200,
