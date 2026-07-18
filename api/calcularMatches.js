@@ -26,8 +26,8 @@ export default async function handler(req, res) {
     }
     const usuarioId = usuario.usuarioId;
 
-    const dentroDelLimite = await chequearLimite(usuario.email, 'calcularMatches', LIMITE_MATCHES, VENTANA_MATCHES_SEGUNDOS);
-    if (!dentroDelLimite) {
+    const limiteInfo = await chequearLimite(usuario.email, 'calcularMatches', LIMITE_MATCHES, VENTANA_MATCHES_SEGUNDOS);
+    if (!limiteInfo.permitido) {
       return res.status(429).json({
         error: 'limite_alcanzado',
         mensaje: 'Ya calculaste tus matches varias veces en poco tiempo. Probá de nuevo más tarde.'

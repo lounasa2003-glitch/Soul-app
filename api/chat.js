@@ -31,13 +31,19 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
 
-    const dentroDelLimite = await chequearLimite(usuario.email, 'chat', LIMITE_CHAT, VENTANA_CHAT_SEGUNDOS);
-    if (!dentroDelLimite) {
+    const limiteInfo = await chequearLimite(usuario.email, 'chat', LIMITE_CHAT, VENTANA_CHAT_SEGUNDOS);
+    if (!limiteInfo.permitido) {
       return res.status(429).json({
         error: 'limite_alcanzado',
-        mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.'
+        mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.',
+        segundosParaReset: limiteInfo.segundosParaReset
       });
     }
+    // Se manda como header (no como parte del body) porque el chat principal
+    // usa streaming -- el body en ese caso es texto plano progresivo, no JSON,
+    // asi que no hay forma de sumarle un campo ahi. El header lo pueden leer
+    // los dos caminos (streaming y no-streaming) de la misma forma.
+    res.setHeader('X-Limite-Restante', String(limiteInfo.restantes));
 
     const { max_tokens, system, messages, contexto, moduloFase } = req.body;
 

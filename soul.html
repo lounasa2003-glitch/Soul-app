@@ -689,6 +689,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <span onclick="pedirPausaChat()" style="margin-left:auto;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
     </div>
     <div class="chat-area" id="chatArea"></div>
+    <div id="chatAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
     <div class="chat-input-area">
       <input type="text" class="chat-in" id="chatIn" placeholder="Escribí lo que pensás...">
       <button class="send-btn" id="sendBtn" onclick="sendMsg()">→</button>
@@ -861,6 +862,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <div id="citaSugerenciaProfundizar" style="display:none;padding:.5rem 1.2rem;text-align:center">
       <span onclick="usarSugerenciaProfundizar()" style="color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer;border:1px solid rgba(201,168,76,.4);border-radius:12px;padding:.4rem .9rem">¿Quieren una pregunta para profundizar?</span>
     </div>
+    <div id="citaAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
     <div class="cita-input-area">
       <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en la cita...">
       <button class="send-btn" id="citaSendBtn" onclick="sendCita()">→</button>
@@ -1559,6 +1561,36 @@ async function guardarTabla(tabla,datos,filtro){
   return res.json();
 }
 
+// Umbral a partir del cual se avisa "te quedan N mensajes" antes de llegar
+// al límite -- mismo criterio que usa Claude.ai (avisar cuando se acerca,
+// no todo el tiempo). Se comparte entre el chat principal y la cita.
+var UMBRAL_AVISO_LIMITE=5;
+
+function mensajeLimiteAlcanzado(segundosParaReset){
+  var min=Math.ceil((segundosParaReset||60)/60);
+  return 'Estás escribiendo muy rápido. Podés seguir en '+(min<=1?'menos de un minuto':min+' minutos')+'.';
+}
+
+function mostrarAvisoLimiteTexto(elId,texto){
+  var el=document.getElementById(elId);
+  if(!el)return;
+  el.textContent=texto;
+  el.style.display='block';
+}
+
+// Solo avisa cuando ya queda poco (mismo criterio que Claude.ai) -- con
+// limites de decenas de mensajes cada pocos minutos, mostrar el contador
+// todo el tiempo seria ruido para una conversacion real.
+function actualizarAvisoLimiteRestante(elId,restante){
+  var el=document.getElementById(elId);
+  if(!el)return;
+  if(typeof restante==='number'&&!isNaN(restante)&&restante>=0&&restante<=UMBRAL_AVISO_LIMITE){
+    mostrarAvisoLimiteTexto(elId,'Te quedan '+restante+' mensaje'+(restante===1?'':'s')+' por unos minutos.');
+  }else{
+    el.style.display='none';
+  }
+}
+
 async function llamarChat(datos){
   var res=await fetchConSesion(function(){
     return fetch('/api/chat',{
@@ -1569,10 +1601,11 @@ async function llamarChat(datos){
   });
   if(res.status===429){
     var err=await res.json();
-    var e=new Error(err.mensaje||'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.');
+    var e=new Error(mensajeLimiteAlcanzado(err.segundosParaReset));
     e.rateLimited=true;
     throw e;
   }
+  window.limiteChatRestante=parseInt(res.headers.get('X-Limite-Restante'),10);
   return res.json();
 }
 
@@ -1590,13 +1623,14 @@ async function llamarChatStreaming(datos,onChunk){
   });
   if(res.status===429){
     var err=await res.json();
-    var e=new Error(err.mensaje||'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.');
+    var e=new Error(mensajeLimiteAlcanzado(err.segundosParaReset));
     e.rateLimited=true;
     throw e;
   }
   if(!res.ok){
     throw new Error('error_chat_streaming');
   }
+  window.limiteChatRestante=parseInt(res.headers.get('X-Limite-Restante'),10);
   var reader=res.body.getReader();
   var decoder=new TextDecoder();
   var texto='';
@@ -3029,6 +3063,7 @@ async function enviarAlChat(txt){
     hideTyping();
     if(soulEl)soulEl.textContent=reply;else addMsg('soul',reply);
     chatHistory.push({role:'assistant',content:reply});
+    actualizarAvisoLimiteRestante('chatAvisoLimite',window.limiteChatRestante);
 
     intercambiosDesdeGuardado++;
     if(intercambiosDesdeGuardado>=INTERCAMBIOS_AUTOSAVE){
@@ -3410,6 +3445,7 @@ function initCita(){
   citaUltimoCount=0;
   document.getElementById('consentimientoCita').style.display='none';
   document.getElementById('citaSugerenciaProfundizar').style.display='none';
+  document.getElementById('citaAvisoLimite').style.display='none';
   citaSugerenciaMostrada=false;
   citaConsentimientoRespondido=false;
   cargarCita();
@@ -3526,9 +3562,16 @@ async function sendCita(){
   var txt=inp.value.trim();if(!txt)return;
   inp.value='';
   try{
-    await fetchConSesion(function(){
+    var res=await fetchConSesion(function(){
       return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'texto',contenido:txt})});
     });
+    if(res.status===429){
+      var err=await res.json();
+      inp.value=txt; // no perder lo que ya habia escrito
+      mostrarAvisoLimiteTexto('citaAvisoLimite',mensajeLimiteAlcanzado(err.segundosParaReset));
+      return;
+    }
+    actualizarAvisoLimiteRestante('citaAvisoLimite',parseInt(res.headers.get('X-Limite-Restante'),10));
   }catch(e){}
   cargarCita();
 }
@@ -3541,9 +3584,15 @@ function toggleAyuda(){document.getElementById('ayudaOpts').classList.toggle('vi
 async function pedirAyudaPrivada(tipo){
   document.getElementById('ayudaOpts').classList.remove('vis');
   try{
-    await fetchConSesion(function(){
+    var res=await fetchConSesion(function(){
       return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'ayudaPrivada',citaId:window.citaActualId,tipoAyuda:tipo})});
     });
+    if(res.status===429){
+      var err=await res.json();
+      mostrarAvisoLimiteTexto('citaAvisoLimite',mensajeLimiteAlcanzado(err.segundosParaReset));
+      return;
+    }
+    actualizarAvisoLimiteRestante('citaAvisoLimite',parseInt(res.headers.get('X-Limite-Restante'),10));
   }catch(e){}
   cargarCita();
 }

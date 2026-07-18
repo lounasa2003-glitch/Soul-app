@@ -926,13 +926,19 @@ export default async function handler(req, res) {
       return await obtenerCita(req, res, supabaseUrl, headers, usuario);
     }
     if (req.method === 'POST') {
-      const dentroDelLimite = await chequearLimite(usuario.email, 'citas', LIMITE_CITA, VENTANA_CITA_SEGUNDOS);
-      if (!dentroDelLimite) {
+      const limiteInfo = await chequearLimite(usuario.email, 'citas', LIMITE_CITA, VENTANA_CITA_SEGUNDOS);
+      if (!limiteInfo.permitido) {
         return res.status(429).json({
           error: 'limite_alcanzado',
-          mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.'
+          mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.',
+          segundosParaReset: limiteInfo.segundosParaReset
         });
       }
+      // Header en vez de meterlo en el body -- este endpoint despacha a
+      // muchas funciones distintas segun 'accion', cada una arma su propio
+      // JSON de respuesta; el header lo pueden leer todas por igual sin
+      // tener que tocar cada handler.
+      res.setHeader('X-Limite-Restante', String(limiteInfo.restantes));
 
       const { accion } = req.body;
       if (accion === 'mensaje') return await enviarMensaje(req, res, supabaseUrl, headers, usuario);
