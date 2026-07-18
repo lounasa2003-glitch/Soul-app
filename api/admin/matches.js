@@ -9,8 +9,10 @@ import { notificarNuevoMatch } from '../../lib/email.js';
 // serverless por deploy, y el proyecto ya estaba por encima de eso. Se
 // distingue por el campo "accion" del body.
 
-const UMBRAL_COMPATIBILIDAD_HOY = 50;
-const UMBRAL_POTENCIAL = 65;
+// Mismo umbral que api/calcularMatches.js -- ver el comentario ahi sobre la
+// recalibracion de COMPARE_PROMPT (lib/comparePrompt.js).
+const UMBRAL_COMPATIBILIDAD_HOY = 60;
+const UMBRAL_POTENCIAL = 75;
 const CONCURRENCIA = 20;
 
 async function calcularRanking(req, res, supabaseUrl, headers) {

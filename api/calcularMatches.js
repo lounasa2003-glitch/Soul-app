@@ -89,7 +89,13 @@ export default async function handler(req, res) {
         totalOutputTokens += usage.output_tokens || 0;
       }
 
-      if (comp.compatibilidad_hoy >= 50 || comp.potencial_construccion >= 65) {
+      // Umbral acorde a la recalibracion de COMPARE_PROMPT (ver
+      // lib/comparePrompt.js): "alineacion real" empieza en 55-70 y
+      // "solida" en 70-85, asi que el corte se ubica adentro de esas
+      // bandas en vez del umbral viejo (50/65), que con el prompt anterior
+      // dejaba pasar casi cualquier par -- una persona real del piloto
+      // llego a tener 17 matches simultaneos con eso.
+      if (comp.compatibilidad_hoy >= 60 || comp.potencial_construccion >= 75) {
         const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
