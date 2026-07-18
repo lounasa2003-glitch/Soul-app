@@ -3,6 +3,7 @@ import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { notificarMensajeCita } from '../lib/email.js';
 import { EXTRACT_PROMPT } from './analisisExterno.js';
+import { chequearLimite } from '../lib/rateLimit.js';
 
 // Endpoint dedicado para la cita virtual asincronica -- mismo motivo que
 // api/matches.js: hace falta que usuario_a Y usuario_b del match puedan
@@ -15,6 +16,14 @@ import { EXTRACT_PROMPT } from './analisisExterno.js';
 // mensaje de una tanda mientras esta desconectado).
 const ACTIVO_MS = 2 * 60 * 1000;
 const COOLDOWN_EMAIL_MS = 20 * 60 * 1000;
+
+// A diferencia de /api/chat, este endpoint no tenia ningun limite -- tanto
+// 'mensaje' como 'ayudaPrivada' (esta ultima llama a Claude directo) se
+// podian disparar en loop sin freno. 40 cada 5 min alcanza de sobra para una
+// charla real (incluso rapida) entre dos personas y frena un loop
+// automatizado, mismo orden de magnitud que el limite de /api/chat (30/5min).
+const LIMITE_CITA = 40;
+const VENTANA_CITA_SEGUNDOS = 300;
 
 const PROMPT_BASE = `Sos Soul, presente en la cita virtual entre dos personas que hicieron match. Tu rol acá es de directora invisible: interviniste solo cuando hace falta, en mensajes cortos, cálidos, sin markdown ni listas, nunca como un bot de soporte. Nunca revelás que alguien te pidió algo -- lo que decís tiene que sonar como si fuera tu propia ocurrencia, participando naturalmente del momento.`;
 
@@ -917,6 +926,14 @@ export default async function handler(req, res) {
       return await obtenerCita(req, res, supabaseUrl, headers, usuario);
     }
     if (req.method === 'POST') {
+      const dentroDelLimite = await chequearLimite(usuario.email, 'citas', LIMITE_CITA, VENTANA_CITA_SEGUNDOS);
+      if (!dentroDelLimite) {
+        return res.status(429).json({
+          error: 'limite_alcanzado',
+          mensaje: 'Estás mandando mensajes muy rápido. Esperá un toque y volvé a intentar.'
+        });
+      }
+
       const { accion } = req.body;
       if (accion === 'mensaje') return await enviarMensaje(req, res, supabaseUrl, headers, usuario);
       if (accion === 'consentirAnalisis') return await consentirAnalisis(req, res, supabaseUrl, headers, usuario);
