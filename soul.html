@@ -2341,11 +2341,22 @@ async function mostrarMisMatches(){
 // "Eliminar" un match: deja de aparecer en la propia lista y la otra
 // persona no puede volver a escribir (queda como si nunca más respondiera,
 // sin un aviso explícito de bloqueo). No se puede deshacer desde acá.
-async function eliminarMatch(matchId,nombre){
+// Tras confirmar, se ofrece contar un motivo (opcional) -- ver
+// confirmarEliminarConMotivo() y el modal #modalReporte.
+function eliminarMatch(matchId,nombre){
   if(!confirm('¿Eliminar el match con '+nombre+'? No vas a poder volver a verlo ni retomarlo, y la otra persona ya no va a poder escribirte.'))return;
+  window.matchIdAReportar=matchId;
+  document.getElementById('modalReporte').style.display='flex';
+}
+
+async function confirmarEliminarConMotivo(motivo){
+  document.getElementById('modalReporte').style.display='none';
+  var matchId=window.matchIdAReportar;
+  window.matchIdAReportar=null;
+  if(!matchId)return;
   try{
     await fetchConSesion(function(){
-      return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'eliminarMatch',matchId:matchId})});
+      return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'eliminarMatch',matchId:matchId,motivo:motivo||undefined})});
     });
   }catch(e){}
   mostrarMisMatches();
@@ -3646,6 +3657,20 @@ function decidirSala(decision){
     <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1rem">Tu sesión expiró</p>
     <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.6;margin-bottom:1.5rem">Tranquilo/a — lo que ya charlaste está guardado. Solo hace falta que vuelvas a entrar para seguir.</p>
     <button class="btn-gold" onclick="location.reload()" style="width:100%">Volver a entrar →</button>
+  </div>
+</div>
+
+<div id="modalReporte" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem">
+  <div style="max-width:360px;text-align:center">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.2rem;color:#c9a84c;margin-bottom:.6rem">¿Querés contarnos por qué?</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.8rem;color:#9a8e96;line-height:1.6;margin-bottom:1.4rem">Es opcional, pero nos ayuda a cuidar la comunidad. El match ya quedó eliminado.</p>
+    <div style="display:flex;flex-direction:column;gap:.6rem">
+      <button onclick="confirmarEliminarConMotivo('conducta_inapropiada')" style="padding:.65rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Inter,sans-serif;font-size:.78rem;cursor:pointer">Conducta inapropiada o irrespetuosa</button>
+      <button onclick="confirmarEliminarConMotivo('contenido_ofensivo')" style="padding:.65rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Inter,sans-serif;font-size:.78rem;cursor:pointer">Contenido ofensivo o inseguro</button>
+      <button onclick="confirmarEliminarConMotivo('sospecha_identidad_falsa')" style="padding:.65rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Inter,sans-serif;font-size:.78rem;cursor:pointer">Sospecho que no es quien dice ser</button>
+      <button onclick="confirmarEliminarConMotivo('no_es_lo_que_buscaba')" style="padding:.65rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Inter,sans-serif;font-size:.78rem;cursor:pointer">Simplemente no es lo que buscaba</button>
+      <button onclick="confirmarEliminarConMotivo(null)" style="padding:.6rem 1rem;background:none;border:none;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer;margin-top:.3rem">Omitir</button>
+    </div>
   </div>
 </div>
 </body>

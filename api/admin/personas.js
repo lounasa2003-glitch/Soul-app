@@ -53,12 +53,16 @@ export default async function handler(req, res) {
     }
 
     // ── Hoja de vida completa ──
-    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes] = await Promise.all([
+    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes, reportesRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?select=*&id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/conversaciones?select=*&usuario_id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/intentos_fuga_prompt?select=*&usuario_id=eq.${idEnc}&order=created_at.desc`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/intentos_fuga_prompt?select=*&usuario_id=eq.${idEnc}&order=created_at.desc`, { headers }),
+      // Reportes RECIBIDOS por esta persona (los que hizo ella misma sobre
+      // otros no se muestran acá -- lo relevante para la administradora es
+      // detectar patrones de conducta reportada, no quién reporta seguido).
+      fetch(`${supabaseUrl}/rest/v1/reportes?select=*&usuario_reportado=eq.${idEnc}&order=created_at.desc`, { headers })
     ]);
 
     const usuarios = usuarioRes.ok ? await usuarioRes.json() : [];
@@ -66,6 +70,7 @@ export default async function handler(req, res) {
     const conversaciones = convRes.ok ? await convRes.json() : [];
     const matches = matchesRes.ok ? await matchesRes.json() : [];
     const intentosFuga = intentosFugaRes.ok ? await intentosFugaRes.json() : [];
+    const reportesRecibidos = reportesRes.ok ? await reportesRes.json() : [];
 
     if (!usuarios[0]) {
       return res.status(404).json({ error: 'No encontrada' });
@@ -126,12 +131,18 @@ export default async function handler(req, res) {
       };
     });
 
+    const reportesConNombre = reportesRecibidos.map(r => ({
+      ...r,
+      reportante_nombre: nombrePorId[r.usuario_reporta] || null
+    }));
+
     return res.status(200).json({
       usuario: usuarios[0],
       perfil: perfiles.length > 0 ? perfiles[perfiles.length - 1] : null,
       conversacion: conversaciones.length > 0 ? conversaciones[conversaciones.length - 1] : null,
       matches: matchesConNombre,
-      intentosFuga
+      intentosFuga,
+      reportesRecibidos: reportesConNombre
     });
   } catch (error) {
     console.error('Error en /api/admin/personas:', error);

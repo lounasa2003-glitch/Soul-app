@@ -50,15 +50,29 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ matches: matchesConNombre });
 }
 
+// Motivos validos para un reporte -- categoricos, sin texto libre, para
+// mantener el MVP simple y darle a la administradora una senal accionable
+// (distinguir "no era lo que buscaba" de un motivo de seguridad real) sin
+// sumar superficie de moderacion de texto libre.
+const MOTIVOS_REPORTE = new Set([
+  'conducta_inapropiada',
+  'contenido_ofensivo',
+  'sospecha_identidad_falsa',
+  'no_es_lo_que_buscaba'
+]);
+
 // "Eliminar" un match desde la pantalla de Matches: deja de aparecer en la
 // lista de quien lo eliminó (no en la de la otra persona, que puede seguir
 // viendo el historial) y bloquea cualquier mensaje nuevo entre las dos
 // partes (ver el chequeo de eliminado_por en enviarMensaje, api/citas.js) --
 // "una especie de borrado y bloqueado", sin avisarle explícitamente a la
-// otra persona que fue bloqueada.
+// otra persona que fue bloqueada. El motivo es opcional -- si viene, se
+// guarda como reporte para que la administradora pueda ver patrones de
+// conducta durante el piloto (ver tabla 'reportes').
 async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
-  const { matchId } = req.body;
+  const { matchId, motivo } = req.body;
   if (!matchId) return res.status(400).json({ error: 'Falta matchId' });
+  if (motivo && !MOTIVOS_REPORTE.has(motivo)) return res.status(400).json({ error: 'Motivo no válido' });
   const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,eliminado_por&id=eq.${encodeURIComponent(matchId)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
@@ -71,6 +85,14 @@ async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ eliminado_por: usuario.usuarioId })
+    });
+  }
+  if (motivo) {
+    const otraPersonaId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
+    await fetch(`${supabaseUrl}/rest/v1/reportes`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ match_id: matchId, usuario_reporta: usuario.usuarioId, usuario_reportado: otraPersonaId, motivo })
     });
   }
   return res.status(200).json({ ok: true });
