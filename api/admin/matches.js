@@ -214,7 +214,15 @@ const PREVIEW_EMAIL_B = 'preview-alex@soul-app.test';
 const PREVIEW_PASSWORD = 'PreviewSoul2026!';
 const PREVIEW_NOMBRE_A = 'Vista Previa';
 const PREVIEW_NOMBRE_B = 'Alex (preview)';
-const ESCENARIOS_PREVIEW = new Set(['chat', 'modulos', 'cita', 'debriefing', 'sala_encuentros']);
+const ESCENARIOS_PREVIEW = new Set(['chat', 'modulos', 'match_pendiente', 'cita', 'debriefing', 'sala_encuentros']);
+
+// Avatar de prueba autocontenido (sin depender de ninguna imagen externa,
+// coherente con "cero dependencias") -- solo para que la pantalla de
+// presentación de match tenga algo real que mostrar en la foto.
+function avatarPreview(letra, color) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><rect width='300' height='300' fill='${color}'/><text x='150' y='185' font-size='130' font-family='Georgia, serif' fill='white' text-anchor='middle'>${letra}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
 
 function baseUrlDesdeRequest(req) {
   const proto = req.headers['x-forwarded-proto'] || 'http';
@@ -295,7 +303,7 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
   const authA = await loginOCrearAuth(supabaseUrl, supabaseKey, PREVIEW_EMAIL_A, PREVIEW_PASSWORD);
   const idA = await asegurarUsuario(supabaseUrl, headers, PREVIEW_EMAIL_A, PREVIEW_NOMBRE_A);
 
-  const necesitaSegundaPersona = escenario === 'cita' || escenario === 'debriefing' || escenario === 'sala_encuentros';
+  const necesitaSegundaPersona = escenario === 'match_pendiente' || escenario === 'cita' || escenario === 'debriefing' || escenario === 'sala_encuentros';
   let authB = null, idB = null;
   if (necesitaSegundaPersona) {
     authB = await loginOCrearAuth(supabaseUrl, supabaseKey, PREVIEW_EMAIL_B, PREVIEW_PASSWORD);
@@ -321,6 +329,36 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
 
   if (necesitaSegundaPersona) {
     await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idB, ...perfilPreview() }) });
+
+    if (escenario === 'match_pendiente') {
+      // Fotos + fecha de nacimiento reales (aunque sea un avatar generado)
+      // porque obtenerPresentacion (api/matches.js) las necesita para armar
+      // la pantalla que ve la otra persona antes de decidir -- sin esto se
+      // vería vacía, no representaría lo que pasa en un caso real.
+      await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${idA}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ fecha_nacimiento: '1994-05-12', foto_cara: avatarPreview('VP', '#6b5b8f'), foto_aprobada: true }) }),
+        fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${idB}`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ fecha_nacimiento: '1992-11-03', foto_cara: avatarPreview('A', '#8f5b6b'), foto_aprobada: true }) })
+      ]);
+
+      // estado 'activo' con eleccion_usuario_a/b sin definir -- exactamente
+      // como queda un match recien activado por la admin, antes de que
+      // ninguna de las dos personas haya decidido nada. Es lo que hace que
+      // recolectarPendientes() lo detecte como "decision" pendiente y
+      // muestre la pantalla de presentación al loguearse.
+      await fetch(`${supabaseUrl}/rest/v1/matches`, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({
+          usuario_a: idA, usuario_b: idB, compatibilidad_hoy: 74, potencial_construccion: 81,
+          fortalezas: ['Los dos valoran la honestidad directa', 'Buen equilibrio entre cercanía y espacio propio'],
+          desafio: 'Podrían evitar los temas incómodos por privilegiar la calidez',
+          mensaje_dupla: 'Dos personas que valoran la honestidad y el humor compartido -- el desafío va a ser no esquivar lo incómodo.',
+          estado: 'activo', activado_por: 'admin'
+        })
+      });
+
+      instrucciones = 'Al iniciar sesión vas a caer directo en el preámbulo del match nuevo y después en la presentación de Alex (preview): nombre, edad, bio y foto, antes de decidir si querés conocerla. Con la otra cuenta (preview-alex@soul-app.test, misma contraseña) vas a ver la presentación de Vista Previa, simétrica.';
+      return res.status(200).json({ ok: true, email: PREVIEW_EMAIL_A, password: PREVIEW_PASSWORD, instrucciones });
+    }
 
     const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
       method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
