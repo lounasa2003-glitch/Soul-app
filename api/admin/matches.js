@@ -202,6 +202,187 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
   return res.status(200).json(data[0] || null);
 }
 
+// ── Vista previa: sembrar una cuenta fija en distintos momentos del
+// proceso, para poder revisarlos sin jugar de usuaria de prueba desde cero
+// cada vez. Dos cuentas fijas y conocidas (mismo email/password siempre) --
+// los datos se resetean en cada siembra, nunca se acumulan escenarios
+// viejos. Todo lo que puede pasar por la API real (cerrar una cita, etc.)
+// pasa por ahi -- asi los efectos reales (resumen, dinamica relacional)
+// tambien se generan de verdad, no se simulan a mano.
+const PREVIEW_EMAIL_A = 'preview@soul-app.test';
+const PREVIEW_EMAIL_B = 'preview-alex@soul-app.test';
+const PREVIEW_PASSWORD = 'PreviewSoul2026!';
+const PREVIEW_NOMBRE_A = 'Vista Previa';
+const PREVIEW_NOMBRE_B = 'Alex (preview)';
+const ESCENARIOS_PREVIEW = new Set(['chat', 'modulos', 'cita', 'debriefing', 'sala_encuentros']);
+
+function baseUrlDesdeRequest(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  return `${proto}://${req.headers['host']}`;
+}
+
+async function loginOCrearAuth(supabaseUrl, supabaseKey, email, password) {
+  const headersBase = { 'Content-Type': 'application/json', apikey: supabaseKey };
+  let r = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, { method: 'POST', headers: headersBase, body: JSON.stringify({ email, password }) });
+  if (r.ok) return await r.json();
+  r = await fetch(`${supabaseUrl}/auth/v1/signup`, { method: 'POST', headers: headersBase, body: JSON.stringify({ email, password }) });
+  const data = await r.json();
+  if (!r.ok) throw new Error('No se pudo crear la cuenta de preview: ' + JSON.stringify(data));
+  return data;
+}
+
+async function asegurarUsuario(supabaseUrl, headers, email, nombre) {
+  const r = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=eq.${encodeURIComponent(email)}`, { headers });
+  const rows = r.ok ? await r.json() : [];
+  if (rows[0]) return rows[0].id;
+  const insertRes = await fetch(`${supabaseUrl}/rest/v1/usuarios`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify({ email, nombre })
+  });
+  const inserted = await insertRes.json();
+  return inserted[0].id;
+}
+
+function perfilPreview() {
+  return {
+    grupo1: { valores: ['honestidad', 'curiosidad', 'humor'], estilo_comunicacion: 'directa', ritmo_emocional: 'reflexivo', mascara_vs_autentico: 'autentica', momento_evolutivo: 'en crecimiento' },
+    grupo2: { tipo_vinculo: 'compañerismo profundo', proyecto_vida: 'construir algo propio y viajar', necesidades_intimidad: 'cercanía con espacio propio', no_puede_faltar: 'humor compartido', no_puede_estar: 'falta de honestidad' },
+    grupo3: { modo_conflictos: 'lo habla enseguida', capacidad_reparacion: 'alta', reciprocidad: 'equilibrada', flexibilidad: 'media', patrones_vinculares: 'tiende a dar el primer paso' },
+    grupo4: { apertura: 'alta', consistencia: 'alta', estabilidad_emocional: 'media', revision_creencias: 'activa', metalenguaje: 'fluido', indice_disponibilidad: 7 },
+    referencias_culturales: JSON.stringify({ pelicula: 'Película de prueba', cancion: 'Canción de prueba', libro: 'Libro de prueba' }),
+    modulo_esencial: 'Capacidad de volver a elegir',
+    modulo_recomendado: 'Autonomía emocional',
+    modulo_fase: 'esencial'
+  };
+}
+
+// Limpia todo lo que haya quedado de una siembra anterior antes de armar la
+// nueva -- asi cada escenario queda inequívoco, sin restos de otro.
+async function limpiarDatosPreview(supabaseUrl, headers, idA, idB) {
+  const ids = [idA, idB].filter(Boolean);
+  const condiciones = ids.flatMap((id) => [`usuario_a.eq.${id}`, `usuario_b.eq.${id}`]).join(',');
+  const matchesRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=id&or=(${condiciones})`, { headers });
+  const matches = matchesRes.ok ? await matchesRes.json() : [];
+  const matchIds = matches.map((m) => m.id);
+  if (matchIds.length > 0) {
+    const listaMatchIds = matchIds.map(encodeURIComponent).join(',');
+    const citasRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id&match_id=in.(${listaMatchIds})`, { headers });
+    const citas = citasRes.ok ? await citasRes.json() : [];
+    const citaIds = citas.map((c) => c.id);
+    if (citaIds.length > 0) {
+      const listaCitaIds = citaIds.map(encodeURIComponent).join(',');
+      await fetch(`${supabaseUrl}/rest/v1/cita_mensajes?cita_id=in.(${listaCitaIds})`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?cita_id=in.(${listaCitaIds})`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/cita_ayudas?cita_id=in.(${listaCitaIds})`, { method: 'DELETE', headers });
+      await fetch(`${supabaseUrl}/rest/v1/citas?id=in.(${listaCitaIds})`, { method: 'DELETE', headers });
+    }
+    await fetch(`${supabaseUrl}/rest/v1/matches?id=in.(${listaMatchIds})`, { method: 'DELETE', headers });
+  }
+  for (const id of ids) {
+    await fetch(`${supabaseUrl}/rest/v1/perfiles?usuario_id=eq.${id}`, { method: 'DELETE', headers });
+    await fetch(`${supabaseUrl}/rest/v1/historial_relacional?usuario_id=eq.${id}`, { method: 'DELETE', headers });
+    await fetch(`${supabaseUrl}/rest/v1/conversaciones?usuario_id=eq.${id}`, { method: 'DELETE', headers });
+  }
+}
+
+async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
+  const { escenario } = req.body;
+  if (!ESCENARIOS_PREVIEW.has(escenario)) {
+    return res.status(400).json({ error: 'Escenario no válido' });
+  }
+
+  const authA = await loginOCrearAuth(supabaseUrl, supabaseKey, PREVIEW_EMAIL_A, PREVIEW_PASSWORD);
+  const idA = await asegurarUsuario(supabaseUrl, headers, PREVIEW_EMAIL_A, PREVIEW_NOMBRE_A);
+
+  const necesitaSegundaPersona = escenario === 'cita' || escenario === 'debriefing' || escenario === 'sala_encuentros';
+  let authB = null, idB = null;
+  if (necesitaSegundaPersona) {
+    authB = await loginOCrearAuth(supabaseUrl, supabaseKey, PREVIEW_EMAIL_B, PREVIEW_PASSWORD);
+    idB = await asegurarUsuario(supabaseUrl, headers, PREVIEW_EMAIL_B, PREVIEW_NOMBRE_B);
+  }
+
+  await limpiarDatosPreview(supabaseUrl, headers, idA, idB);
+
+  const base = baseUrlDesdeRequest(req);
+  let instrucciones = 'Iniciá sesión en soul.html con este email y contraseña.';
+
+  if (escenario === 'modulos' || necesitaSegundaPersona) {
+    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idA, ...perfilPreview() }) });
+  }
+
+  if (escenario === 'chat') {
+    instrucciones = 'Vas a caer en "¿Qué querés hacer hoy?" -- elegí seguir charlando con Soul para entrar al chat inicial, vacío.';
+  }
+
+  if (escenario === 'modulos') {
+    instrucciones = 'Vas a caer en "¿Qué querés hacer hoy?" -- elegí seguir charlando con Soul para entrar directo a los módulos.';
+  }
+
+  if (necesitaSegundaPersona) {
+    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idB, ...perfilPreview() }) });
+
+    const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({
+        usuario_a: idA, usuario_b: idB, compatibilidad_hoy: 74, potencial_construccion: 81,
+        fortalezas: ['Los dos valoran la honestidad directa', 'Buen equilibrio entre cercanía y espacio propio'],
+        desafio: 'Podrían evitar los temas incómodos por privilegiar la calidez',
+        mensaje_dupla: 'Dos personas que valoran la honestidad y el humor compartido -- el desafío va a ser no esquivar lo incómodo.',
+        estado: 'mutuamente_aceptado', activado_por: 'admin'
+      })
+    });
+    const match = (await matchRes.json())[0];
+
+    const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas`, {
+      method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+      body: JSON.stringify({ match_id: match.id, estado: 'activa', consiente_analisis_a: true, consiente_analisis_b: true })
+    });
+    const cita = (await citaRes.json())[0];
+
+    const mensajes = [
+      { usuario_id: null, contenido: 'No busquen impresionar. Intenten descubrir si disfrutan conversar.' },
+      { usuario_id: idB, contenido: 'Hola! ¿Cómo llegaste hasta acá, con todo esto de Soul?' },
+      { usuario_id: idA, contenido: 'Un poco por curiosidad, un poco porque estaba cansada de las apps normales. ¿Y vos?' },
+      { usuario_id: idB, contenido: 'Parecido. Me gustó que no arranca preguntando edad y trabajo como si fuera un formulario.' }
+    ];
+    for (const m of mensajes) {
+      await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ cita_id: cita.id, tipo: 'texto', ...m }) });
+    }
+
+    if (escenario === 'cita') {
+      instrucciones = 'Vas a caer directo en la cita en curso con Alex (preview).';
+    }
+
+    if (escenario === 'debriefing' || escenario === 'sala_encuentros') {
+      // Se cierra de verdad via la API real (no un UPDATE directo a la
+      // base) para que se disparen los efectos reales -- resumen objetivo,
+      // extraccion de dinamica relacional -- igual que le pasaria a una
+      // pareja real, no una version simulada a mano.
+      await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authB.access_token }, body: JSON.stringify({ accion: 'ayudaPrivada', citaId: cita.id, tipoAyuda: 'cerrar' }) });
+      await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'responderCierre', citaId: cita.id, respuesta: 'para' }) });
+
+      if (escenario === 'debriefing') {
+        // Se resuelve de antemano la decision de la Sala de Encuentros
+        // (valor neutro, "seguir en Soul" de los dos lados) para que el
+        // login NO mande directo a esa pantalla -- asi cae en la eleccion
+        // de sesion normal y se puede entrar al debriefing privado desde
+        // "Mis matches -> Ver debriefing", que es lo que interesa revisar
+        // en este escenario en particular.
+        await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${match.id}`, {
+          method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ decision_a: 'seguir_soul', decision_b: 'seguir_soul' })
+        });
+        instrucciones = 'Vas a caer en "¿Qué querés hacer hoy?". Andá a "Ver mis matches" → el encuentro con Alex (preview) → "Ver debriefing →" para entrar directo a la reflexión privada post-cita.';
+      } else {
+        instrucciones = 'Vas a caer directo en la Sala de Encuentros (seguir en Soul / intercambiar datos / cerrar el vínculo) para el encuentro con Alex (preview).';
+      }
+    }
+  }
+
+  return res.status(200).json({ ok: true, email: PREVIEW_EMAIL_A, password: PREVIEW_PASSWORD, instrucciones });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -225,6 +406,9 @@ export default async function handler(req, res) {
     }
     if (accion === 'activar' || accion === 'pausar') {
       return await cambiarEstado(req, res, supabaseUrl, headers, accion);
+    }
+    if (accion === 'sembrarPreview') {
+      return await sembrarPreview(req, res, supabaseUrl, supabaseKey, headers);
     }
     return res.status(400).json({ error: 'Acción no válida' });
   } catch (error) {

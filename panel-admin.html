@@ -86,6 +86,18 @@ a{color:inherit}
   </div>
   <div class="panel-body">
     <div id="vistaPersonas">
+      <div style="border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:1.2rem">
+        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:1rem;margin-bottom:.3rem">Vista previa</p>
+        <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Sembrá una cuenta de prueba fija en un momento específico del proceso, para revisarlo sin tener que jugar de usuaria de prueba desde cero.</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem">
+          <button class="btn-secundario" onclick="sembrarPreview('chat')">Chat inicial</button>
+          <button class="btn-secundario" onclick="sembrarPreview('modulos')">Módulos</button>
+          <button class="btn-secundario" onclick="sembrarPreview('cita')">Cita en curso</button>
+          <button class="btn-secundario" onclick="sembrarPreview('debriefing')">Debriefing</button>
+          <button class="btn-secundario" onclick="sembrarPreview('sala_encuentros')">Sala de Encuentros</button>
+        </div>
+        <div id="previewResultado" class="oculto" style="background:rgba(201,168,76,.08);border-radius:6px;padding:.8rem"></div>
+      </div>
       <p class="cargando" id="personasCargando">Cargando personas...</p>
       <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
         <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="width:100%;max-width:340px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;margin-bottom:.7rem;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
@@ -143,6 +155,26 @@ async function llamarAdmin(url,opciones){
   opciones.headers=Object.assign({'X-Admin-Password':adminPassword},opciones.headers||{});
   var res=await fetch(url,opciones);
   return res;
+}
+
+// Vista previa: siembra la cuenta fija de preview en el escenario elegido
+// (ver sembrarPreview en api/admin/matches.js) y muestra las credenciales +
+// instrucciones para entrar directo a revisarlo en soul.html.
+async function sembrarPreview(escenario){
+  var div=document.getElementById('previewResultado');
+  div.className='';
+  div.innerHTML='<p class="cargando">Preparando el escenario...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/matches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'sembrarPreview',escenario:escenario})});
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo preparar el escenario')+'</p>';
+      return;
+    }
+    div.innerHTML='<p style="font-size:.85rem;margin-bottom:.4rem"><strong>Email:</strong> '+esc(data.email)+' &nbsp; <strong>Contraseña:</strong> '+esc(data.password)+'</p><p style="font-size:.8rem;color:#d8cdd2">'+esc(data.instrucciones)+'</p>';
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión al preparar el escenario.</p>';
+  }
 }
 
 var filtroEtapaActual='todas';
