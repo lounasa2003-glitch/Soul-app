@@ -399,7 +399,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div class="chat-wrap">
     <div class="chat-header">
       <span onclick="volverDeReflexion()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.9rem;cursor:pointer">←</span>
-      <div><div class="chat-nm" id="reflexionTitulo">Pensando en tu cita</div><div class="chat-st">privado, solo para vos</div></div>
+      <div><div class="chat-nm" id="reflexionTitulo">Pensando en tu encuentro</div><div class="chat-st">privado, solo para vos</div></div>
     </div>
     <div class="chat-area" id="reflexionArea"></div>
     <div class="chat-input-area">
@@ -843,16 +843,16 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div class="cita-wrap">
     <div class="cita-header">
       <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Salir</span>
-      <p class="cita-title">La cita ✦</p>
-      <button class="ritmo-btn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
+      <p class="cita-title">El encuentro ✦</p>
+      <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
         <div class="ritmo-opt" onclick="pedirAyudaPrivada('generar_tema')">Generar un tema</div>
         <div class="ritmo-opt" onclick="pedirAyudaPrivada('salir_incomodidad')">Salir de una situación incómoda</div>
-        <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar la cita</div>
+        <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar el encuentro</div>
       </div>
     </div>
     <div id="consentimientoCita" style="display:none;padding:.8rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(201,168,76,.08)">
-      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#d8cdd2;line-height:1.6;margin-bottom:.6rem">Al finalizar la cita, Soul puede analizar la conversación para ayudarte a conocerte mejor y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
+      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#d8cdd2;line-height:1.6;margin-bottom:.6rem">Al finalizar el encuentro, Soul puede analizar la conversación para ayudarte a conocerte mejor y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
       <div style="display:flex;gap:.6rem">
         <button onclick="responderConsentimientoCita(true)" style="padding:.5rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.72rem;font-weight:600;cursor:pointer">Sí, acepto</button>
         <button onclick="responderConsentimientoCita(false)" style="padding:.5rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Prefiero que no</button>
@@ -863,8 +863,9 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <span onclick="usarSugerenciaProfundizar()" style="color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer;border:1px solid rgba(201,168,76,.4);border-radius:12px;padding:.4rem .9rem">¿Quieren una pregunta para profundizar?</span>
     </div>
     <div id="citaAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
+    <div id="citaEncuentroCerrado" style="display:none;padding:.6rem 1.2rem;text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;border-top:1px solid #2a1f28">Este encuentro ya cerró — no se puede seguir escribiendo acá.</div>
     <div class="cita-input-area">
-      <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en la cita...">
+      <input type="text" class="chat-in" id="citaIn" placeholder="Escribí en el encuentro...">
       <button class="send-btn" id="citaSendBtn" onclick="sendCita()">→</button>
     </div>
   </div>
@@ -2258,9 +2259,10 @@ var CITA_ESTADO_LEGIBLE={
 };
 
 // Pantalla "Tus citas": historial completo (activas y cerradas), con opcion
-// de volver a entrar a cualquiera (incluso cerradas -- se puede seguir
-// escribiendo) o de abrir una conversacion privada de reflexion con Soul
-// sobre esa cita puntual.
+// de volver a entrar a cualquiera para revisar lo que paso -- una cerrada
+// es de solo lectura, ya no se puede seguir escribiendo ahi (ver el chequeo
+// de "cerrado" en renderCita()) -- o de abrir una conversacion privada de
+// reflexion con Soul sobre ese encuentro puntual.
 // Estados legibles del match, para la pantalla "Matches" (distinto del
 // estado de la cita, CITA_ESTADO_LEGIBLE, que ya existe).
 var MATCH_ESTADO_LEGIBLE={
@@ -2325,7 +2327,7 @@ async function mostrarMisMatches(){
         html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28;margin-top:.5rem">';
         html+='<p style="font-family:\'Inter\',sans-serif;font-size:.7rem;color:#7a6e78;margin-bottom:.5rem">Encuentro '+numero+': '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
         html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
-        html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(cita.id)+'\')">Ver cita →</button>';
+        html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(cita.id)+'\')">Ver encuentro →</button>';
         if(cita.estado==='cerrada'){
           html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeCita(\''+esc(cita.id)+'\')">Ver debriefing →</button>';
         }
@@ -2436,18 +2438,30 @@ async function initReflexionCita(){
   document.getElementById('reflexionIn').onkeydown=function(e){if(e.key==='Enter')enviarReflexion()};
   document.getElementById('reflexionIn').style.display='';
   document.getElementById('reflexionSendBtn').style.display='';
-  document.getElementById('reflexionTitulo').textContent='Pensando en tu cita';
+  document.getElementById('reflexionTitulo').textContent='Pensando en tu encuentro';
+  // Esta llamada tarda unos segundos (verificacion de sesion) y antes no
+  // mostraba ningun indicador mientras tanto -- el area de mensajes se veia
+  // vacia y quieta, lo que se podia sentir como que el boton se colgo. Los
+  // mismos puntitos que ya se usan en el chat principal (showTyping),
+  // puestos directo en reflexionArea en vez de chatArea.
+  var puntitos=document.createElement('div');
+  puntitos.className='msg soul typing';
+  puntitos.id='reflexionTyping';
+  puntitos.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  document.getElementById('reflexionArea').appendChild(puntitos);
   try{
     var res=await fetchConSesion(function(){
       return fetch('/api/citas?reflexionCitaId='+encodeURIComponent(reflexionCitaIdActual),{headers:{'Authorization':'Bearer '+accessToken}});
     });
     var data=await res.json();
+    var puntitosEl=document.getElementById('reflexionTyping');
+    if(puntitosEl)puntitosEl.remove();
     if(!res.ok){
       document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.</p>';
       return;
     }
     window.reflexionContexto=data;
-    if(data.otraPersonaNombre)document.getElementById('reflexionTitulo').textContent='Pensando en tu cita con '+data.otraPersonaNombre;
+    if(data.otraPersonaNombre)document.getElementById('reflexionTitulo').textContent='Pensando en tu encuentro con '+data.otraPersonaNombre;
     reflexionHistory=data.historial||[];
     reflexionIntercambios=reflexionHistory.filter(function(m){return m.role==='user'}).length;
     reflexionCerrada=!!data.cerrada;
@@ -2460,7 +2474,7 @@ async function initReflexionCita(){
       area.appendChild(div);
     });
     if(reflexionHistory.length===0){
-      var saludo='¿Cómo la pasaste? Contame lo que quieras de esta cita.';
+      var saludo='¿Cómo la pasaste? Contame lo que quieras de este encuentro.';
       addReflexionMsg('soul',saludo);
       reflexionHistory.push({role:'assistant',content:saludo});
       guardarReflexionHistorial();
@@ -3457,6 +3471,10 @@ function initCita(){
   document.getElementById('consentimientoCita').style.display='none';
   document.getElementById('citaSugerenciaProfundizar').style.display='none';
   document.getElementById('citaAvisoLimite').style.display='none';
+  document.getElementById('citaEncuentroCerrado').style.display='none';
+  document.getElementById('citaIn').disabled=false;
+  document.getElementById('citaSendBtn').disabled=false;
+  document.getElementById('citaAyudaBtn').style.display='';
   citaSugerenciaMostrada=false;
   citaConsentimientoRespondido=false;
   cargarCita();
@@ -3558,6 +3576,18 @@ function renderCita(cita,mensajes){
     }
   }
 
+  // Un encuentro cerrado es terminal -- ya no se puede escribir ahi (ver
+  // enviarMensaje en api/citas.js). Antes el cuadro de texto seguia
+  // habilitado igual al revisitarlo desde "Mis matches", asi que escribir
+  // algo fallaba en silencio sin ningun aviso -- esto lo deja claro en vez
+  // de dejar que la persona lo descubra por las suyas.
+  var cerrado=cita.estado==='cerrada';
+  document.getElementById('citaIn').disabled=cerrado;
+  document.getElementById('citaSendBtn').disabled=cerrado;
+  document.getElementById('citaAyudaBtn').style.display=cerrado?'none':'';
+  document.getElementById('citaEncuentroCerrado').style.display=cerrado?'block':'none';
+  if(cerrado)document.getElementById('ayudaOpts').classList.remove('vis');
+
   citaUltimoCount=mensajes.length;
   scrollAlFondo('citaArea');
 }
@@ -3580,6 +3610,14 @@ async function sendCita(){
       var err=await res.json();
       inp.value=txt; // no perder lo que ya habia escrito
       mostrarAvisoLimiteTexto('citaAvisoLimite',mensajeLimiteAlcanzado(err.segundosParaReset));
+      return;
+    }
+    if(res.status===409){
+      // La otra persona cerro el encuentro justo ahora, entre un poll y el
+      // siguiente -- se refresca para que renderCita() deshabilite todo y
+      // muestre el aviso, en vez de perder el mensaje en silencio.
+      inp.value=txt;
+      cargarCita();
       return;
     }
     actualizarAvisoLimiteRestante('citaAvisoLimite',parseInt(res.headers.get('X-Limite-Restante'),10));
