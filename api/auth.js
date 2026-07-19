@@ -1,4 +1,20 @@
+import { chequearLimite } from '../lib/rateLimit.js';
+
 const REDIRECT_URL = 'https://soul-app-tau.vercel.app/soul.html';
+
+// Sin ningun freno, login/registro/recuperar quedaban abiertos a fuerza
+// bruta y creacion masiva de cuentas -- se limita por email (misma clave
+// que usa chequearLimite en el resto de la app) antes de mandar nada a
+// Supabase. login queda mas ajustado que el resto porque es el vector mas
+// directo de fuerza bruta contra una cuenta puntual; registro y recuperar
+// se limitan por hora, que alcanza para uso legitimo (nadie necesita
+// registrarse o pedir recuperar contraseña muchas veces seguidas para el
+// mismo email).
+const LIMITES_AUTH = {
+  login: { limite: 8, ventanaSegundos: 600 },
+  registro: { limite: 5, ventanaSegundos: 3600 },
+  recuperar: { limite: 5, ventanaSegundos: 3600 }
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,6 +30,19 @@ export default async function handler(req, res) {
 
   try {
     const { accion, email, password, refresh_token } = req.body;
+
+    const limiteConfig = LIMITES_AUTH[accion];
+    if (limiteConfig) {
+      if (!email) return res.status(400).json({ error: 'Falta email' });
+      const limiteInfo = await chequearLimite(email, 'auth_' + accion, limiteConfig.limite, limiteConfig.ventanaSegundos);
+      if (!limiteInfo.permitido) {
+        return res.status(429).json({
+          error: 'limite_alcanzado',
+          mensaje: 'Demasiados intentos. Esperá un toque y volvé a intentar.',
+          segundosParaReset: limiteInfo.segundosParaReset
+        });
+      }
+    }
 
     // El link de recuperación llega con el token de sesión de la persona
     // (no el apikey) -- se reenvía tal cual a Supabase con el metodo PUT

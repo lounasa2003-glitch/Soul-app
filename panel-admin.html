@@ -222,10 +222,16 @@ function aplicarFiltrosPersonas(){
   document.getElementById('personasSinResultados').classList.toggle('oculto',filtradas.length>0);
 }
 
+// El truco textContent->innerHTML solo escapa &, < y > -- suficiente para
+// texto plano entre tags, pero insuficiente si el resultado se interpola
+// dentro de un atributo HTML delimitado por comillas (ej. onclick="..."),
+// donde una comilla sin escapar puede romper el atributo. Se escapan
+// tambien comillas simples y dobles para que esc() sea seguro en los dos
+// contextos, no solo en el de texto plano.
 function esc(s){
-  var d=document.createElement('div');
-  d.textContent=s==null?'':String(s);
-  return d.innerHTML;
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 
 function volverALista(){

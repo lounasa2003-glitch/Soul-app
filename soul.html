@@ -2310,6 +2310,14 @@ async function mostrarMisMatches(){
       citasPorMatch[mid].sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at)});
     });
 
+    // Se guarda la lista cruda (no escapada) para que eliminarMatch() pueda
+    // buscar el nombre real ahi en vez de recibirlo como string embebido en
+    // el HTML del onclick -- nombre es texto libre de la persona, y
+    // embeber texto libre dentro de un atributo onclick="..." es un vector
+    // de XSS real (esc() no escapa comillas dobles, que rompen el atributo).
+    // Pasando solo el id (un UUID generado por el servidor, nunca contiene
+    // caracteres especiales) el problema desaparece de raiz.
+    window.misMatchesCache=matches;
     var estiloBtn='padding:.6rem .9rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer';
     lista.innerHTML=matches.map(function(m){
       var nombre=m.otra_persona_nombre||'(persona sin nombre)';
@@ -2319,7 +2327,7 @@ async function mostrarMisMatches(){
       html+='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem">';
       html+='<div><p style="font-family:\'Cormorant Garamond\',serif;font-style:italic;color:#c9a84c;font-size:1.05rem">'+esc(nombre)+'</p>';
       html+='<p style="font-family:\'Inter\',sans-serif;font-size:.72rem;color:#7a6e78;margin-bottom:.7rem">'+esc(estadoTxt)+'</p></div>';
-      html+='<span onclick="eliminarMatch(\''+esc(m.id)+'\',\''+esc(nombre).replace(/'/g,"\\'")+'\')" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.72rem;cursor:pointer;white-space:nowrap;opacity:.7">Eliminar</span>';
+      html+='<span onclick="eliminarMatch(\''+esc(m.id)+'\')" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.72rem;cursor:pointer;white-space:nowrap;opacity:.7">Eliminar</span>';
       html+='</div>';
       // Mas reciente primero, pero numerado en orden real de cuando pasaron.
       citasDelMatch.slice().reverse().forEach(function(cita,idxInv){
@@ -2345,7 +2353,9 @@ async function mostrarMisMatches(){
 // sin un aviso explícito de bloqueo). No se puede deshacer desde acá.
 // Tras confirmar, se ofrece contar un motivo (opcional) -- ver
 // confirmarEliminarConMotivo() y el modal #modalReporte.
-function eliminarMatch(matchId,nombre){
+function eliminarMatch(matchId){
+  var m=(window.misMatchesCache||[]).find(function(x){return x.id===matchId});
+  var nombre=(m&&m.otra_persona_nombre)||'esta persona';
   if(!confirm('¿Eliminar el match con '+nombre+'? No vas a poder volver a verlo ni retomarlo, y la otra persona ya no va a poder escribirte.'))return;
   window.matchIdAReportar=matchId;
   document.getElementById('modalReporte').style.display='flex';
@@ -3453,10 +3463,16 @@ function initMatch(){
 // Escapa HTML para los pocos lugares de la cita que arman contenido con
 // innerHTML (el mensaje de Soul) -- el resto usa textContent, que ya
 // escapa solo.
+// El truco textContent->innerHTML solo escapa &, < y > -- suficiente para
+// texto plano entre tags, pero insuficiente si el resultado se interpola
+// dentro de un atributo HTML delimitado por comillas (ej. onclick="..."),
+// donde una comilla sin escapar puede romper el atributo. Se escapan
+// tambien comillas simples y dobles para que esc() sea seguro en los dos
+// contextos, no solo en el de texto plano.
 function esc(s){
-  var d=document.createElement('div');
-  d.textContent=s==null?'':String(s);
-  return d.innerHTML;
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
 }
 var citaPollTimer=null;
 var citaUltimoCount=0;
