@@ -231,6 +231,12 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 .cita-msg{max-width:82%;padding:.7rem .95rem;border-radius:4px;font-family:'Cormorant Garamond',serif;font-size:1.45rem;line-height:1.55}
 .cita-msg.yo{align-self:flex-end;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.25);color:#f2ece4}
 .cita-msg.otro{align-self:flex-start;background:rgba(36,26,32,.6);border-left:2px solid #2a1f28;color:#f2ece4;font-style:italic}
+.cita-msg.pendiente{opacity:.55}
+.cita-msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:.3rem;margin-top:.25rem;font-family:'Inter',sans-serif;font-size:.62rem;color:#7a6e78;letter-spacing:.02em}
+.cita-msg.otro .cita-msg-meta{justify-content:flex-start}
+.cita-check{color:#5a5058}
+.cita-check.leido{color:#c9a84c}
+.cita-escribiendo{align-self:flex-start;display:flex;align-items:center;gap:.5rem;padding:.3rem .2rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#7a6e78}
 .cita-input-area{padding:.85rem 1rem;border-top:1px solid #2a1f28;background:rgba(7,5,10,.95);display:flex;gap:.6rem;flex-shrink:0}
 
 /* ══════════════════════════════════
@@ -3479,6 +3485,26 @@ var citaUltimoCount=0;
 var citaTimerSugerencia=null;
 var citaSugerenciaMostrada=false;
 var citaConsentimientoRespondido=false;
+// Ultimo cita/mensajes que llegaron del servidor -- se guardan para poder
+// re-renderizar al instante cuando se manda un mensaje propio (ver
+// sendCita), sin esperar al proximo poll. Arranca en {} (no null) para que
+// sendCita() pueda renderizar el mensaje optimista aunque se mande antes de
+// que termine de resolver el primer cargarCita() (renderCita tolera un
+// objeto vacio: estado/leido_hasta/escribiendo indefinidos son inofensivos).
+var citaUltimaCita={};
+var citaUltimosMensajes=[];
+// Mensajes propios ya mandados al servidor pero que todavia no aparecieron
+// en la respuesta real de un poll -- se muestran igual, atenuados, para
+// que mandar un mensaje se sienta instantaneo en vez de esperar el
+// viaje de ida y vuelta completo antes de verlo aparecer.
+var citaPendientes=[];
+// Throttle del lado del cliente para el ping de "estoy escribiendo" -- no
+// tiene sentido mandar uno por cada tecla.
+var citaUltimoPingEscribiendo=0;
+var MS_THROTTLE_ESCRIBIENDO=3000;
+// Si el ultimo ping de la otra persona fue hace menos que esto, se
+// considera que sigue escribiendo.
+var MS_VIGENCIA_ESCRIBIENDO=4000;
 // 10 minutos reales en producción -- expuesto como variable (no una
 // constante inline) para poder pisarlo desde un test sin esperar de
 // verdad.
@@ -3486,7 +3512,11 @@ var MS_SUGERENCIA_PROFUNDIZAR=10*60*1000;
 
 function initCita(){
   document.getElementById('citaIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendCita()});
+  document.getElementById('citaIn').addEventListener('input',avisarEscribiendo);
   citaUltimoCount=0;
+  citaPendientes=[];
+  citaUltimaCita={};
+  citaUltimosMensajes=[];
   document.getElementById('consentimientoCita').style.display='none';
   document.getElementById('citaSugerenciaProfundizar').style.display='none';
   document.getElementById('citaAvisoLimite').style.display='none';
@@ -3563,9 +3593,29 @@ async function cargarCita(){
   }catch(e){}
 }
 
+// HH:MM local -- alcanza para ubicarse en la charla, no hace falta la fecha
+// completa dentro de la misma cita.
+function formatearHoraCita(iso){
+  return new Date(iso).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+}
+
 function renderCita(cita,mensajes){
+  // Se guardan para poder re-renderizar al instante desde sendCita() sin
+  // esperar al proximo poll.
+  citaUltimaCita=cita;
+  citaUltimosMensajes=mensajes;
+  // Un pendiente deja de mostrarse aparte apenas ese mismo contenido mio
+  // aparece de verdad en la respuesta del servidor (posterior al momento
+  // en que se mando) -- evita mostrarlo dos veces mientras se reconcilia.
+  citaPendientes=citaPendientes.filter(function(p){
+    return !mensajes.some(function(m){
+      return esMensajeMio(m)&&m.contenido===p.contenido&&new Date(m.created_at).getTime()>=p.ts;
+    });
+  });
+
   var area=document.getElementById('citaArea');
   var esNuevo=mensajes.length>citaUltimoCount;
+  var leidoHastaOtro=window.citaSoyA?cita.leido_hasta_b:cita.leido_hasta_a;
   area.innerHTML='';
   mensajes.forEach(function(m,idx){
     var esUltimoTramoNuevo=esNuevo&&idx>=citaUltimoCount;
@@ -3578,10 +3628,39 @@ function renderCita(cita,mensajes){
       var esMio=esMensajeMio(m);
       var div2=document.createElement('div');
       div2.className='cita-msg '+(esMio?'yo':'otro')+(esUltimoTramoNuevo?' nuevo':'');
-      div2.textContent=m.contenido;
+      var meta='<div class="cita-msg-meta"><span>'+formatearHoraCita(m.created_at)+'</span>';
+      if(esMio){
+        // Check sin color = mandado; check dorado = la otra persona ya vio
+        // hasta este momento (leido_hasta_*, ver obtenerCita en api/citas.js).
+        var leido=leidoHastaOtro&&new Date(m.created_at).getTime()<=new Date(leidoHastaOtro).getTime();
+        meta+='<span class="cita-check'+(leido?' leido':'')+'">✓</span>';
+      }
+      meta+='</div>';
+      div2.innerHTML='<div>'+esc(m.contenido)+'</div>'+meta;
       area.appendChild(div2);
     }
   });
+
+  // Mensajes propios ya mandados al servidor pero todavia sin confirmar --
+  // atenuados y sin check, para que se note que todavia no es un mensaje
+  // guardado de verdad.
+  citaPendientes.forEach(function(p){
+    var divP=document.createElement('div');
+    divP.className='cita-msg yo pendiente';
+    divP.innerHTML='<div>'+esc(p.contenido)+'</div><div class="cita-msg-meta"><span>enviando…</span></div>';
+    area.appendChild(divP);
+  });
+
+  // "Esta escribiendo": el ping mas reciente de la OTRA persona (ver
+  // marcarEscribiendo en api/citas.js) sigue vigente si es mas reciente que
+  // MS_VIGENCIA_ESCRIBIENDO -- se re-evalua solo, cada poll, sin timer aparte.
+  var escribiendoOtro=window.citaSoyA?cita.escribiendo_b:cita.escribiendo_a;
+  if(cita.estado!=='cerrada'&&escribiendoOtro&&(Date.now()-new Date(escribiendoOtro).getTime())<MS_VIGENCIA_ESCRIBIENDO){
+    var divE=document.createElement('div');
+    divE.className='cita-escribiendo';
+    divE.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    area.appendChild(divE);
+  }
 
   // Chequeo de cierre: si hay uno en curso y mi elección todavía no quedó
   // registrada, muestro los botones debajo del último mensaje.
@@ -3617,10 +3696,24 @@ function esMensajeMio(m){
   return m.usuario_id===usuarioId;
 }
 
+function quitarPendiente(pendiente){
+  var idx=citaPendientes.indexOf(pendiente);
+  if(idx>-1)citaPendientes.splice(idx,1);
+  if(citaUltimaCita)renderCita(citaUltimaCita,citaUltimosMensajes);
+}
+
 async function sendCita(){
   var inp=document.getElementById('citaIn');
   var txt=inp.value.trim();if(!txt)return;
   inp.value='';
+  // Envio optimista: se muestra de inmediato (atenuado, "enviando...") en
+  // vez de esperar el viaje de ida y vuelta completo antes de que aparezca
+  // algo en pantalla -- eso era gran parte de lo que se sentia lento. Se
+  // reconcilia solo cuando el proximo poll trae ese mismo mensaje de
+  // verdad guardado (ver el filtro en renderCita).
+  var pendiente={contenido:txt,ts:Date.now()};
+  citaPendientes.push(pendiente);
+  if(citaUltimaCita)renderCita(citaUltimaCita,citaUltimosMensajes);
   try{
     var res=await fetchConSesion(function(){
       return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'texto',contenido:txt})});
@@ -3628,6 +3721,7 @@ async function sendCita(){
     if(res.status===429){
       var err=await res.json();
       inp.value=txt; // no perder lo que ya habia escrito
+      quitarPendiente(pendiente);
       mostrarAvisoLimiteTexto('citaAvisoLimite',mensajeLimiteAlcanzado(err.segundosParaReset));
       return;
     }
@@ -3636,12 +3730,34 @@ async function sendCita(){
       // siguiente -- se refresca para que renderCita() deshabilite todo y
       // muestre el aviso, en vez de perder el mensaje en silencio.
       inp.value=txt;
+      quitarPendiente(pendiente);
       cargarCita();
       return;
     }
+    if(!res.ok){
+      quitarPendiente(pendiente);
+      inp.value=txt;
+      return;
+    }
     actualizarAvisoLimiteRestante('citaAvisoLimite',parseInt(res.headers.get('X-Limite-Restante'),10));
-  }catch(e){}
+  }catch(e){
+    quitarPendiente(pendiente);
+    inp.value=txt;
+    return;
+  }
   cargarCita();
+}
+
+// Ping liviano de "estoy escribiendo" -- throttleado del lado del cliente
+// (MS_THROTTLE_ESCRIBIENDO) para no mandar uno por cada tecla. Fire-and-
+// forget a proposito: si se pierde uno puntual no importa, el proximo
+// keystroke manda otro.
+function avisarEscribiendo(){
+  var ahora=Date.now();
+  if(ahora-citaUltimoPingEscribiendo<MS_THROTTLE_ESCRIBIENDO)return;
+  citaUltimoPingEscribiendo=ahora;
+  if(!window.citaActualId||!accessToken)return;
+  fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'escribiendo',citaId:window.citaActualId})}).catch(function(){});
 }
 
 function toggleAyuda(){document.getElementById('ayudaOpts').classList.toggle('vis')}

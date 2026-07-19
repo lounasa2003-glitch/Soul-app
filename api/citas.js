@@ -114,7 +114,41 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
   );
   const mensajes = mensajesRes.ok ? await mensajesRes.json() : [];
 
+  // "Leido hasta": cada vez que esta persona pide la cita (osea, la esta
+  // mirando -- el poll del cliente solo corre mientras la pantalla esta
+  // activa) se marca que vio todo hasta ahora. No es fire-and-forget (ver
+  // el resto de este archivo sobre por que eso no es confiable en
+  // serverless) pero tampoco se espera a que termine para responder -- un
+  // check de "leido" que llega con un instante de atraso no afecta nada,
+  // a diferencia de un mensaje que se pierde.
+  const campoLeido = auth.soyA ? 'leido_hasta_a' : 'leido_hasta_b';
+  fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ [campoLeido]: new Date().toISOString() })
+  }).catch(() => {});
+
   return res.status(200).json({ cita: auth.cita, soyA: auth.soyA, mensajes });
+}
+
+// Señal liviana de "estoy escribiendo" -- se pisa cada vez (no se acumula
+// historial), y el cliente la considera vigente solo si es reciente (ver
+// UMBRAL_ESCRIBIENDO_MS en soul.html). A diferencia del resto de las
+// acciones de este endpoint, no importa si esta llamada puntual se pierde
+// alguna vez -- por eso es de las pocas cosas de este archivo que se deja
+// como fire-and-forget del lado del cliente.
+async function marcarEscribiendo(req, res, supabaseUrl, headers, usuario) {
+  const { citaId } = req.body;
+  if (!citaId) return res.status(400).json({ error: 'Falta citaId' });
+  const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
+  if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
+  const campoPropio = auth.soyA ? 'escribiendo_a' : 'escribiendo_b';
+  await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ [campoPropio]: new Date().toISOString() })
+  });
+  return res.status(200).json({ ok: true });
 }
 
 async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, remitenteId) {
@@ -926,6 +960,14 @@ export default async function handler(req, res) {
       return await obtenerCita(req, res, supabaseUrl, headers, usuario);
     }
     if (req.method === 'POST') {
+      // "escribiendo" queda afuera del limite compartido -- es una senal
+      // liviana (un solo campo, sin insert, sin Claude) que el cliente
+      // manda cada pocos segundos mientras alguien tipea, y competir por el
+      // mismo cupo que los mensajes reales lo agotaria rapido sin necesidad.
+      if (req.body.accion === 'escribiendo') {
+        return await marcarEscribiendo(req, res, supabaseUrl, headers, usuario);
+      }
+
       const limiteInfo = await chequearLimite(usuario.email, 'citas', LIMITE_CITA, VENTANA_CITA_SEGUNDOS);
       if (!limiteInfo.permitido) {
         return res.status(429).json({
