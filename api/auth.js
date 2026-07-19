@@ -1,6 +1,6 @@
 import { chequearLimite } from '../lib/rateLimit.js';
 
-const REDIRECT_URL = 'https://soul-app-tau.vercel.app/soul.html';
+const REDIRECT_URL = 'https://soulapp.love/soul.html';
 
 // Sin ningun freno, login/registro/recuperar quedaban abiertos a fuerza
 // bruta y creacion masiva de cuentas -- se limita por email (misma clave
@@ -13,7 +13,8 @@ const REDIRECT_URL = 'https://soul-app-tau.vercel.app/soul.html';
 const LIMITES_AUTH = {
   login: { limite: 8, ventanaSegundos: 600 },
   registro: { limite: 5, ventanaSegundos: 3600 },
-  recuperar: { limite: 5, ventanaSegundos: 3600 }
+  recuperar: { limite: 5, ventanaSegundos: 3600 },
+  reenviarConfirmacion: { limite: 5, ventanaSegundos: 3600 }
 };
 
 export default async function handler(req, res) {
@@ -79,6 +80,9 @@ export default async function handler(req, res) {
     } else if (accion === 'recuperar') {
       endpoint = '/auth/v1/recover?redirect_to=' + encodeURIComponent(REDIRECT_URL);
       bodyData = { email };
+    } else if (accion === 'reenviarConfirmacion') {
+      endpoint = '/auth/v1/resend';
+      bodyData = { type: 'signup', email, options: { email_redirect_to: REDIRECT_URL } };
     } else if (accion === 'refrescar') {
       endpoint = '/auth/v1/token?grant_type=refresh_token';
       bodyData = { refresh_token };
