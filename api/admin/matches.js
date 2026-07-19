@@ -363,17 +363,18 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
       await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'responderCierre', citaId: cita.id, respuesta: 'para' }) });
 
       if (escenario === 'debriefing') {
-        // Se resuelve de antemano la decision de la Sala de Encuentros
-        // (valor neutro, "seguir en Soul" de los dos lados) para que el
-        // login NO mande directo a esa pantalla -- asi cae en la eleccion
-        // de sesion normal y se puede entrar al debriefing privado desde
-        // "Mis matches -> Ver debriefing", que es lo que interesa revisar
-        // en este escenario en particular.
-        await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${match.id}`, {
-          method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ decision_a: 'seguir_soul', decision_b: 'seguir_soul' })
-        });
-        instrucciones = 'Vas a caer en "¿Qué querés hacer hoy?". Andá a "Ver mis matches" → el encuentro con Alex (preview) → "Ver debriefing →" para entrar directo a la reflexión privada post-cita.';
+        // Se resuelve la Sala de Encuentros de verdad, via la API real y
+        // por las dos personas (nunca escribiendo decision_a/b a mano en la
+        // base) -- eso es lo unico que efectivamente crea el proximo
+        // encuentro y reinicia decision_a/b como pasaria en un caso real.
+        // Antes esto se resolvia con un UPDATE directo a la base, que dejaba
+        // el match en un estado que nunca ocurre en la app real (decision
+        // "resuelta" pero sin el encuentro nuevo que ese resultado deberia
+        // haber generado) -- por eso no aparecia forma de agendar una charla
+        // nueva desde Matches.
+        await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
+        await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authB.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
+        instrucciones = 'Las dos personas ya eligieron seguir en Soul, asi que el login te manda directo al encuentro NUEVO (activo, vacio) -- esto es lo que realmente pasa despues de esa decision. Tocá "← Salir" y andá a "Ver mis matches": vas a ver los dos encuentros anidados bajo el mismo match -- abrí el más viejo (cerrado) y tocá "Ver debriefing →" para entrar a la reflexión privada post-cita.';
       } else {
         instrucciones = 'Vas a caer directo en la Sala de Encuentros (seguir en Soul / intercambiar datos / cerrar el vínculo) para el encuentro con Alex (preview).';
       }
