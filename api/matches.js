@@ -1,5 +1,6 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
+import { registrarEvento } from '../lib/logEvento.js';
 
 // Fusiona lo que antes eran misMatches.js, elegirMatch.js y cerrarMatch.js
 // en un solo archivo -- el plan Hobby de Vercel permite como maximo 12
@@ -235,6 +236,10 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
           headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ cita_id: citaCreada.id, usuario_id: null, tipo: 'texto', contenido: 'No busquen impresionar. Intenten descubrir si disfrutan conversar.' })
         });
+        await Promise.all([
+          registrarEvento({ usuarioId: match.usuario_a, tipo: 'encuentro_agendado', metadata: { citaId: citaCreada.id, matchId } }),
+          registrarEvento({ usuarioId: match.usuario_b, tipo: 'encuentro_agendado', metadata: { citaId: citaCreada.id, matchId } })
+        ]);
       }
     } catch (e) {
       console.error('Error creando la cita o su mensaje de apertura:', e);

@@ -2,6 +2,7 @@ import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
+import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
 
 const LIMITE_MATCHES = 5;
@@ -127,6 +128,11 @@ export default async function handler(req, res) {
       usuarioId,
       endpoint: 'calcularMatches',
       usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
+    });
+    await registrarEvento({
+      usuarioId,
+      tipo: 'calculo_matches',
+      metadata: { matchEncontrado, cantidadComparaciones: otrosPerfilesSinMatch.length }
     });
 
     return res.status(200).json({ matchEncontrado, matchData });

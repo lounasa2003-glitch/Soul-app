@@ -1,4 +1,5 @@
 import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido, parsearFiltro } from '../lib/authUtil.js';
+import { registrarEvento } from '../lib/logEvento.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
 // atomico (on_conflict=usuario_id) para no depender de un check-then-act
@@ -70,6 +71,12 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       return res.status(response.status).json(data);
+    }
+
+    if (!filtro && tabla === 'usuarios' && data[0]) {
+      await registrarEvento({ usuarioId: data[0].id, tipo: 'registro' });
+    } else if (tabla === 'perfiles' && esUpsert) {
+      await registrarEvento({ usuarioId: usuario.usuarioId, tipo: 'onboarding_completado' });
     }
 
     return res.status(200).json(data);

@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
+import { registrarEvento } from '../lib/logEvento.js';
 import { notificarMensajeCita } from '../lib/email.js';
 import { EXTRACT_PROMPT } from './analisisExterno.js';
 import { chequearLimite } from '../lib/rateLimit.js';
@@ -237,6 +238,7 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ estado: 'activa' })
     });
+    await registrarEvento({ usuarioId: usuario.usuarioId, tipo: 'primera_conversacion', metadata: { citaId } });
   }
 
   // Se espera a que termine (no fire-and-forget): en un entorno serverless
@@ -402,7 +404,9 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(auth.match.usuario_b)}`, {
         method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ etapa_actual: 'debriefing' })
-      })
+      }),
+      registrarEvento({ usuarioId: auth.match.usuario_a, tipo: 'encuentro_cerrado', metadata: { citaId } }),
+      registrarEvento({ usuarioId: auth.match.usuario_b, tipo: 'encuentro_cerrado', metadata: { citaId } })
     ]).catch(() => {});
     return res.status(200).json({ estado: 'cerrada' });
   }
@@ -464,6 +468,8 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
   const campoAjeno = soyA ? 'decision_b' : 'decision_a';
   const ajena = match[campoAjeno];
 
+  await registrarEvento({ usuarioId: usuario.usuarioId, tipo: 'eleccion_post_encuentro', metadata: { matchId, decision } });
+
   if (ajena) {
     let resultado;
     if (decision === 'cerrar' || ajena === 'cerrar') resultado = 'cerrar';
@@ -494,6 +500,10 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
             headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
             body: JSON.stringify({ cita_id: citaCreada.id, usuario_id: null, tipo: 'texto', contenido: 'No busquen impresionar. Intenten descubrir si disfrutan conversar.' })
           });
+          await Promise.all([
+            registrarEvento({ usuarioId: match.usuario_a, tipo: 'encuentro_agendado', metadata: { citaId: citaCreada.id, matchId } }),
+            registrarEvento({ usuarioId: match.usuario_b, tipo: 'encuentro_agendado', metadata: { citaId: citaCreada.id, matchId } })
+          ]);
         }
       } catch (e) {
         console.error('Error creando el próximo encuentro:', e);
@@ -591,7 +601,7 @@ async function generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, ma
     }).join('\n');
     if (!transcripto) return;
 
-    const { json } = await llamarClaudeJSON({
+    const { json, usage } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: RESUMEN_CITA_PROMPT,
@@ -602,6 +612,10 @@ async function generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, ma
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ resumen_ia: json })
     });
+    // No es una llamada de una persona puntual (el resumen es compartido
+    // entre las dos) -- se loguea con usuarioId null, mismo criterio que
+    // adminComparar en api/admin/comparar.js.
+    await registrarUsoTokens({ usuarioId: null, endpoint: 'resumenCita', usage });
   } catch (e) {
     console.error('Error generando resumen de cita:', e);
   }
@@ -663,12 +677,13 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
     }).join('\n');
     if (!transcripto) return null;
 
-    const { json } = await llamarClaudeJSON({
+    const { json, usage } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 1200,
       system: DINAMICA_RELACIONAL_PROMPT,
       messages: [{ role: 'user', content: 'Transcripción de la cita:\n\n' + transcripto }]
     });
+    await registrarUsoTokens({ usuarioId: null, endpoint: 'dinamicaRelacional', usage });
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(cita.id)}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
@@ -711,6 +726,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ci
       system: debriefingAperturaPrompt(otraPersonaNombre),
       messages: [{ role: 'user', content: 'Arrancá la conversación.' }]
     });
+    await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: 'debriefingApertura', usage: data.usage });
     const texto = (data.content || []).map(b => b.text || '').join('').trim();
     if (!texto) return [];
 
@@ -828,12 +844,13 @@ async function revisarNivel2(supabaseUrl, headers, usuarioId) {
     if (filas.length < proximoUmbral) return null;
 
     const ultimasSenales = filas.slice(-10).map(f => f.senales);
-    const { json } = await llamarClaudeJSON({
+    const { json, usage } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 300,
       system: NIVEL2_PROMPT,
       messages: [{ role: 'user', content: JSON.stringify(ultimasSenales) }]
     });
+    await registrarUsoTokens({ usuarioId, endpoint: 'nivel2', usage });
 
     // Se marca como mostrado el umbral que se acaba de cruzar, tenga o no
     // patron real -- no tiene sentido re-evaluar el mismo tramo de citas
@@ -870,12 +887,13 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const transcripto = historial.map(m => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
   let resultado = { resumen_breve: null, aprendizaje: null, fortaleza_observada: null, algo_para_explorar: null, mensaje_cierre: null };
   try {
-    const { json } = await llamarClaudeJSON({
+    const { json, usage } = await llamarClaudeJSON({
       model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: CIERRE_DEBRIEFING_CORTO_PROMPT,
       messages: [{ role: 'user', content: 'Conversación:\n' + transcripto + '\n\nAnálisis de dinámica (fuente 2, puede ser null): ' + JSON.stringify(dinamicaPropia || null) }]
     });
+    await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: 'cierreDebriefing', usage });
     resultado = json;
   } catch (e) {
     console.error('Error cerrando debriefing corto:', e);
@@ -899,6 +917,15 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario.usuarioId);
   if (mensajeNivel2) historialFinal.push({ role: 'assistant', content: mensajeNivel2 });
   await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario.usuarioId, historialFinal);
+  await registrarEvento({
+    usuarioId: usuario.usuarioId,
+    tipo: 'debriefing_completado',
+    metadata: {
+      citaId,
+      idasYVueltas: historial.filter(m => m.role === 'user').length,
+      nivel2Disparado: !!mensajeNivel2
+    }
+  });
 
   return res.status(200).json({ mensajeCierre, mensajeNivel2 });
 }
