@@ -4,16 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Soul — Antes de ayudarte a conocer a alguien</title>
+<meta name="description" content="Soul es una plataforma de vínculos basada en coaching ontológico. Antes de presentarte a alguien, se toma el tiempo de conocerte a vos.">
+<link rel="canonical" href="https://soulapp.love/">
+<meta property="og:title" content="Soul — Antes de ayudarte a conocer a alguien">
+<meta property="og:description" content="Antes de ayudarte a conocer a alguien, Soul se toma el tiempo de conocerte a vos.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://soulapp.love/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Soul — Antes de ayudarte a conocer a alguien">
+<meta name="twitter:description" content="Antes de ayudarte a conocer a alguien, Soul se toma el tiempo de conocerte a vos.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500&display=swap');
-
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{background:#07050a;color:#f2ece4;font-family:'Inter',sans-serif;overflow-x:hidden}
+a{color:inherit}
 
 /* ── ESTRELLAS Y CONSTELACIÓN ── */
 .universe{position:fixed;inset:0;z-index:0;pointer-events:none}
 canvas{position:absolute;inset:0;width:100%;height:100%}
+
+/* ── CTA (unico boton principal, se repite en hero y cierre) ── */
+.cta-btn{display:inline-flex;align-items:center;gap:.5rem;padding:1rem 2.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.08em;text-decoration:none;cursor:pointer;transition:transform .2s,box-shadow .2s}
+.cta-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(201,168,76,.35)}
 
 /* ── HERO ── */
 .hero{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem 1.5rem;text-align:center}
@@ -22,28 +37,11 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 
 .hero-eyebrow{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1rem,3vw,1.2rem);color:rgba(201,168,76,.7);margin-bottom:1rem;line-height:1.5}
 
-.hero-headline{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(2rem,6vw,3.2rem);color:#f2ece4;line-height:1.25;margin-bottom:1.5rem;max-width:700px}
+.hero-headline{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(2rem,6vw,3.2rem);color:#f2ece4;line-height:1.25;margin-bottom:1.5rem;max-width:700px;text-wrap:balance}
 
 .hero-headline em{font-style:italic;color:#c9a84c}
 
-.hero-sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.1rem,3vw,1.4rem);color:rgba(242,236,228,.75);line-height:1.7;max-width:520px;margin:0 auto 3rem}
-
-/* ── FORMULARIO ── */
-.form-wrap{width:100%;max-width:400px;margin:0 auto}
-
-.form-input-row{display:flex;gap:.5rem;margin-bottom:.7rem}
-
-.email-input{flex:1;background:rgba(36,26,32,.6);border:1px solid rgba(201,168,76,.3);border-radius:3px;color:#f2ece4;font-family:'Inter',sans-serif;font-size:.85rem;padding:.85rem 1rem;outline:none;transition:border-color .2s}
-.email-input:focus{border-color:rgba(201,168,76,.7)}
-.email-input::placeholder{color:#5a5058}
-
-.submit-btn{padding:.85rem 1.4rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.08em;cursor:pointer;white-space:nowrap;transition:transform .2s,box-shadow .2s}
-.submit-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(201,168,76,.3)}
-
-.form-note{font-family:'Inter',sans-serif;font-size:.72rem;color:#5a5058;text-align:center}
-
-.success-msg{display:none;text-align:center;padding:1rem;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);border-radius:6px}
-.success-msg p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.05rem;color:#c9a84c;line-height:1.6}
+.hero-sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.1rem,3vw,1.4rem);color:rgba(242,236,228,.75);line-height:1.7;max-width:520px;margin:0 auto 2.6rem}
 
 /* ── SCROLL INDICATOR ── */
 .scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.4rem;opacity:.4;animation:fadeUpDown 2s ease-in-out infinite}
@@ -51,33 +49,46 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
 .scroll-dot{width:1px;height:32px;background:linear-gradient(to bottom,rgba(201,168,76,0),rgba(201,168,76,.6))}
 @keyframes fadeUpDown{0%,100%{opacity:.3;transform:translateX(-50%) translateY(0)}50%{opacity:.6;transform:translateX(-50%) translateY(4px)}}
 
-/* ── SECCIÓN DIFERENCIAL ── */
-.section{position:relative;z-index:1;padding:5rem 1.5rem;max-width:680px;margin:0 auto}
+/* ── QUE ES SOUL ── */
+.intro{position:relative;z-index:1;padding:4rem 1.5rem 1rem;max-width:640px;margin:0 auto;text-align:center}
+.intro p{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.1rem,2.8vw,1.35rem);color:#d8cdd2;line-height:1.75}
 
+/* ── SECCIONES COMPARTIDAS ── */
+.section{position:relative;z-index:1;padding:5rem 1.5rem;max-width:720px;margin:0 auto}
+.section-eyebrow{font-family:'Inter',sans-serif;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:rgba(201,168,76,.7);text-align:center;margin-bottom:.6rem}
+.section-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.4rem,3.4vw,1.8rem);color:#f2ece4;text-align:center;margin-bottom:3rem}
 .section-divider{width:40px;height:1px;background:rgba(201,168,76,.4);margin:0 auto 3rem}
 
-.pillars{display:flex;flex-direction:column;gap:2.5rem}
+/* ── COMO FUNCIONA (pasos) ── */
+.pasos{display:flex;flex-direction:column;gap:2.2rem}
+.paso{display:flex;gap:1.4rem;align-items:flex-start}
+.paso-num{flex:none;width:2.6rem;height:2.6rem;border-radius:50%;border:1px solid rgba(201,168,76,.4);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#c9a84c}
+.paso-title{font-family:'Cormorant Garamond',serif;font-size:1.15rem;color:#f2ece4;margin-bottom:.35rem;line-height:1.3}
+.paso-text{font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.7}
 
+/* ── BENEFICIOS (pilares) ── */
+.pillars{display:flex;flex-direction:column;gap:2.5rem}
 .pillar{border-left:1px solid rgba(201,168,76,.25);padding-left:1.4rem}
-.pillar-num{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:rgba(201,168,76,.5);margin-bottom:.4rem}
-.pillar-title{font-family:'Cormorant Garamond',serif;font-size:1.25rem;color:#f2ece4;margin-bottom:.5rem;line-height:1.3}
-.pillar-text{font-family:'Inter',sans-serif;font-size:.82rem;color:#9a8e96;line-height:1.7}
+.pillar-title{font-family:'Cormorant Garamond',serif;font-size:1.2rem;color:#f2ece4;margin-bottom:.5rem;line-height:1.3}
+.pillar-text{font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.7}
 
 /* ── CIERRE ── */
 .close-section{position:relative;z-index:1;padding:5rem 1.5rem;text-align:center;max-width:560px;margin:0 auto}
-
 .close-quote{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,4vw,1.6rem);color:#f2ece4;line-height:1.6;margin-bottom:1rem}
-
-.close-sub{font-family:'Inter',sans-serif;font-size:.78rem;color:#7a6e78;margin-bottom:2.5rem;line-height:1.6}
-
+.close-sub{font-family:'Inter',sans-serif;font-size:.82rem;color:#7a6e78;margin-bottom:2.6rem;line-height:1.6}
 .close-orb{width:48px;height:48px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 20px 6px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 
-.form-wrap-close{max-width:380px;margin:0 auto}
-
 /* ── FOOTER ── */
-footer{position:relative;z-index:1;padding:2rem 1.5rem;text-align:center;border-top:1px solid rgba(42,31,40,.5)}
+footer{position:relative;z-index:1;padding:2.4rem 1.5rem;text-align:center;border-top:1px solid rgba(42,31,40,.5)}
+.footer-links{display:flex;justify-content:center;gap:1.6rem;flex-wrap:wrap;margin-bottom:1rem}
+.footer-links a{font-family:'Inter',sans-serif;font-size:.75rem;color:#7a6e78;text-decoration:none;letter-spacing:.03em;transition:color .2s}
+.footer-links a:hover{color:#c9a84c}
 footer p{font-family:'Inter',sans-serif;font-size:.7rem;color:#3a2f38;letter-spacing:.05em}
+
+@media (prefers-reduced-motion:reduce){
+  .scroll-hint,.close-orb{animation:none}
+}
 </style>
 </head>
 <body>
@@ -102,16 +113,7 @@ footer p{font-family:'Inter',sans-serif;font-size:.7rem;color:#3a2f38;letter-spa
     Soul se toma el tiempo de conocerte a vos.
   </p>
 
-  <div class="form-wrap">
-    <div class="form-input-row">
-      <input type="email" class="email-input" id="emailInput" placeholder="tu@mail.com">
-      <button class="submit-btn" onclick="submitEmail()">Quiero estar →</button>
-    </div>
-    <p class="form-note">Beta cerrada. Te avisamos cuando sea tu momento.</p>
-    <div class="success-msg" id="successMsg">
-      <p>Quedaste en la lista. ✦<br>Cuando Soul esté lista para vos, te lo hacemos saber.</p>
-    </div>
-  </div>
+  <a class="cta-btn" href="/soul.html">Entrar a Soul →</a>
 
   <div class="scroll-hint">
     <span>Seguir</span>
@@ -119,29 +121,57 @@ footer p{font-family:'Inter',sans-serif;font-size:.7rem;color:#3a2f38;letter-spa
   </div>
 </section>
 
-<!-- DIFERENCIAL -->
-<section class="section">
-  <div class="section-divider"></div>
-  <div class="pillars">
+<!-- QUE ES SOUL -->
+<section class="intro">
+  <p>Soul es una plataforma de vínculos humanos basada en coaching ontológico. Antes de presentarte a alguien, conversa con vos — de verdad — para entender cómo te vinculás, no solo qué decís que buscás.</p>
+</section>
 
+<!-- COMO FUNCIONA -->
+<section class="section">
+  <p class="section-eyebrow">Cómo funciona</p>
+  <p class="section-title">Tres pasos, no un formulario.</p>
+  <div class="pasos">
+    <div class="paso">
+      <div class="paso-num">1</div>
+      <div>
+        <p class="paso-title">Conversás con Soul</p>
+        <p class="paso-text">Le contás quién sos en una charla real, a tu ritmo — no llenás un perfil con checkboxes.</p>
+      </div>
+    </div>
+    <div class="paso">
+      <div class="paso-num">2</div>
+      <div>
+        <p class="paso-title">Soul te presenta a alguien</p>
+        <p class="paso-text">Con compatibilidad real y potencial de construir algo juntos, no solo una foto que gustó.</p>
+      </div>
+    </div>
+    <div class="paso">
+      <div class="paso-num">3</div>
+      <div>
+        <p class="paso-title">Se encuentran, acompañados</p>
+        <p class="paso-text">Soul está presente en el primer encuentro y en la reflexión después, para que ese momento cuente.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFICIOS -->
+<section class="section">
+  <p class="section-eyebrow">Por qué Soul</p>
+  <p class="section-title">Lo que lo hace distinto.</p>
+  <div class="pillars">
     <div class="pillar">
-      <p class="pillar-num">01</p>
       <p class="pillar-title">Primero te conoce a vos</p>
       <p class="pillar-text">Soul no empieza preguntando qué buscás. Empieza escuchándote. A través de una conversación real, construye un perfil de cómo te vinculás — no de lo que declarás, sino de cómo sos.</p>
     </div>
-
     <div class="pillar">
-      <p class="pillar-num">02</p>
       <p class="pillar-title">No busca la pareja perfecta</p>
       <p class="pillar-text">Busca dos personas que puedan convertirse en una gran pareja. La compatibilidad de hoy importa. Pero lo que más importa es el potencial de construir algo juntos.</p>
     </div>
-
     <div class="pillar">
-      <p class="pillar-num">03</p>
-      <p class="pillar-title">El algoritmo no termina en el match</p>
-      <p class="pillar-text">Recién ahí empieza. Soul acompaña el primer encuentro, prepara a cada persona para ese momento, y está presente si algo necesita sostenerse.</p>
+      <p class="pillar-title">El acompañamiento no termina en el match</p>
+      <p class="pillar-text">Recién ahí empieza. Soul prepara a cada persona para el primer encuentro, y está presente si algo necesita sostenerse después.</p>
     </div>
-
   </div>
 </section>
 
@@ -150,31 +180,19 @@ footer p{font-family:'Inter',sans-serif;font-size:.7rem;color:#3a2f38;letter-spa
   <div class="close-orb"></div>
   <p class="close-quote">"La premisa es acompañarse en la vida."</p>
   <p class="close-sub">No solo en el romance. En la amistad, en la compañía, en lo que sea que estés buscando encontrar.</p>
-
-  <div class="form-wrap-close">
-    <div class="form-input-row">
-      <input type="email" class="email-input" id="emailInput2" placeholder="tu@mail.com">
-      <button class="submit-btn" onclick="submitEmail2()">Sumarme →</button>
-    </div>
-    <p class="form-note">Beta cerrada · Solo te escribimos cuando sea tu momento.</p>
-    <div class="success-msg" id="successMsg2">
-      <p>Quedaste en la lista. ✦<br>Cuando Soul esté lista para vos, te lo hacemos saber.</p>
-    </div>
-  </div>
+  <a class="cta-btn" href="/soul.html">Entrar a Soul →</a>
 </section>
 
 <footer>
-  <p>© Soul · Todos los derechos reservados · Beta cerrada</p>
+  <div class="footer-links">
+    <a href="/consentimiento.html">Privacidad</a>
+    <a href="/consentimiento.html">Términos</a>
+    <a href="mailto:lounasa2003@gmail.com">Contacto</a>
+  </div>
+  <p>© Soul · Todos los derechos reservados</p>
 </footer>
 
 <script>
-// Bypass de la waitlist para testing (?beta=off). No es control de acceso real
-// -- el parametro queda visible en la URL/historial -- solo para saltar
-// directo a la app mientras dura el desarrollo.
-if (new URLSearchParams(location.search).get('beta') === 'off') {
-  location.href = '/soul.html';
-}
-
 // ── UNIVERSO CON CONSTELACIONES ──
 const canvas = document.getElementById('universe');
 const ctx = canvas.getContext('2d');
@@ -225,6 +243,8 @@ const conLines = [
   [7,10],[10,11],[11,12],[12,13],
   [11,14],[14,15],[10,15]
 ];
+
+const prefiereMenosMovimiento = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let t = 0;
 function draw() {
@@ -282,32 +302,9 @@ function draw() {
     ctx.fill();
   });
 
-  requestAnimationFrame(draw);
+  if (!prefiereMenosMovimiento) requestAnimationFrame(draw);
 }
 draw();
-
-// ── FORMULARIO ──
-function submitEmail() {
-  const email = document.getElementById('emailInput').value.trim();
-  if (!email || !email.includes('@')) {
-    document.getElementById('emailInput').style.borderColor = 'rgba(217,138,158,0.6)';
-    return;
-  }
-  document.getElementById('emailInput').style.display = 'none';
-  document.querySelector('.form-input-row .submit-btn').style.display = 'none';
-  document.getElementById('successMsg').style.display = 'block';
-  // Acá iría la llamada a tu backend / Supabase
-}
-
-function submitEmail2() {
-  const email = document.getElementById('emailInput2').value.trim();
-  if (!email || !email.includes('@')) {
-    document.getElementById('emailInput2').style.borderColor = 'rgba(217,138,158,0.6)';
-    return;
-  }
-  document.querySelectorAll('.form-wrap-close .form-input-row')[0].style.display = 'none';
-  document.getElementById('successMsg2').style.display = 'block';
-}
 </script>
 </body>
 </html>
