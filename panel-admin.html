@@ -74,7 +74,10 @@ a{color:inherit}
 
 <div class="login-wrap" id="loginWrap">
   <p class="login-title">Panel de Soul</p>
-  <input type="password" class="login-input" id="loginPass" placeholder="Contraseña de admin">
+  <div style="position:relative">
+    <input type="password" class="login-input" id="loginPass" placeholder="Contraseña de admin" style="padding-right:4.4rem">
+    <span onclick="togglePassVisibility('loginPass',this)" style="position:absolute;right:.9rem;top:0;bottom:1rem;display:flex;align-items:center;cursor:pointer;color:#7a6e78;font-size:.78rem;user-select:none">Mostrar</span>
+  </div>
   <p class="login-err" id="loginErr">Contraseña incorrecta.</p>
   <button class="btn" style="width:100%" onclick="entrarAdmin()">Entrar →</button>
 </div>
@@ -147,6 +150,12 @@ a{color:inherit}
 </div>
 
 <script>
+function togglePassVisibility(id,el){
+  var inp=document.getElementById(id);
+  if(inp.type==='password'){inp.type='text';el.textContent='Ocultar';}
+  else{inp.type='password';el.textContent='Mostrar';}
+}
+
 var adminPassword=null;
 var personasCache=[];
 var personaActual=null;

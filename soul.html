@@ -279,7 +279,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
     <input type="text" class="auth-input" id="authNombre" placeholder="Tu nombre">
     <input type="email" class="auth-input" id="authEmail" placeholder="tu@mail.com">
-    <input type="password" class="auth-input" id="authPass" placeholder="Contraseña (mínimo 6 caracteres)">
+    <div style="position:relative">
+      <input type="password" class="auth-input" id="authPass" placeholder="Contraseña (mínimo 6 caracteres)" style="padding-right:4.4rem">
+      <span onclick="togglePassVisibility('authPass',this)" style="position:absolute;right:.9rem;top:0;bottom:.8rem;display:flex;align-items:center;cursor:pointer;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;user-select:none">Mostrar</span>
+    </div>
 
     <button class="btn-gold" id="authBtn" onclick="hacerAuth()" style="width:100%;opacity:1">Crear mi cuenta →</button>
     <p class="auth-loading" id="authLoading">Un momento...</p>
@@ -344,7 +347,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
     <div class="auth-err" id="nuevaPassErr"></div>
 
-    <input type="password" class="auth-input" id="nuevaPassInput" placeholder="Contraseña nueva (mínimo 6 caracteres)">
+    <div style="position:relative">
+      <input type="password" class="auth-input" id="nuevaPassInput" placeholder="Contraseña nueva (mínimo 6 caracteres)" style="padding-right:4.4rem">
+      <span onclick="togglePassVisibility('nuevaPassInput',this)" style="position:absolute;right:.9rem;top:0;bottom:.8rem;display:flex;align-items:center;cursor:pointer;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;user-select:none">Mostrar</span>
+    </div>
 
     <button class="btn-gold" id="nuevaPassBtn" onclick="confirmarNuevaPassword()" style="width:100%;opacity:1">Guardar contraseña →</button>
     <p class="auth-loading" id="nuevaPassLoading">Guardando...</p>
@@ -1934,6 +1940,12 @@ async function confirmarNuevaPassword(){
 function irALoginTrasConfirmar(){
   if(authMode==='registro')toggleAuthMode();
   ir(0);
+}
+
+function togglePassVisibility(id,el){
+  var inp=document.getElementById(id);
+  if(inp.type==='password'){inp.type='text';el.textContent='Ocultar';}
+  else{inp.type='password';el.textContent='Mostrar';}
 }
 
 function toggleAuthMode(){
