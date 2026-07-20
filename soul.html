@@ -289,6 +289,16 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
+<!-- ══ RESULTADO DE TOCAR EL LINK DE CONFIRMACIÓN ══ -->
+<div class="etapa" id="eMailConfirmado">
+  <div class="auth-wrap">
+    <div class="auth-orb"></div>
+    <p class="auth-title" id="mailConfirmadoTitulo">Confirmando...</p>
+    <p class="auth-sub" id="mailConfirmadoTexto"></p>
+    <button class="btn-gold" id="mailConfirmadoBtn" style="width:100%;opacity:1;display:none" onclick="irALoginTrasConfirmar()">Iniciar sesión →</button>
+  </div>
+</div>
+
 <!-- ══ CONFIRMÁ TU EMAIL (post-registro, antes de poder usar la app) ══ -->
 <div class="etapa" id="eConfirmarEmail">
   <div class="auth-wrap">
@@ -1818,7 +1828,37 @@ var userEmail=null;
 // el login normal. Se hace en DOMContentLoaded (no en carga directa del
 // script) para que ya haya corrido "var etapaActual=0" más abajo en el
 // archivo -- si no, esa declaración pisa el valor seteado acá.
-window.addEventListener('DOMContentLoaded',function(){
+// El link de confirmacion de cuenta (mandado por notificarConfirmarMail,
+// lib/email.js) vuelve con el token en la query string -- distinto del de
+// recuperacion de Supabase, que usa el hash. La sesion nunca persiste
+// entre cargas (ver comentario mas abajo), asi que tocar el link SIEMPRE
+// abre una carga nueva sin sesion, sea el mismo dispositivo o no -- por
+// eso el resultado siempre termina en "iniciá sesión para seguir", nunca
+// intenta retomar nada de memoria.
+window.addEventListener('DOMContentLoaded',async function(){
+  var paramsQuery=new URLSearchParams(location.search);
+  var tokenConfirmar=paramsQuery.get('confirmarMail');
+  if(tokenConfirmar){
+    history.replaceState(null,'',location.pathname);
+    document.getElementById('e0').classList.remove('activa');
+    document.getElementById('eMailConfirmado').classList.add('activa');
+    etapaActual='MailConfirmado';
+    try{
+      var res=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'confirmarMail',token:tokenConfirmar})});
+      var data=await res.json();
+      if(res.ok){
+        document.getElementById('mailConfirmadoTitulo').textContent='✓ Cuenta confirmada';
+        document.getElementById('mailConfirmadoTexto').textContent='Ya podés iniciar sesión y seguir con Soul.';
+      }else{
+        document.getElementById('mailConfirmadoTitulo').textContent='Este link no funcionó';
+        document.getElementById('mailConfirmadoTexto').textContent=data.mensaje||'Puede que ya lo hayas usado. Iniciá sesión y pedí que te reenvíen uno nuevo si hace falta.';
+      }
+    }catch(e){
+      document.getElementById('mailConfirmadoTitulo').textContent='Este link no funcionó';
+      document.getElementById('mailConfirmadoTexto').textContent='No pudimos conectar. Iniciá sesión y probá de nuevo.';
+    }
+    document.getElementById('mailConfirmadoBtn').style.display='block';
+  }
   var hash=location.hash.replace(/^#/,'');
   if(!hash)return;
   var params={};
@@ -1889,6 +1929,11 @@ async function confirmarNuevaPassword(){
     document.getElementById('nuevaPassBtn').style.display='block';
     document.getElementById('nuevaPassLoading').style.display='none';
   }
+}
+
+function irALoginTrasConfirmar(){
+  if(authMode==='registro')toggleAuthMode();
+  ir(0);
 }
 
 function toggleAuthMode(){
@@ -2270,6 +2315,17 @@ async function continuarTrasCierreMatch(){
 // La distinción con el camino inmediato post-onboarding (window.matchEsPersistido
 // en false) es que ahí el match todavía no está 'activo' en la base -- ese
 // camino sigue yendo directo a preparación como siempre.
+// Punto compartido para cuando el servidor frena una accion por mail sin
+// confirmar (calcularMatches, elegir un match, escribir en una cita) --
+// misma pantalla que se usa recien registrada, reutilizando el boton de
+// reenvio ya armado ahi.
+function requiereConfirmarEmail(){
+  window.emailParaConfirmar=userEmail;
+  document.getElementById('confirmarEmailErr').style.display='none';
+  document.getElementById('confirmarEmailReenviado').style.display='none';
+  ir('ConfirmarEmail');
+}
+
 async function decidirEnMatch(si){
   document.getElementById('matchDecisionBtns').style.display='none';
   var msg=document.getElementById('matchDecisionMsg');
@@ -2285,6 +2341,7 @@ async function decidirEnMatch(si){
     });
     var data=await res.json();
     if(!res.ok){
+      if(data.error==='email_no_confirmado'){ requiereConfirmarEmail(); return; }
       msg.textContent='Algo se complicó guardando tu elección. Probá de nuevo en un rato.';
       return;
     }
@@ -3801,6 +3858,10 @@ async function sendCita(){
     if(!res.ok){
       quitarPendiente(pendiente);
       inp.value=txt;
+      if(res.status===403){
+        var errCita=await res.json().catch(function(){return{}});
+        if(errCita.error==='email_no_confirmado'){ requiereConfirmarEmail(); }
+      }
       return;
     }
     actualizarAvisoLimiteRestante('citaAvisoLimite',parseInt(res.headers.get('X-Limite-Restante'),10));

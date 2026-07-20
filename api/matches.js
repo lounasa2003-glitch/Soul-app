@@ -173,6 +173,12 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
   if (!matchId || (eleccion !== 'acepta' && eleccion !== 'rechaza')) {
     return res.status(400).json({ error: 'Faltan datos o elección inválida' });
   }
+  // Rechazar no conecta con nadie, así que no hace falta bloquearlo -- pero
+  // aceptar puede generar un match mutuo y una cita con una persona real,
+  // que es exactamente el momento en que la confirmación de mail importa.
+  if (eleccion === 'acepta' && !usuario.emailConfirmado) {
+    return res.status(403).json({ error: 'email_no_confirmado', mensaje: 'Confirmá tu email para poder avanzar con un match.' });
+  }
   const idEnc = encodeURIComponent(matchId);
 
   const filaRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=*&id=eq.${idEnc}`, { headers });

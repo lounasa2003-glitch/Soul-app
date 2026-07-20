@@ -1,5 +1,7 @@
+import crypto from 'crypto';
 import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido, parsearFiltro } from '../lib/authUtil.js';
 import { registrarEvento } from '../lib/logEvento.js';
+import { notificarConfirmarMail } from '../lib/email.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
 // atomico (on_conflict=usuario_id) para no depender de un check-then-act
@@ -75,6 +77,21 @@ export default async function handler(req, res) {
 
     if (!filtro && tabla === 'usuarios' && data[0]) {
       await registrarEvento({ usuarioId: data[0].id, tipo: 'registro' });
+      // Token propio de confirmacion (independiente del de Supabase Auth --
+      // ver notificarConfirmarMail en lib/email.js sobre por que). Best-
+      // effort: si el mail no sale, la cuenta queda creada igual y puede
+      // pedir el reenvio desde la pantalla de "Revisá tu email".
+      try {
+        const token = crypto.randomBytes(24).toString('hex');
+        await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(data[0].id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'return=minimal' },
+          body: JSON.stringify({ token_confirmacion: token })
+        });
+        await notificarConfirmarMail({ nombre: data[0].nombre, email: data[0].email, token });
+      } catch (e) {
+        console.error('Error generando/enviando confirmacion de mail:', e);
+      }
     } else if (tabla === 'perfiles' && esUpsert) {
       await registrarEvento({ usuarioId: usuario.usuarioId, tipo: 'onboarding_completado' });
     }

@@ -25,6 +25,12 @@ export default async function handler(req, res) {
     if (!usuario || !usuario.usuarioId) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
+    // El onboarding y el chat con Soul no requieren mail confirmado (no
+    // involucran a otra persona real) -- pero calcular matches es el primer
+    // paso hacia una interaccion con alguien mas, asi que ahi si se exige.
+    if (!usuario.emailConfirmado) {
+      return res.status(403).json({ error: 'email_no_confirmado', mensaje: 'Confirmá tu email para poder buscar matches.' });
+    }
     const usuarioId = usuario.usuarioId;
 
     const limiteInfo = await chequearLimite(usuario.email, 'calcularMatches', LIMITE_MATCHES, VENTANA_MATCHES_SEGUNDOS);

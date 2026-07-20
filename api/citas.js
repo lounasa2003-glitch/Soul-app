@@ -207,6 +207,12 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   if (!citaId || tipo !== 'texto' || !contenido) {
     return res.status(400).json({ error: 'Faltan datos' });
   }
+  // Ultima red de seguridad antes de escribirle a una persona real -- cubre
+  // el caso de una cita ya existente (ej. activada por la admin) para una
+  // cuenta que todavia no confirmo el mail.
+  if (!usuario.emailConfirmado) {
+    return res.status(403).json({ error: 'email_no_confirmado', mensaje: 'Confirmá tu email para poder escribir en el encuentro.' });
+  }
   const auth = await obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario.usuarioId);
   if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
   // Con la Sala de Encuentros, cada encuentro es una fila propia en citas

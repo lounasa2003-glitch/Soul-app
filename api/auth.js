@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import { chequearLimite } from '../lib/rateLimit.js';
+import { notificarConfirmarMail } from '../lib/email.js';
 
 const REDIRECT_URL = 'https://soulapp.love/soul.html';
 
@@ -69,6 +71,49 @@ export default async function handler(req, res) {
       return res.status(200).json({ email: data.email });
     }
 
+    // Confirmacion de cuenta propia (independiente de la de Supabase Auth --
+    // ver el comentario en lib/email.js sobre por que). No requieren la
+    // sesion de la persona: reenviarConfirmacion se pide desde la pantalla
+    // "Revisá tu email" sin sesion valida todavia en algunos casos, y
+    // confirmarMail llega desde el link del mail, que puede abrirse en un
+    // dispositivo distinto al que se registro.
+    if (accion === 'reenviarConfirmacion') {
+      const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,mail_confirmado&email=eq.${encodeURIComponent(email)}`, { headers: headersSb });
+      const rows = rowRes.ok ? await rowRes.json() : [];
+      const fila = rows[0];
+      // Misma respuesta exista o no la cuenta, o ya este confirmada -- este
+      // endpoint no es un lugar para confirmar si un mail esta registrado.
+      if (fila && !fila.mail_confirmado) {
+        const token = crypto.randomBytes(24).toString('hex');
+        await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
+          method: 'PATCH',
+          headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ token_confirmacion: token })
+        });
+        await notificarConfirmarMail({ nombre: fila.nombre, email: fila.email, token });
+      }
+      return res.status(200).json({ ok: true });
+    }
+
+    if (accion === 'confirmarMail') {
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ error: 'Falta token' });
+      const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&token_confirmacion=eq.${encodeURIComponent(token)}`, { headers: headersSb });
+      const rows = rowRes.ok ? await rowRes.json() : [];
+      const fila = rows[0];
+      if (!fila) {
+        return res.status(400).json({ error: 'token_invalido', mensaje: 'Este link ya no es válido -- puede que ya lo hayas usado, o que hayas pedido uno nuevo después.' });
+      }
+      await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
+        method: 'PATCH',
+        headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ mail_confirmado: true, token_confirmacion: null })
+      });
+      return res.status(200).json({ ok: true });
+    }
+
     let endpoint = '';
     let bodyData;
     if (accion === 'registro') {
@@ -80,9 +125,6 @@ export default async function handler(req, res) {
     } else if (accion === 'recuperar') {
       endpoint = '/auth/v1/recover?redirect_to=' + encodeURIComponent(REDIRECT_URL);
       bodyData = { email };
-    } else if (accion === 'reenviarConfirmacion') {
-      endpoint = '/auth/v1/resend';
-      bodyData = { type: 'signup', email, options: { email_redirect_to: REDIRECT_URL } };
     } else if (accion === 'refrescar') {
       endpoint = '/auth/v1/token?grant_type=refresh_token';
       bodyData = { refresh_token };
