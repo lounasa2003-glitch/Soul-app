@@ -66,7 +66,7 @@ export default async function handler(req, res) {
   if (secretoEsperado) {
     const recibido = (req.headers.authorization || '').replace('Bearer ', '');
     if (recibido !== secretoEsperado) {
-      return res.status(401).json({ error: 'No autorizado', debugHeaders: Object.keys(req.headers), debugAuthHeader: req.headers.authorization || null });
+      return res.status(401).json({ error: 'No autorizado' });
     }
   }
 
