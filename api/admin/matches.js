@@ -21,12 +21,20 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     return res.status(400).json({ error: 'Falta personaId' });
   }
 
-  const [miRes, otrosRes] = await Promise.all([
+  const [miRes, otrosRes, cuentasPruebaRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(personaId)}`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(personaId)}`, { headers })
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(personaId)}`, { headers }),
+    // Las cuentas de prueba fijas (Vista Previa) usan a proposito el dominio
+    // @soul-app.test -- nunca deben terminar sugeridas como match para una
+    // persona real por casualidad de compatibilidad.
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=like.*@soul-app.test`, { headers })
   ]);
   const misPerfiles = miRes.ok ? await miRes.json() : [];
-  const otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
+  let otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
+  const idsCuentasPrueba = new Set((cuentasPruebaRes.ok ? await cuentasPruebaRes.json() : []).map((u) => u.id));
+  if (idsCuentasPrueba.size > 0) {
+    otrosPerfiles = otrosPerfiles.filter((p) => !idsCuentasPrueba.has(p.usuario_id));
+  }
 
   if (!misPerfiles[0]) {
     return res.status(400).json({ error: 'sin_perfil', mensaje: 'Esta persona todavía no tiene perfil.' });

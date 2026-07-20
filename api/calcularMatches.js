@@ -53,11 +53,18 @@ export default async function handler(req, res) {
     }
     const miPerfil = misPer[0];
 
-    const otrosRes = await fetch(
-      `${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}`,
-      { headers }
-    );
-    const otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
+    const [otrosRes, cuentasPruebaRes] = await Promise.all([
+      fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}`, { headers }),
+      // Las cuentas de prueba fijas (Vista Previa del panel admin) usan a
+      // proposito el dominio @soul-app.test -- nunca deben terminar
+      // matcheadas con una persona real por casualidad de compatibilidad.
+      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=like.*@soul-app.test`, { headers })
+    ]);
+    let otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
+    const idsCuentasPrueba = new Set((cuentasPruebaRes.ok ? await cuentasPruebaRes.json() : []).map((u) => u.id));
+    if (idsCuentasPrueba.size > 0) {
+      otrosPerfiles = otrosPerfiles.filter((p) => !idsCuentasPrueba.has(p.usuario_id));
+    }
 
     // Evita generar un match duplicado con alguien con quien ya existe uno
     // (en cualquier estado) -- sin este chequeo, reintentar el pipeline
