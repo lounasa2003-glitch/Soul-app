@@ -3,6 +3,7 @@ import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
 import { notificarNuevoMatch } from '../../lib/email.js';
+import { generosCompatibles } from '../../lib/matchCompatible.js';
 
 // Fusiona lo que antes eran admin/ranking.js y admin/activarMatch.js en un
 // solo archivo -- el plan Hobby de Vercel permite como maximo 12 funciones
@@ -46,18 +47,28 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   }
 
   const idsUnicos = [...new Set(otrosPerfiles.map(p => p.usuario_id))];
-  const [nombresRes, matchesRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers })
+  const [nombresRes, matchesRes, miUsuarioRes] = await Promise.all([
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,genero,preferencia_genero&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=eq.${encodeURIComponent(personaId)}`, { headers })
   ]);
   const nombresRows = nombresRes.ok ? await nombresRes.json() : [];
   const nombrePorId = {};
-  nombresRows.forEach(u => { nombrePorId[u.id] = u.nombre; });
+  const generoPorId = {};
+  nombresRows.forEach(u => { nombrePorId[u.id] = u.nombre; generoPorId[u.id] = u; });
+  const miUsuarioRows = miUsuarioRes.ok ? await miUsuarioRes.json() : [];
+  const miGeneroInfo = miUsuarioRows[0] || null;
 
   const matchesExistentes = matchesRes.ok ? await matchesRes.json() : [];
   const paresExistentes = new Set(
     matchesExistentes.map(m => [m.usuario_a, m.usuario_b].sort().join('|'))
   );
+
+  // Filtra ANTES de gastar ninguna llamada a Claude -- ver
+  // lib/matchCompatible.js: sin esto el ranking llegaba a comparar (y hasta
+  // matchear) personas que cruzaban lo que cada una eligio en "¿Con quien
+  // queres conectar?".
+  otrosPerfiles = otrosPerfiles.filter(p => generosCompatibles(miGeneroInfo, generoPorId[p.usuario_id]));
 
   let totalInputTokens = 0, totalOutputTokens = 0;
   const comparaciones = [];

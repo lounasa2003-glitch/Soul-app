@@ -4,6 +4,7 @@ import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
+import { generosCompatibles } from '../lib/matchCompatible.js';
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
@@ -81,6 +82,27 @@ export default async function handler(req, res) {
     );
     const otrosPerfilesSinMatch = otrosPerfiles.filter((p) => !idsYaMatcheados.has(p.usuario_id));
 
+    // El genero/preferencia vive en 'usuarios', no en 'perfiles' -- hace
+    // falta traerlo aparte para filtrar ANTES de gastar ninguna llamada a
+    // Claude (ver lib/matchCompatible.js: sin esto se llegaron a crear
+    // matches que cruzaban lo que la persona eligio en "¿Con quien queres
+    // conectar?").
+    const idsCandidatos = otrosPerfilesSinMatch.map((p) => p.usuario_id);
+    let miGeneroInfo = null;
+    let otrosPerfilesCompatibles = [];
+    if (idsCandidatos.length > 0) {
+      const [miUsuarioRes, otrosUsuariosRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=eq.${encodeURIComponent(usuarioId)}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers })
+      ]);
+      const miUsuarioRows = miUsuarioRes.ok ? await miUsuarioRes.json() : [];
+      miGeneroInfo = miUsuarioRows[0] || null;
+      const otrosUsuarios = otrosUsuariosRes.ok ? await otrosUsuariosRes.json() : [];
+      const generoPorId = {};
+      otrosUsuarios.forEach((u) => { generoPorId[u.id] = u; });
+      otrosPerfilesCompatibles = otrosPerfilesSinMatch.filter((p) => generosCompatibles(miGeneroInfo, generoPorId[p.usuario_id]));
+    }
+
     let matchEncontrado = false;
     let matchData = null;
     // Este endpoint puede hacer varias llamadas a Claude (una por cada otro
@@ -88,7 +110,7 @@ export default async function handler(req, res) {
     // en vez de sumar una escritura a Supabase por cada comparacion.
     let totalInputTokens = 0, totalOutputTokens = 0;
 
-    for (const otro of otrosPerfilesSinMatch) {
+    for (const otro of otrosPerfilesCompatibles) {
       const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
         max_tokens: 1200,
@@ -145,7 +167,7 @@ export default async function handler(req, res) {
     await registrarEvento({
       usuarioId,
       tipo: 'calculo_matches',
-      metadata: { matchEncontrado, cantidadComparaciones: otrosPerfilesSinMatch.length }
+      metadata: { matchEncontrado, cantidadComparaciones: otrosPerfilesCompatibles.length }
     });
 
     return res.status(200).json({ matchEncontrado, matchData });
