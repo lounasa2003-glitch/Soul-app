@@ -831,7 +831,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <div class="chat-header">
       <div class="chat-orb"></div>
       <div><div class="chat-nm">Soul</div><div class="chat-st">conversando con vos</div></div>
-      <span onclick="pedirPausaChat()" style="margin-left:auto;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:.9rem">
+        <span onclick="avanzarManualmente()" id="avanzarManualBtn" style="display:none;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Ya conté bastante, avancemos →</span>
+        <span onclick="pedirPausaChat()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
+      </div>
     </div>
     <div class="chat-area" id="chatArea"></div>
     <div id="chatAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
@@ -3294,6 +3297,13 @@ var INTERCAMBIOS_AUTOSAVE=2;
 // no hay material real para guardar como perfil parcial, así que Soul
 // prefiere invitar a seguir un poco más en vez de cerrar de una.
 var UMBRAL_VIABLE_PAUSA=6;
+// Mensajes en chatHistory (usuario+Soul) a partir de los cuales aparece el
+// boton manual "Ya conté bastante, avancemos", y a partir de los cuales se
+// fuerza el cierre igual si Soul todavia no decidio cerrar sola -- ver el
+// comentario junto a UMBRAL_FORZAR_CIERRE en enviarAlChat().
+var UMBRAL_MOSTRAR_BOTON_AVANZAR=30;
+var UMBRAL_FORZAR_CIERRE=50;
+var cierreForzadoDisparado=false;
 // Bloque de blindaje anti-fuga / anti-inyeccion, agregado al final de todos
 // los prompts conversacionales (chat principal, modulos, cita, debriefing)
 // -- nunca a los prompts de extraccion/analisis puro (esos ya responden
@@ -3498,6 +3508,21 @@ function pedirPausaChat(){
   });
 }
 
+// Salida manual (boton en el header a partir de UMBRAL_MOSTRAR_BOTON_AVANZAR,
+// o forzada sola a partir de UMBRAL_FORZAR_CIERRE en enviarAlChat) para
+// cuando Soul no decide cerrar por su cuenta. Reutiliza el mismo pipeline
+// que el cierre automatico (avanzarAlMatch/hacerAvanzar, ya protegido
+// contra corridas duplicadas) -- arma el perfil con lo que se hablo hasta
+// ahora en vez de dejar a la persona charlando sin avanzar nunca.
+function avanzarManualmente(){
+  document.getElementById('avanzarManualBtn').style.display='none';
+  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
+  var cierre='Dale, con todo lo que charlamos ya tengo una buena base para vos.';
+  addMsg('soul',cierre);
+  chatHistory.push({role:'assistant',content:cierre});
+  avanzarAlMatch();
+}
+
 async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
   showTyping();
@@ -3528,9 +3553,32 @@ async function enviarAlChat(txt){
     // avanzar (no se le pregunta al usuario con dos botones "avanzar" vs
     // "seguir charlando", que generaban confusión). El delay es solo para
     // que se alcance a leer el mensaje antes de que arranque el pipeline.
-    if(reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1){
+    var cerroSola=reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1;
+    if(cerroSola){
       setTimeout(function(){
         avanzarAlMatch();
+      },1800);
+    }
+
+    // Red de seguridad: el cierre dependia 100% de que Soul decidiera sola
+    // (sin ningun limite) que ya cubrio los 9 temas del checklist, y de que
+    // repitiera una frase exacta -- personas reales llegaron a 60-90+
+    // mensajes sin que eso pasara nunca, charlando indefinidamente sin
+    // avanzar ni tener perfil armado. A partir de UMBRAL_MOSTRAR_BOTON_AVANZAR
+    // se le da a la persona una salida manual visible; a partir de
+    // UMBRAL_FORZAR_CIERRE se fuerza el cierre igual (mejor un perfil armado
+    // con lo que hay que dejarla sin avanzar nunca).
+    if(!cerroSola&&chatHistory.length>=UMBRAL_MOSTRAR_BOTON_AVANZAR){
+      document.getElementById('avanzarManualBtn').style.display='inline';
+    }
+    // El guard cierreForzadoDisparado evita reprogramar esto en cada mensaje
+    // siguiente una vez cruzado el umbral (sin eso, cada mensaje nuevo
+    // volvia a programar otro avanzarManualmente(), duplicando el mensaje
+    // de cierre una vez por cada uno que llegara a disparar).
+    if(!cerroSola&&!cierreForzadoDisparado&&chatHistory.length>=UMBRAL_FORZAR_CIERRE){
+      cierreForzadoDisparado=true;
+      setTimeout(function(){
+        avanzarManualmente();
       },1800);
     }
     // Detectar si Soul propone pausar por contención emocional
