@@ -23,6 +23,54 @@ export default async function handler(req, res) {
   const { id, modo } = req.query;
 
   try {
+    if (modo === 'metricas') {
+      // Se trae todo y se agrega en memoria (nada de RPC/SQL crudo) --
+      // mismo criterio que el resto del panel (ranking, listado de
+      // personas), y el volumen de un piloto no justifica nada mas
+      // elaborado. Se calcula al pedirlo, no en vivo/cacheado.
+      const [tokensRes, eventosRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,input_tokens,output_tokens`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=tipo,usuario_id`, { headers })
+      ]);
+      const tokensFilas = tokensRes.ok ? await tokensRes.json() : [];
+      const eventosFilas = eventosRes.ok ? await eventosRes.json() : [];
+
+      // Tarifa de Claude Sonnet -- USD por millon de tokens. Ajustar aca si
+      // cambia el precio real; es una estimacion, no factura.
+      const PRECIO_INPUT_POR_MILLON = 3;
+      const PRECIO_OUTPUT_POR_MILLON = 15;
+      const porEndpoint = {};
+      let totalInput = 0, totalOutput = 0;
+      tokensFilas.forEach((f) => {
+        const ep = f.endpoint || '(sin nombre)';
+        if (!porEndpoint[ep]) porEndpoint[ep] = { endpoint: ep, inputTokens: 0, outputTokens: 0, llamadas: 0 };
+        porEndpoint[ep].inputTokens += f.input_tokens || 0;
+        porEndpoint[ep].outputTokens += f.output_tokens || 0;
+        porEndpoint[ep].llamadas += 1;
+        totalInput += f.input_tokens || 0;
+        totalOutput += f.output_tokens || 0;
+      });
+      const tokensPorEndpoint = Object.values(porEndpoint)
+        .map((f) => ({ ...f, costoEstimadoUsd: (f.inputTokens / 1e6) * PRECIO_INPUT_POR_MILLON + (f.outputTokens / 1e6) * PRECIO_OUTPUT_POR_MILLON }))
+        .sort((a, b) => b.costoEstimadoUsd - a.costoEstimadoUsd);
+      const costoTotalEstimadoUsd = (totalInput / 1e6) * PRECIO_INPUT_POR_MILLON + (totalOutput / 1e6) * PRECIO_OUTPUT_POR_MILLON;
+
+      // Personas UNICAS por tipo de evento (no eventos crudos -- un tipo
+      // como encuentro_agendado puede repetirse varias veces por persona).
+      const usuariosPorTipo = {};
+      eventosFilas.forEach((f) => {
+        if (!usuariosPorTipo[f.tipo]) usuariosPorTipo[f.tipo] = new Set();
+        usuariosPorTipo[f.tipo].add(f.usuario_id);
+      });
+      const ORDEN_EMBUDO = ['registro', 'onboarding_completado', 'calculo_matches', 'primera_conversacion', 'encuentro_agendado', 'encuentro_cerrado', 'debriefing_completado', 'eleccion_post_encuentro'];
+      const embudo = ORDEN_EMBUDO.map((tipo) => ({ tipo, personas: usuariosPorTipo[tipo] ? usuariosPorTipo[tipo].size : 0 }));
+
+      return res.status(200).json({
+        tokens: { totalInput, totalOutput, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint },
+        embudo
+      });
+    }
+
     if (!id) {
       // ── Listado de personas ──
       const usuariosRes = await fetch(

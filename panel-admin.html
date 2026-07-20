@@ -99,6 +99,14 @@ a{color:inherit}
         </div>
         <div id="previewResultado" class="oculto" style="background:rgba(201,168,76,.08);border-radius:6px;padding:.8rem"></div>
       </div>
+      <div style="border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:1.2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+          <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:1rem">Métricas del piloto</p>
+          <button class="btn-secundario" onclick="cargarMetricas()">Actualizar</button>
+        </div>
+        <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Uso de tokens (costo estimado) y embudo de personas por etapa. Se calcula al pedirlo, no en vivo.</p>
+        <div id="metricasContenido"><p class="cargando">Tocá "Actualizar" para calcular.</p></div>
+      </div>
       <p class="cargando" id="personasCargando">Cargando personas...</p>
       <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
         <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="width:100%;max-width:340px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;margin-bottom:.7rem;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
@@ -175,6 +183,55 @@ async function sembrarPreview(escenario){
     div.innerHTML='<p style="font-size:.85rem;margin-bottom:.4rem"><strong>Email:</strong> '+esc(data.email)+' &nbsp; <strong>Contraseña:</strong> '+esc(data.password)+'</p><p style="font-size:.8rem;color:#d8cdd2">'+esc(data.instrucciones)+'</p>';
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al preparar el escenario.</p>';
+  }
+}
+
+// Embudo del piloto -- etiquetas legibles para los mismos "tipo" que
+// registra registrarEvento() en lib/logEvento.js.
+var EMBUDO_ETIQUETA={
+  registro:'Se registraron',
+  onboarding_completado:'Completaron el onboarding',
+  calculo_matches:'Buscaron matches',
+  primera_conversacion:'Tuvieron una primera charla en un encuentro',
+  encuentro_agendado:'Agendaron un encuentro',
+  encuentro_cerrado:'Cerraron un encuentro',
+  debriefing_completado:'Completaron un debriefing',
+  eleccion_post_encuentro:'Eligieron cómo seguir tras un encuentro'
+};
+
+async function cargarMetricas(){
+  var div=document.getElementById('metricasContenido');
+  div.innerHTML='<p class="cargando">Calculando...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=metricas');
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo calcular')+'</p>';
+      return;
+    }
+    var html='';
+
+    html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Tokens y costo estimado</p>';
+    html+='<p style="font-size:.85rem;margin-bottom:.6rem">Total: '+(data.tokens.totalInput+data.tokens.totalOutput).toLocaleString('es-AR')+' tokens ('+data.tokens.totalInput.toLocaleString('es-AR')+' entrada / '+data.tokens.totalOutput.toLocaleString('es-AR')+' salida) — <strong style="color:#c9a84c">≈ USD '+data.tokens.costoTotalEstimadoUsd.toFixed(2)+'</strong></p>';
+    if(data.tokens.porEndpoint.length>0){
+      html+='<table class="personas-tabla" style="margin-bottom:1.2rem"><thead><tr><th>Función</th><th>Llamadas</th><th>Entrada</th><th>Salida</th><th>≈ USD</th></tr></thead><tbody>';
+      data.tokens.porEndpoint.forEach(function(f){
+        html+='<tr><td>'+esc(f.endpoint)+'</td><td>'+f.llamadas.toLocaleString('es-AR')+'</td><td>'+f.inputTokens.toLocaleString('es-AR')+'</td><td>'+f.outputTokens.toLocaleString('es-AR')+'</td><td>'+f.costoEstimadoUsd.toFixed(2)+'</td></tr>';
+      });
+      html+='</tbody></table>';
+    }
+    html+='<p style="font-size:.7rem;color:#5a5058;margin-bottom:1.2rem">Estimado a tarifa de Claude Sonnet (USD 3/millón entrada, USD 15/millón salida) -- ajustar si cambia el precio real. No incluye costos de Vercel/Supabase.</p>';
+
+    html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Embudo (personas únicas por etapa)</p>';
+    html+='<table class="personas-tabla"><tbody>';
+    data.embudo.forEach(function(e){
+      html+='<tr><td>'+esc(EMBUDO_ETIQUETA[e.tipo]||e.tipo)+'</td><td style="text-align:right;font-weight:600;color:#c9a84c">'+e.personas+'</td></tr>';
+    });
+    html+='</tbody></table>';
+
+    div.innerHTML=html;
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión al calcular las métricas.</p>';
   }
 }
 
