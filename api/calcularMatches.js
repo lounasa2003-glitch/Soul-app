@@ -4,6 +4,7 @@ import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 import { generosCompatibles } from '../lib/matchCompatible.js';
 
 const LIMITE_MATCHES = 5;
@@ -174,6 +175,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error en /api/calcularMatches:', error);
+    await registrarErrorSilencioso({ contexto: 'api/calcularMatches', error });
     return res.status(500).json({ error: 'Error calculando matches' });
   }
 }

@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 const LIMITE_ANALISIS = 2;
 
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error en /api/analisisExterno:', error);
+    await registrarErrorSilencioso({ contexto: 'api/analisisExterno', error });
     return res.status(500).json({ error: 'Error al analizar' });
   }
 }

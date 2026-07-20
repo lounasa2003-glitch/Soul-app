@@ -2,6 +2,7 @@ import { verificarAdmin } from '../../lib/verificarAdmin.js';
 import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
+import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -108,6 +109,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ...comp, nombreA, nombreB, matchId, matchEstado });
   } catch (error) {
     console.error('Error en /api/admin/comparar:', error);
+    await registrarErrorSilencioso({ contexto: 'api/admin/comparar', error });
     return res.status(500).json({ error: 'Error al comparar' });
   }
 }

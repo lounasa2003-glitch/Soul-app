@@ -5,6 +5,7 @@ import { registrarEvento } from '../lib/logEvento.js';
 import { notificarMensajeCita } from '../lib/email.js';
 import { EXTRACT_PROMPT } from './analisisExterno.js';
 import { chequearLimite } from '../lib/rateLimit.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 // Endpoint dedicado para la cita virtual asincronica -- mismo motivo que
 // api/matches.js: hace falta que usuario_a Y usuario_b del match puedan
@@ -254,6 +255,7 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
     await avisarSiDesconectado(supabaseUrl, headers, citaId, auth.cita, auth.match, usuario.usuarioId);
   } catch (e) {
     console.error('Error avisando mensaje nuevo por mail:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: avisar mensaje nuevo', error: e, meta: { citaId } });
   }
 
   return res.status(200).json({ ok: true });
@@ -361,6 +363,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
     await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: 'citaAyuda', usage: data.usage });
   } catch (e) {
     console.error('Error generando intervención de ayuda:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: intervencion de ayuda', error: e, meta: { citaId } });
     return res.status(500).json({ error: 'No se pudo generar la intervención' });
   }
 
@@ -513,6 +516,7 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
         }
       } catch (e) {
         console.error('Error creando el próximo encuentro:', e);
+        await registrarErrorSilencioso({ contexto: 'api/citas: crear proximo encuentro', error: e, meta: { matchId } });
       }
     }
   } else {
@@ -624,6 +628,7 @@ async function generarResumenCitaEnSegundoPlano(supabaseUrl, headers, citaId, ma
     await registrarUsoTokens({ usuarioId: null, endpoint: 'resumenCita', usage });
   } catch (e) {
     console.error('Error generando resumen de cita:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: resumen de cita', error: e, meta: { citaId } });
   }
 }
 
@@ -710,10 +715,14 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ usuario_id: match.usuario_b, cita_id: cita.id, match_id: cita.match_id, senales: json.b })
       }) : Promise.resolve()
-    ]).catch(() => {});
+    ]).catch(async (error) => {
+      console.error('Error guardando historial_relacional:', error);
+      await registrarErrorSilencioso({ contexto: 'api/citas: historial_relacional', error, meta: { citaId: cita.id } });
+    });
     return json;
   } catch (e) {
     console.error('Error extrayendo dinámica relacional de la cita:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: dinamica relacional', error: e, meta: { citaId: cita.id } });
     return null;
   }
 }
@@ -741,6 +750,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ci
     return historialNuevo;
   } catch (e) {
     console.error('Error generando apertura de debriefing:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: apertura de debriefing', error: e, meta: { citaId: cita.id } });
     return [];
   }
 }
@@ -869,6 +879,7 @@ async function revisarNivel2(supabaseUrl, headers, usuarioId) {
     return json.mensaje || null;
   } catch (e) {
     console.error('Error revisando Nivel 2:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: nivel 2', error: e, meta: { usuarioId } });
     return null;
   }
 }
@@ -903,6 +914,7 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     resultado = json;
   } catch (e) {
     console.error('Error cerrando debriefing corto:', e);
+    await registrarErrorSilencioso({ contexto: 'api/citas: cierre debriefing corto', error: e, meta: { usuarioId: usuario.usuarioId } });
   }
 
   const mensajeCierre = resultado.mensaje_cierre || 'Gracias por pensar esto conmigo.';
@@ -1029,6 +1041,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Error en /api/citas:', error);
+    await registrarErrorSilencioso({ contexto: 'api/citas', error });
     return res.status(500).json({ error: 'Error al procesar la solicitud' });
   }
 }

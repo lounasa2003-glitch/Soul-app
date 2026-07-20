@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { notificarConfirmarMail } from '../lib/email.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 const REDIRECT_URL = 'https://soulapp.love/soul.html';
 
@@ -151,6 +152,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error en /api/auth:', error);
+    await registrarErrorSilencioso({ contexto: 'api/auth', error, meta: { accion: req.body?.accion } });
     return res.status(500).json({ error: 'Error de autenticación' });
   }
 }

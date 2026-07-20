@@ -4,6 +4,7 @@ import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
 import { notificarNuevoMatch } from '../../lib/email.js';
 import { generosCompatibles } from '../../lib/matchCompatible.js';
+import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 // Fusiona lo que antes eran admin/ranking.js y admin/activarMatch.js en un
 // solo archivo -- el plan Hobby de Vercel permite como maximo 12 funciones
@@ -89,6 +90,7 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
         return { otro, comp, usage };
       } catch (error) {
         console.error('Error en ranking comparando contra', otro.usuario_id, error);
+        await registrarErrorSilencioso({ contexto: 'api/admin/matches: ranking', error, meta: { otroUsuarioId: otro.usuario_id } });
         return null;
       }
     }));
@@ -203,7 +205,10 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
         method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ etapa_actual: 'match' })
       })
-    ]).catch(() => {});
+    ]).catch(async (error) => {
+      console.error('Error actualizando etapa_actual a match:', error);
+      await registrarErrorSilencioso({ contexto: 'api/admin/matches: etapa_actual=match', error, meta: { matchId: match.id } });
+    });
 
     // Avisar por mail a los dos -- se espera a que termine (no
     // fire-and-forget): en serverless el contexto puede cortarse apenas se
@@ -215,6 +220,7 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
       await notificarNuevoMatch(usuarios);
     } catch (e) {
       console.error('Error notificando match nuevo por mail:', e);
+      await registrarErrorSilencioso({ contexto: 'api/admin/matches: notificar match nuevo', error: e, meta: { matchId: match.id } });
     }
   }
 
@@ -582,6 +588,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Acción no válida' });
   } catch (error) {
     console.error('Error en /api/admin/matches:', error);
+    await registrarErrorSilencioso({ contexto: 'api/admin/matches', error });
     return res.status(500).json({ error: 'Error procesando la solicitud' });
   }
 }

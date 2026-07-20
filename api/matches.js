@@ -1,6 +1,7 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
 import { registrarEvento } from '../lib/logEvento.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 // Fusiona lo que antes eran misMatches.js, elegirMatch.js y cerrarMatch.js
 // en un solo archivo -- el plan Hobby de Vercel permite como maximo 12
@@ -154,6 +155,7 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
       bio = (data.content || []).map(b => b.text || '').join('').trim() || null;
     } catch (e) {
       console.error('Error generando bio de presentación:', e);
+      await registrarErrorSilencioso({ contexto: 'api/matches: bio de presentacion', error: e });
     }
   }
 
@@ -249,6 +251,7 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
       }
     } catch (e) {
       console.error('Error creando la cita o su mensaje de apertura:', e);
+      await registrarErrorSilencioso({ contexto: 'api/matches: crear cita/mensaje apertura', error: e, meta: { matchId } });
     }
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {
@@ -324,6 +327,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
     console.error('Error en /api/matches:', error);
+    await registrarErrorSilencioso({ contexto: 'api/matches', error });
     return res.status(500).json({ error: 'Error al procesar la solicitud' });
   }
 }

@@ -1,4 +1,5 @@
 import { verificarAdmin } from '../../lib/verificarAdmin.js';
+import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 // Fusiona lo que antes eran admin/personas.js (listado), admin/persona.js
 // (hoja de vida completa) y admin/perfil.js (par de perfiles para comparar)
@@ -69,6 +70,17 @@ export default async function handler(req, res) {
         tokens: { totalInput, totalOutput, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint },
         embudo
       });
+    }
+
+    if (modo === 'diagnosticos') {
+      // ── Historial del diagnostico diario automatico (ver
+      // api/cron/diagnostico-diario.js) -- ultimas 30 corridas. ──
+      const diagRes = await fetch(
+        `${supabaseUrl}/rest/v1/diagnosticos_diarios?select=id,fecha,resumen,texto_resumen,creado_en&order=creado_en.desc&limit=30`,
+        { headers }
+      );
+      const diagnosticos = diagRes.ok ? await diagRes.json() : [];
+      return res.status(200).json({ diagnosticos });
     }
 
     if (!id) {
@@ -197,6 +209,7 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Error en /api/admin/personas:', error);
+    await registrarErrorSilencioso({ contexto: 'api/admin/personas', error });
     return res.status(500).json({ error: 'Error al obtener datos' });
   }
 }

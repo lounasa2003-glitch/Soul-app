@@ -1,4 +1,5 @@
 import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeLecturaValido, parsearFiltro } from '../lib/authUtil.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error en /api/leer:', error);
+    await registrarErrorSilencioso({ contexto: 'api/leer', error });
     return res.status(500).json({ error: 'Error al leer base de datos' });
   }
 }

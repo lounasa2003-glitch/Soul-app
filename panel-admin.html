@@ -110,6 +110,15 @@ a{color:inherit}
         <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Uso de tokens (costo estimado) y embudo de personas por etapa. Se calcula al pedirlo, no en vivo.</p>
         <div id="metricasContenido"><p class="cargando">Tocá "Actualizar" para calcular.</p></div>
       </div>
+      <div style="border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:1.2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+          <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:1rem">Diagnóstico diario</p>
+          <button class="btn-secundario" onclick="cargarDiagnosticos()">Actualizar</button>
+        </div>
+        <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Corre solo todos los días (errores silenciosos, reportes, intentos de fuga, mails con problemas de entrega, cuentas trabadas sin confirmar). Acá queda el histórico.</p>
+        <div id="diagnosticoLista" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem"></div>
+        <div id="diagnosticoContenido"><p class="cargando">Tocá "Actualizar" para ver el último diagnóstico.</p></div>
+      </div>
       <p class="cargando" id="personasCargando">Cargando personas...</p>
       <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
         <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="width:100%;max-width:340px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;margin-bottom:.7rem;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
@@ -243,6 +252,46 @@ async function cargarMetricas(){
     div.innerHTML=html;
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al calcular las métricas.</p>';
+  }
+}
+
+var diagnosticosCache=[];
+
+async function cargarDiagnosticos(){
+  var listaDiv=document.getElementById('diagnosticoLista');
+  var contDiv=document.getElementById('diagnosticoContenido');
+  contDiv.innerHTML='<p class="cargando">Cargando...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=diagnosticos');
+    var data=await res.json();
+    if(!res.ok){
+      contDiv.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo cargar')+'</p>';
+      return;
+    }
+    diagnosticosCache=data.diagnosticos||[];
+    if(diagnosticosCache.length===0){
+      listaDiv.innerHTML='';
+      contDiv.innerHTML='<p class="cargando">Todavía no corrió ningún diagnóstico.</p>';
+      return;
+    }
+    listaDiv.innerHTML=diagnosticosCache.map(function(d,i){
+      var fecha=new Date(d.creado_en).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
+      return '<button class="filtro-chip'+(i===0?' activo':'')+'" onclick="mostrarDiagnostico('+i+',this)">'+esc(fecha)+'</button>';
+    }).join('');
+    mostrarDiagnostico(0);
+  }catch(e){
+    contDiv.innerHTML='<p class="error-msg">Error de conexión al cargar el diagnóstico.</p>';
+  }
+}
+
+function mostrarDiagnostico(i,btn){
+  var contDiv=document.getElementById('diagnosticoContenido');
+  var d=diagnosticosCache[i];
+  if(!d){ contDiv.innerHTML='<p class="error-msg">No encontrado.</p>'; return; }
+  contDiv.innerHTML=d.texto_resumen||'<p class="cargando">Sin resumen.</p>';
+  if(btn){
+    document.querySelectorAll('#diagnosticoLista .filtro-chip').forEach(function(b){b.classList.remove('activo')});
+    btn.classList.add('activo');
   }
 }
 

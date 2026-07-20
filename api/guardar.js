@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido, parsearFiltro } from '../lib/authUtil.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { notificarConfirmarMail } from '../lib/email.js';
+import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
 // atomico para no depender de un check-then-act del lado del cliente, que
@@ -105,6 +106,7 @@ export default async function handler(req, res) {
         await notificarConfirmarMail({ nombre: data[0].nombre, email: data[0].email, token });
       } catch (e) {
         console.error('Error generando/enviando confirmacion de mail:', e);
+        await registrarErrorSilencioso({ contexto: 'api/guardar: confirmacion de mail', error: e, meta: { usuarioId: data[0].id } });
       }
     } else if (tabla === 'perfiles' && esUpsert) {
       await registrarEvento({ usuarioId: usuario.usuarioId, tipo: 'onboarding_completado' });
@@ -114,6 +116,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error('Error en /api/guardar:', error);
+    await registrarErrorSilencioso({ contexto: 'api/guardar', error, meta: { tabla } });
     return res.status(500).json({ error: 'Error al guardar en base de datos' });
   }
 }
