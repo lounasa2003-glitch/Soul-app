@@ -475,9 +475,14 @@ async function forzarCierrePerfil(req, res, supabaseUrl, headers) {
 
   const transcripto = conv.historial.map((m) => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
 
+  // max_tokens mas alto que el mismo prompt en soul.html (1200/1024): esta
+  // herramienta se usa justamente para las conversaciones anormalmente
+  // largas (60-90+ mensajes) que se quedaron trabadas -- hay mas contenido
+  // real para volcar en el JSON y el limite normal corta la respuesta a
+  // mitad, dejandola invalida (esto rompio con Lorena en produccion).
   const { json: perfil, usage: usagePerfil } = await llamarClaudeJSON({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1200,
+    max_tokens: 3000,
     system: EXTRACT_PROMPT_ADMIN,
     messages: [{ role: 'user', content: 'Analizá esta conversación:\n\n' + transcripto }]
   });
@@ -485,7 +490,7 @@ async function forzarCierrePerfil(req, res, supabaseUrl, headers) {
 
   const { json: moduloInfo, usage: usageModulo } = await llamarClaudeJSON({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    max_tokens: 2000,
     system: MODULO_DETECCION_PROMPT_ADMIN,
     messages: [{ role: 'user', content: 'Perfil: ' + JSON.stringify(perfil) + '\n\nConversación resumida: ' + conv.historial.slice(-10).map((m) => m.role + ': ' + m.content).join('\n') }]
   });
