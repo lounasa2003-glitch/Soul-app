@@ -2295,6 +2295,18 @@ async function hacerAuth(){
 
     if(authMode==='registro'){
       window.userNombre=nombre;
+      // Guarda una fila minima (email+nombre) ya en este momento -- como la
+      // sesion nunca se persiste (ver pageshow/bfcache mas abajo), si la
+      // persona no termina la capa 1 de un tiron y despues vuelve a entrar
+      // con login, antes no habia ningun lado del que recuperar el nombre
+      // que ya habia tipeado, y quedaba en null para siempre (Soul terminaba
+      // usando el placeholder "[Nombre]" literal en vez del nombre real).
+      // guardarUsuarioYContinuar() upsertea sobre esta misma fila al
+      // terminar la capa 1 (ver on_conflict=email en api/guardar.js).
+      try{
+        var dataReg=await guardarTabla('usuarios',{nombre:nombre});
+        if(dataReg&&dataReg[0]&&dataReg[0].id)usuarioId=dataReg[0].id;
+      }catch(e){}
       ir(1);
     }else{
       // Login: buscar progreso guardado
@@ -3514,6 +3526,8 @@ Una respuesta corta, esquiva, o que cambia de tema sin decir nada concreto NO cu
 Cuando tengas TODO lo anterior -- o hayas llegado al límite de dos intentos de la sección de arriba en algún tema que quedó evasivo -- vos misma decidís que es momento de cerrar esta etapa -- no se lo preguntás a la persona, se lo anunciás con esta frase exacta, sin variaciones:
 
 "[Nombre], siento que ya tenemos una buena base para seguir construyendo esto. Dejame preparar algo con todo lo que hablamos."
+
+Reemplazá [Nombre] por su nombre real (te lo paso más abajo si lo tenés). Si no tenés su nombre por algún motivo, no dejes "[Nombre]" ni ninguna variante de ese placeholder en tu respuesta -- arrancá directamente con "Siento que ya tenemos..." sin nombrarla.
 
 No uses otras variaciones de esta frase, y no la formules como pregunta -- el sistema la detecta para saber cuándo avanzar automáticamente al siguiente paso.
 

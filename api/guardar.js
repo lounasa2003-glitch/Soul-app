@@ -4,10 +4,18 @@ import { registrarEvento } from '../lib/logEvento.js';
 import { notificarConfirmarMail } from '../lib/email.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
-// atomico (on_conflict=usuario_id) para no depender de un check-then-act
-// del lado del cliente, que puede duplicar filas con dos pestanas o un
-// doble click. Requiere una constraint UNIQUE(usuario_id) en la tabla.
-const TABLAS_UPSERT_POR_DUENIO = new Set(['perfiles']);
+// atomico para no depender de un check-then-act del lado del cliente, que
+// puede duplicar filas con dos pestanas o un doble click. Requiere una
+// constraint UNIQUE en la columna indicada.
+// 'usuarios' entra por un motivo distinto al de 'perfiles': el nombre se
+// tipea una sola vez, en la pantalla de registro, ANTES de que exista fila
+// en 'usuarios' -- y como la sesion nunca se persiste (ver comentario en
+// soul.html sobre bfcache/localStorage), si la persona no termina la capa 1
+// de un tiron, un login posterior no tenia de donde recuperarlo. Ahora se
+// guarda una fila minima (email+nombre) apenas se registra, y
+// guardarUsuarioYContinuar() upsertea sobre esa misma fila al terminar la
+// capa 1 en vez de intentar un insert nuevo que chocaria con la constraint.
+const UPSERT_CONFLICT_COLUMN = { perfiles: 'usuario_id', usuarios: 'email' };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -42,7 +50,7 @@ export default async function handler(req, res) {
       if (tabla === 'usuarios') datosFinales = { ...datos, email: usuario.email };
       else if (tabla === 'matches') datosFinales = { ...datos, usuario_a: usuario.usuarioId };
       else datosFinales = { ...datos, usuario_id: usuario.usuarioId };
-      esUpsert = TABLAS_UPSERT_POR_DUENIO.has(tabla);
+      esUpsert = Object.prototype.hasOwnProperty.call(UPSERT_CONFLICT_COLUMN, tabla);
     } else if (!(await filtroDeEscrituraValido(tabla, filtro, usuario))) {
       return res.status(403).json({ error: 'No autorizado para modificar estos datos' });
     }
@@ -56,7 +64,7 @@ export default async function handler(req, res) {
       const { campo, operador, valor } = parsearFiltro(filtro);
       url += `?${campo}=${operador}.${encodeURIComponent(valor)}`;
     }
-    if (esUpsert) url += '?on_conflict=usuario_id';
+    if (esUpsert) url += `?on_conflict=${UPSERT_CONFLICT_COLUMN[tabla]}`;
 
     const response = await fetch(url, {
       method: filtro ? 'PATCH' : 'POST',
@@ -75,7 +83,13 @@ export default async function handler(req, res) {
       return res.status(response.status).json(data);
     }
 
-    if (!filtro && tabla === 'usuarios' && data[0]) {
+    // La fila de 'usuarios' ahora se escribe dos veces: una minima al
+    // registrarse (sin etapa_actual) y otra al terminar la capa 1
+    // (guardarUsuarioYContinuar manda etapa_actual:'chat') -- el evento de
+    // embudo y el mail de confirmacion tienen que salir una sola vez, en
+    // este segundo momento, igual que antes de que existiera el guardado
+    // temprano.
+    if (!filtro && tabla === 'usuarios' && data[0] && datos.etapa_actual === 'chat') {
       await registrarEvento({ usuarioId: data[0].id, tipo: 'registro' });
       // Token propio de confirmacion (independiente del de Supabase Auth --
       // ver notificarConfirmarMail en lib/email.js sobre por que). Best-
