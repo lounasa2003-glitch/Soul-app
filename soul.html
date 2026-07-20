@@ -416,11 +416,117 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-title">Analizar una conversación</p>
       <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
+    <div class="sesion-opt" onclick="mostrarMiPerfil()">
+      <p class="sesion-opt-title">Mi perfil</p>
+      <p class="sesion-opt-desc">Tus fotos y tus datos -- podés cambiarlos cuando quieras.</p>
+    </div>
     <div class="sesion-opt" onclick="retomarModulosDesdeNav()">
       <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
       <p class="sesion-opt-desc">Retomar los módulos si te falta terminar alguno.</p>
     </div>
     <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
+  </div>
+</div>
+
+<!-- ══ MI PERFIL (ver/editar datos y fotos guardados en el onboarding) ══ -->
+<div class="etapa" id="eMiPerfil">
+  <div class="scroll" style="max-width:460px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.5rem;text-align:center">Mi perfil</p>
+
+    <p class="cargando" id="miPerfilCargando">Cargando tus datos...</p>
+
+    <div id="miPerfilForm" style="display:none">
+      <div class="photo-pair">
+        <div class="photo-slot">
+          <div class="photo-up" id="upCaraPerfil" onclick="document.getElementById('inCaraPerfil').click()">
+            <span class="photo-icon">+</span>
+            <input type="file" id="inCaraPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,'upCaraPerfil',true)">
+          </div>
+          <p class="photo-slot-lbl">Tu cara</p>
+        </div>
+        <div class="photo-slot">
+          <div class="photo-up" id="upCuerpoPerfil" onclick="document.getElementById('inCuerpoPerfil').click()">
+            <span class="photo-icon">+</span>
+            <input type="file" id="inCuerpoPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,'upCuerpoPerfil',false)">
+          </div>
+          <p class="photo-slot-lbl">Tu cuerpo</p>
+        </div>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:.6rem;margin:1rem 0 1.2rem;cursor:pointer;text-align:left">
+        <input type="checkbox" id="mpFotoAprobada" style="margin-top:.2rem">
+        <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.95rem;color:#9a8e96;line-height:1.5">Autorizo que mi foto de cara se muestre a la persona con la que tenga un match, como parte de su presentación</span>
+      </label>
+
+      <p class="step-sub">Nombre</p>
+      <input class="step-in" type="text" id="mpNombre">
+
+      <p class="step-sub">Cuándo naciste</p>
+      <input class="step-in" type="date" id="mpFnac">
+      <p class="step-sub">Hora de nacimiento (opcional)</p>
+      <input class="step-in" type="time" id="mpHnac">
+
+      <p class="step-sub">Ciudad o zona</p>
+      <input class="step-in" type="text" id="mpCiudad">
+      <p class="step-sub">¿Hasta qué distancia para un encuentro?</p>
+      <div class="chips" id="mpDistChips">
+        <div class="chip" onclick="selChipPerfil(this,'dist')">Mi ciudad</div>
+        <div class="chip" onclick="selChipPerfil(this,'dist')">Hasta 50 km</div>
+        <div class="chip" onclick="selChipPerfil(this,'dist')">Mismo país</div>
+        <div class="chip" onclick="selChipPerfil(this,'dist')">Cualquier lugar</div>
+      </div>
+
+      <p class="step-sub">¿Cómo te identificás?</p>
+      <div class="chips" id="mpGenChips">
+        <div class="chip" onclick="selChipPerfil(this,'gen')">Mujer</div>
+        <div class="chip" onclick="selChipPerfil(this,'gen')">Hombre</div>
+        <div class="chip" onclick="selChipPerfil(this,'gen')">No binario/a</div>
+        <div class="chip" onclick="selChipPerfil(this,'gen')">Prefiero no decir</div>
+      </div>
+      <p class="step-sub">¿Con quién querés conectar?</p>
+      <div class="chips" id="mpPrefChips">
+        <div class="chip" onclick="selChipPerfil(this,'pref')">Mujeres</div>
+        <div class="chip" onclick="selChipPerfil(this,'pref')">Hombres</div>
+        <div class="chip" onclick="selChipPerfil(this,'pref')">Cualquier género</div>
+        <div class="chip" onclick="selChipPerfil(this,'pref')">Todavía lo estoy definiendo</div>
+      </div>
+
+      <p class="step-sub">¿Qué tipo de vínculo buscás?</p>
+      <div class="chips" id="mpVincChips">
+        <div class="chip" onclick="selChipMPerfil(this,'vinc')">Romántico</div>
+        <div class="chip" onclick="selChipMPerfil(this,'vinc')">Amistad profunda</div>
+        <div class="chip" onclick="selChipMPerfil(this,'vinc')">Compañía</div>
+        <div class="chip" onclick="selChipMPerfil(this,'vinc')">Todavía no lo sé</div>
+      </div>
+      <p class="step-sub">¿Tenés hijos?</p>
+      <div class="chips" id="mpHijosChips">
+        <div class="chip" onclick="selChipPerfil(this,'hijos')">No tengo</div>
+        <div class="chip" onclick="selChipPerfil(this,'hijos')">Sí, pequeños</div>
+        <div class="chip" onclick="selChipPerfil(this,'hijos')">Sí, adolescentes</div>
+        <div class="chip" onclick="selChipPerfil(this,'hijos')">Sí, adultos</div>
+      </div>
+
+      <p class="step-sub">Estado civil</p>
+      <div class="chips" id="mpCivilChips">
+        <div class="chip" onclick="selChipPerfil(this,'civil')">Soltero/a</div>
+        <div class="chip" onclick="selChipPerfil(this,'civil')">Separado/a</div>
+        <div class="chip" onclick="selChipPerfil(this,'civil')">Divorciado/a</div>
+        <div class="chip" onclick="selChipPerfil(this,'civil')">Viudo/a</div>
+      </div>
+      <p class="step-sub">¿A qué te dedicás?</p>
+      <input class="step-in" type="text" id="mpOcup">
+
+      <p class="step-sub">Lo que no estás dispuesto/a a negociar</p>
+      <textarea class="step-ta" id="mpNoNeg"></textarea>
+      <p class="step-sub">Lo que podrías negociar</p>
+      <textarea class="step-ta" id="mpNeg"></textarea>
+
+      <div class="auth-err" id="miPerfilErr"></div>
+      <p class="auth-loading" id="miPerfilGuardando" style="display:none">Guardando...</p>
+      <p class="auth-loading" id="miPerfilExito" style="display:none;color:#4ecb71">✓ Guardado.</p>
+
+      <button class="btn-gold" id="miPerfilGuardarBtn" onclick="guardarMiPerfil()" style="width:100%;margin-top:.5rem">Guardar cambios →</button>
+      <button class="btn-back" onclick="mostrarNavCentral()">← Volver</button>
+    </div>
   </div>
 </div>
 
@@ -2543,6 +2649,152 @@ function mostrarNavCentral(){
 }
 function retomarModulosDesdeNav(){
   elegirSesion('soul');
+}
+
+// ── MI PERFIL (ver/editar lo que se cargo en el onboarding) ──
+// Estado propio (perfilChipSels, mpFotoCaraB64/mpFotoCuerpoB64), separado
+// del que usa el onboarding (chipSels, fotoCaraB64/fotoCuerpoB64) -- son
+// pantallas distintas que conviven en el mismo DOM (todas las etapas
+// existen a la vez, solo se ocultan con CSS), y los ids de los grupos de
+// chips tambien son distintos (mpDistChips vs distChips, etc.) para que
+// selChip/selChipM del onboarding nunca puedan pisar esto por accidente.
+var perfilChipSels={};
+var MP_CHIP_CONTAINER={dist:'mpDistChips',gen:'mpGenChips',pref:'mpPrefChips',vinc:'mpVincChips',hijos:'mpHijosChips',civil:'mpCivilChips'};
+
+function selChipPerfil(el,g){
+  document.querySelectorAll('#'+MP_CHIP_CONTAINER[g]+' .chip').forEach(function(c){c.classList.remove('sel')});
+  el.classList.add('sel');
+  perfilChipSels[g]=el.textContent;
+}
+function selChipMPerfil(el,g){
+  el.classList.toggle('sel');
+  var s=[];
+  document.querySelectorAll('#'+MP_CHIP_CONTAINER[g]+' .chip.sel').forEach(function(c){s.push(c.textContent)});
+  perfilChipSels[g]=s;
+}
+function preseleccionarChipPerfil(g,valor){
+  if(!valor)return;
+  document.querySelectorAll('#'+MP_CHIP_CONTAINER[g]+' .chip').forEach(function(c){
+    if(c.textContent===valor)c.classList.add('sel');
+  });
+}
+function preseleccionarChipsMultiPerfil(g,valores){
+  if(!valores||!valores.length)return;
+  document.querySelectorAll('#'+MP_CHIP_CONTAINER[g]+' .chip').forEach(function(c){
+    if(valores.indexOf(c.textContent)>-1)c.classList.add('sel');
+  });
+}
+
+window.mpFotoCaraB64=null;
+window.mpFotoCuerpoB64=null;
+// Misma compresion que loadPhoto() del onboarding (max 800px, JPEG 75%) --
+// duplicada a proposito, con variables propias, para no tocar el estado
+// del onboarding.
+function loadPhotoPerfil(inp,upId,isCara){
+  var file=inp.files[0];if(!file)return;
+  var url=URL.createObjectURL(file);
+  var up=document.getElementById(upId);
+  up.innerHTML='<img src="'+url+'" alt="foto">';
+  var img=new Image();
+  img.onload=function(){
+    var MAX=800;
+    var w=img.width,h=img.height;
+    if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+    else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+    var canvas=document.createElement('canvas');
+    canvas.width=w;canvas.height=h;
+    canvas.getContext('2d').drawImage(img,0,0,w,h);
+    var b64=canvas.toDataURL('image/jpeg',0.75);
+    if(isCara)window.mpFotoCaraB64=b64;else window.mpFotoCuerpoB64=b64;
+  };
+  img.src=url;
+}
+
+async function mostrarMiPerfil(){
+  ir('MiPerfil');
+  var cargando=document.getElementById('miPerfilCargando');
+  document.getElementById('miPerfilForm').style.display='none';
+  cargando.style.display='block';
+  cargando.textContent='Cargando tus datos...';
+  perfilChipSels={};
+  window.mpFotoCaraB64=null;
+  window.mpFotoCuerpoB64=null;
+  document.getElementById('upCaraPerfil').innerHTML='<span class="photo-icon">+</span><input type="file" id="inCaraPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\'upCaraPerfil\',true)">';
+  document.getElementById('upCuerpoPerfil').innerHTML='<span class="photo-icon">+</span><input type="file" id="inCuerpoPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\'upCuerpoPerfil\',false)">';
+  document.querySelectorAll('#eMiPerfil .chip').forEach(function(c){c.classList.remove('sel')});
+  try{
+    var rows=await leerTabla('usuarios','id=eq.'+usuarioId);
+    var u=rows[0]||{};
+    document.getElementById('mpNombre').value=u.nombre||'';
+    document.getElementById('mpFnac').value=u.fecha_nacimiento||'';
+    document.getElementById('mpHnac').value=u.hora_nacimiento||'';
+    document.getElementById('mpCiudad').value=u.ciudad||'';
+    document.getElementById('mpOcup').value=u.ocupacion||'';
+    document.getElementById('mpNoNeg').value=u.no_negociables||'';
+    document.getElementById('mpNeg').value=u.negociables||'';
+    document.getElementById('mpFotoAprobada').checked=!!u.foto_aprobada;
+
+    preseleccionarChipPerfil('dist',u.distancia_max);
+    preseleccionarChipPerfil('gen',u.genero);
+    preseleccionarChipPerfil('pref',u.preferencia_genero);
+    preseleccionarChipPerfil('hijos',u.hijos);
+    preseleccionarChipPerfil('civil',u.estado_civil);
+    preseleccionarChipsMultiPerfil('vinc',u.tipo_vinculo);
+    perfilChipSels={dist:u.distancia_max||null,gen:u.genero||null,pref:u.preferencia_genero||null,hijos:u.hijos||null,civil:u.estado_civil||null,vinc:u.tipo_vinculo||null};
+
+    if(u.foto_cara)document.getElementById('upCaraPerfil').innerHTML='<img src="'+u.foto_cara+'" alt="foto">';
+    if(u.foto_cuerpo)document.getElementById('upCuerpoPerfil').innerHTML='<img src="'+u.foto_cuerpo+'" alt="foto">';
+
+    cargando.style.display='none';
+    document.getElementById('miPerfilForm').style.display='block';
+  }catch(e){
+    cargando.textContent='No pudimos cargar tus datos. Probá de nuevo.';
+  }
+}
+
+async function guardarMiPerfil(){
+  var btn=document.getElementById('miPerfilGuardarBtn');
+  var errEl=document.getElementById('miPerfilErr');
+  var guardando=document.getElementById('miPerfilGuardando');
+  var exito=document.getElementById('miPerfilExito');
+  errEl.style.display='none';
+  exito.style.display='none';
+  btn.disabled=true;
+  guardando.style.display='block';
+
+  var datos={
+    nombre: document.getElementById('mpNombre').value.trim()||null,
+    fecha_nacimiento: document.getElementById('mpFnac').value||null,
+    hora_nacimiento: document.getElementById('mpHnac').value||null,
+    ciudad: document.getElementById('mpCiudad').value.trim()||null,
+    distancia_max: perfilChipSels['dist']||null,
+    genero: perfilChipSels['gen']||null,
+    preferencia_genero: perfilChipSels['pref']||null,
+    tipo_vinculo: perfilChipSels['vinc']||null,
+    hijos: perfilChipSels['hijos']||null,
+    estado_civil: perfilChipSels['civil']||null,
+    ocupacion: document.getElementById('mpOcup').value.trim()||null,
+    no_negociables: document.getElementById('mpNoNeg').value.trim()||null,
+    negociables: document.getElementById('mpNeg').value.trim()||null,
+    foto_aprobada: document.getElementById('mpFotoAprobada').checked
+  };
+  // Solo se manda la foto si se eligio una nueva -- si no, un PATCH parcial
+  // deja la que ya estaba guardada intacta (no se manda null por defecto).
+  if(window.mpFotoCaraB64)datos.foto_cara=window.mpFotoCaraB64;
+  if(window.mpFotoCuerpoB64)datos.foto_cuerpo=window.mpFotoCuerpoB64;
+
+  try{
+    await guardarTabla('usuarios',datos,'id=eq.'+usuarioId);
+    guardando.style.display='none';
+    exito.style.display='block';
+    if(datos.nombre)window.userNombre=datos.nombre;
+    btn.disabled=false;
+  }catch(e){
+    guardando.style.display='none';
+    errEl.textContent='No pudimos guardar los cambios. Probá de nuevo.';
+    errEl.style.display='block';
+    btn.disabled=false;
+  }
 }
 
 // No hay ninguna sesion persistida en localStorage/sessionStorage -- todo
