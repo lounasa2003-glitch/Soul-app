@@ -1380,7 +1380,17 @@ REGLAS DE ORO
 Mensajes cortos, en tu voz cálida habitual — que se sienta una charla, no un informe. Sin títulos, sin listas numeradas visibles, sin markdown.`;
 }
 
+// Sin este guard, un doble-tap en "Sí, contame" (o tocar los dos botones
+// del espejo casi a la vez) podia disparar mostrarEspejo() dos veces en
+// paralelo -- las dos remueven el mismo boton sincronicamente al entrar,
+// pero si los dos clicks ya estaban encolados antes de esa remocion (tipico
+// de un doble-tap en mobile), las dos corridas siguen de largo igual, cada
+// una agregando su propio mensaje de usuario + llamada a Claude + respuesta
+// de Soul -- de ahi la devolucion "repetida" que reportó una usuaria real.
+var espejoEnCurso=false;
 async function mostrarEspejo(){
+  if(espejoEnCurso)return;
+  espejoEnCurso=true;
   var b=document.getElementById('espejoBtns');if(b)b.remove();
   addModuloMsg('user','Sí, contame.');
   moduloHistory.push({role:'user',content:'Sí, contame.'});
@@ -1405,6 +1415,8 @@ async function mostrarEspejo(){
   }catch(e){
     var t2=document.getElementById('moduloTyping');if(t2)t2.remove();
     addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
+  }finally{
+    espejoEnCurso=false;
   }
 }
 
@@ -1418,6 +1430,8 @@ async function guardarModuloHistorial(){
 }
 
 function saltearEspejo(){
+  if(espejoEnCurso)return;
+  espejoEnCurso=true;
   var b=document.getElementById('espejoBtns');if(b)b.remove();
   addModuloMsg('user','Prefiero que no, por ahora.');
   moduloHistory.push({role:'user',content:'Prefiero que no, por ahora.'});
@@ -3597,7 +3611,16 @@ function timeoutTras(ms){
   });
 }
 
+// Token de la corrida vigente: Promise.race no cancela al que pierde, asi
+// que si el timeout de 90s se dispara (o un doble-tap en "Reintentar"
+// arranca una segunda corrida) la corrida vieja seguia viva de fondo -- si
+// terminaba tarde, igual pisaba/duplicaba la devolucion ya mostrada por la
+// corrida nueva (esto es lo que reportó una usuaria real: "la devolución
+// del perfil" repetida varias veces). Cada corrida de hacerAvanzar() solo
+// aplica sus cambios al DOM si su token sigue siendo el vigente.
+var avanzarAlMatchToken=0;
 async function avanzarAlMatch(){
+  var miToken=++avanzarAlMatchToken;
   // Mostrar loading
   var b=document.getElementById('pausarChatBtns');if(b)b.remove();
   addMsg('soul','Dame un momento para preparar algo especial para vos...');
@@ -3607,8 +3630,9 @@ async function avanzarAlMatch(){
     // Si por lo que sea esto se cuelga de verdad (no solo tarda), a los 90s
     // se corta y se muestra el error real en vez de dejar la pantalla así
     // para siempre.
-    await Promise.race([hacerAvanzar(), timeoutTras(90000)]);
+    await Promise.race([hacerAvanzar(miToken), timeoutTras(90000)]);
   }catch(e){
+    if(miToken!==avanzarAlMatchToken)return;
     hideTyping();
     console.error('Error en pipeline:',e);
     addMsg('soul','Perdón, algo se complicó de mi lado guardando todo esto.');
@@ -3621,10 +3645,11 @@ async function avanzarAlMatch(){
 // guarda en ningún lado.
 var RESUMEN_PERFIL_PROMPT='Sos Soul. Le vas a hablar directo a la persona, en segunda persona, con calidez genuina -- nunca en tercera persona ni como un informe técnico. Resumí en 3 a 4 oraciones breves lo que fuiste entendiendo de ella a partir de este perfil vincular, sin nombrar "grupos" ni campos técnicos, como si se lo estuvieras contando en una charla real. Cerrá con una frase breve que invite a decir si se siente representada. Nunca uses markdown ni listas.';
 
-async function hacerAvanzar(){
+async function hacerAvanzar(miToken){
   // 1. Extraer perfil
   var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
   var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
+  if(miToken!==avanzarAlMatchToken)return; // otra corrida mas nueva ya tomo la posta
   window.perfilParaValidar=perfil;
 
   // Antes de avanzar a cualquier otra etapa, se le muestra a la persona un
@@ -3633,6 +3658,8 @@ async function hacerAvanzar(){
   // exhaustiva.
   var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:300,system:RESUMEN_PERFIL_PROMPT,messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)}]});
   var resumen=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
+
+  if(miToken!==avanzarAlMatchToken)return; // idem -- no pisar lo que ya se muestra
 
   hideTyping();
   document.getElementById('validacionResumen').textContent=resumen;
