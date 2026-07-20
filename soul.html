@@ -2197,10 +2197,20 @@ async function recolectarPendientes(){
         }else{
           // Decision de la Sala de Encuentros (seguir en Soul / intercambiar
           // / cerrar) -- por lado, independiente de si la otra persona ya
-          // contesto o no (mismo patron que eleccion_usuario_a/b).
+          // contesto o no (mismo patron que eleccion_usuario_a/b). Cuando
+          // decidirSalaEncuentros() resuelve a "intercambiar" o "cerrar"
+          // (estado del match pasa a aceptado/rechazado), decision_a/b se
+          // resetean a null en el servidor -- sin este chequeo de estado,
+          // esa misma cita ya resuelta volvia a aparecer como pendiente en
+          // el proximo login, mandando de nuevo a la Sala de Encuentros y,
+          // 2.2s despues de elegir cualquier opcion, otra vez al debriefing
+          // (bug real: "elijo intercambiar y termino de nuevo en el
+          // debriefing"). "seguir_soul" no lo sufre porque ahi se crea un
+          // encuentro nuevo, que pasa a ser el mas reciente y tapa a este.
           var soyADecision=c.match.usuario_a===usuarioId;
           var miDecision=soyADecision?c.match.decision_a:c.match.decision_b;
-          if(!miDecision){
+          var salaYaResuelta=c.match.estado==='aceptado'||c.match.estado==='rechazado';
+          if(!miDecision&&!salaYaResuelta){
             pendientes.push({tipo:'debriefing',label:'Debriefing pendiente con '+otroNombre,cita:c});
           }
         }
