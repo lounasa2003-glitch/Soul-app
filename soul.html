@@ -968,8 +968,80 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1.15rem,3.2vw,1.35rem);color:#d8cdd2;line-height:1.6;max-width:400px">Soul ya guardó todo lo que compartiste, y en cuanto aparezca alguien compatible con vos, te lo va a hacer saber.</p>
     <div style="margin-top:2.2rem;display:flex;flex-direction:column;gap:.7rem;align-items:center">
       <span onclick="mostrarMisMatches()" style="color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">Ver mis matches</span>
+      <span id="feedbackPilotoLink" onclick="ir('FeedbackPiloto')" style="display:none;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">¿Nos contás cómo fue tu experiencia? →</span>
       <span onclick="cerrarSesion()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer">Cerrar sesión</span>
     </div>
+  </div>
+</div>
+
+<!-- ══ FEEDBACK DEL PILOTO ══ -->
+<div class="etapa" id="eFeedbackPiloto">
+  <div class="sesion-wrap">
+    <div class="sesion-orb"></div>
+    <p class="sesion-title">¿Cómo fue tu experiencia?</p>
+    <p class="sesion-sub" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;line-height:1.6;max-width:420px;margin:0 auto 1.8rem">Tus respuestas nos ayudan a mejorar Soul para las próximas personas. Es breve.</p>
+
+    <div id="feedbackForm" style="max-width:460px;margin:0 auto;text-align:left">
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">¿Qué tan comprendida/o te sentiste por Soul durante la charla?</p>
+      <div class="chips" id="fbComprensionChips">
+        <div class="chip" onclick="selChipFeedback(this,'comprension','1')">1</div>
+        <div class="chip" onclick="selChipFeedback(this,'comprension','2')">2</div>
+        <div class="chip" onclick="selChipFeedback(this,'comprension','3')">3</div>
+        <div class="chip" onclick="selChipFeedback(this,'comprension','4')">4</div>
+        <div class="chip" onclick="selChipFeedback(this,'comprension','5')">5</div>
+      </div>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">¿Hubo algo en la conversación que te resultó raro, repetitivo o incómodo? <span style="color:#7a6e78;font-size:.78rem">(opcional)</span></p>
+      <textarea id="fbComentarioConversacion" placeholder="Contame..." style="width:100%;min-height:70px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;padding:.6rem .8rem;font-family:'Cormorant Garamond',serif;font-size:1rem;outline:none;resize:vertical;margin-bottom:1.1rem"></textarea>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">Cuando viste el resumen de tu perfil, ¿sentiste que te representaba?</p>
+      <div class="chips" id="fbRepresentaChips">
+        <div class="chip" onclick="selChipFeedback(this,'representa','si')">Sí</div>
+        <div class="chip" onclick="selChipFeedback(this,'representa','mas_o_menos')">Más o menos</div>
+        <div class="chip" onclick="selChipFeedback(this,'representa','no')">No</div>
+      </div>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">Los módulos que te tocaron, ¿te aportaron algo o se sintieron de relleno? <span style="color:#7a6e78;font-size:.78rem">(opcional)</span></p>
+      <textarea id="fbComentarioModulos" placeholder="Contame..." style="width:100%;min-height:70px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;padding:.6rem .8rem;font-family:'Cormorant Garamond',serif;font-size:1rem;outline:none;resize:vertical;margin-bottom:1.1rem"></textarea>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">¿Qué tan cómoda/o te sentiste compartiendo cosas personales con Soul?</p>
+      <div class="chips" id="fbComodidadChips">
+        <div class="chip" onclick="selChipFeedback(this,'comodidad','1')">1</div>
+        <div class="chip" onclick="selChipFeedback(this,'comodidad','2')">2</div>
+        <div class="chip" onclick="selChipFeedback(this,'comodidad','3')">3</div>
+        <div class="chip" onclick="selChipFeedback(this,'comodidad','4')">4</div>
+        <div class="chip" onclick="selChipFeedback(this,'comodidad','5')">5</div>
+      </div>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">¿Te topaste con algún error técnico o algo que no funcionó como esperabas? <span style="color:#7a6e78;font-size:.78rem">(opcional)</span></p>
+      <textarea id="fbProblemasTecnicos" placeholder="Contame..." style="width:100%;min-height:70px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;padding:.6rem .8rem;font-family:'Cormorant Garamond',serif;font-size:1rem;outline:none;resize:vertical;margin-bottom:1.1rem"></textarea>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">Del 0 al 10, ¿qué tan probable es que le recomiendes Soul a una amiga?</p>
+      <div class="chips" id="fbRecomendacionChips">
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','0')">0</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','1')">1</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','2')">2</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','3')">3</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','4')">4</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','5')">5</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','6')">6</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','7')">7</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','8')">8</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','9')">9</div>
+        <div class="chip" onclick="selChipFeedback(this,'recomendacion','10')">10</div>
+      </div>
+
+      <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;margin-bottom:.5rem">Si pudieras cambiar una sola cosa de Soul, ¿cuál sería?</p>
+      <textarea id="fbQueCambiarias" placeholder="Contame..." style="width:100%;min-height:70px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;padding:.6rem .8rem;font-family:'Cormorant Garamond',serif;font-size:1rem;outline:none;resize:vertical;margin-bottom:.4rem"></textarea>
+
+      <p id="feedbackError" style="display:none;color:#c97a6e;font-family:Georgia,serif;font-style:italic;font-size:.85rem;margin-bottom:.8rem">Falta responder alguna de las preguntas con escala.</p>
+
+      <button class="btn-gold" onclick="enviarFeedbackPiloto()" style="width:100%;margin-top:.5rem">Enviar →</button>
+      <p onclick="ir('Esperando')" style="text-align:center;margin-top:.9rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Ahora no</p>
+    </div>
+
+    <p id="feedbackGracias" style="display:none;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;line-height:1.6;max-width:400px;margin:0 auto">Gracias por contarnos esto. Nos sirve muchísimo para mejorar Soul. ✦</p>
+    <p id="feedbackCargando" style="display:none;margin-top:1rem;color:#7a6e78;font-style:italic">Un momento...</p>
   </div>
 </div>
 
@@ -3193,6 +3265,12 @@ function ir(n){
   if(n===5) initMatch();
   if(n===7) initCita();
   if(n==='Esperando') initEsperando();
+  if(n==='FeedbackPiloto'){
+    document.getElementById('feedbackForm').style.display='block';
+    document.getElementById('feedbackGracias').style.display='none';
+    document.getElementById('feedbackCargando').style.display='none';
+    document.getElementById('feedbackError').style.display='none';
+  }
 }
 
 // Mensaje motivacional fijo, sin generar con Claude -- rota entre variantes
@@ -3205,6 +3283,52 @@ var MENSAJES_ESPERANDO=[
 function initEsperando(){
   var msg=MENSAJES_ESPERANDO[Math.floor(Math.random()*MENSAJES_ESPERANDO.length)];
   document.getElementById('esperandoMotivacional').textContent=msg;
+  // El link de feedback se oculta si la persona ya respondio antes (en esta
+  // sesion o en una anterior) -- se chequea contra la base en vez de un flag
+  // local para que sobreviva a cerrar sesion y volver a entrar.
+  leerTabla('feedback_piloto','usuario_id=eq.'+usuarioId).then(function(filas){
+    if(!filas||filas.length===0)document.getElementById('feedbackPilotoLink').style.display='inline';
+  }).catch(function(){});
+}
+
+// ── FEEDBACK DEL PILOTO ──
+var feedbackSels={};
+function selChipFeedback(el,grupo,valor){
+  document.querySelectorAll('#fb'+grupo.charAt(0).toUpperCase()+grupo.slice(1)+'Chips .chip').forEach(function(c){c.classList.remove('sel')});
+  el.classList.add('sel');
+  feedbackSels[grupo]=valor;
+}
+
+async function enviarFeedbackPiloto(){
+  if(!feedbackSels.comprension||!feedbackSels.representa||!feedbackSels.comodidad||!feedbackSels.recomendacion){
+    document.getElementById('feedbackError').style.display='block';
+    return;
+  }
+  document.getElementById('feedbackError').style.display='none';
+  document.getElementById('feedbackForm').style.display='none';
+  document.getElementById('feedbackCargando').style.display='block';
+  try{
+    await guardarTabla('feedback_piloto',{
+      comprension:parseInt(feedbackSels.comprension,10),
+      comentario_conversacion:document.getElementById('fbComentarioConversacion').value.trim()||null,
+      perfil_representa:feedbackSels.representa,
+      comentario_modulos:document.getElementById('fbComentarioModulos').value.trim()||null,
+      comodidad:parseInt(feedbackSels.comodidad,10),
+      problemas_tecnicos:document.getElementById('fbProblemasTecnicos').value.trim()||null,
+      recomendacion:parseInt(feedbackSels.recomendacion,10),
+      que_cambiarias:document.getElementById('fbQueCambiarias').value.trim()||null
+    });
+    document.getElementById('feedbackCargando').style.display='none';
+    document.getElementById('feedbackGracias').style.display='block';
+    document.getElementById('feedbackPilotoLink').style.display='none';
+    setTimeout(function(){ir('Esperando')},2600);
+  }catch(e){
+    console.error('Error guardando feedback del piloto:',e);
+    document.getElementById('feedbackCargando').style.display='none';
+    document.getElementById('feedbackForm').style.display='block';
+    document.getElementById('feedbackError').textContent='Algo se complicó enviando esto. Probá de nuevo.';
+    document.getElementById('feedbackError').style.display='block';
+  }
 }
 
 // ── CONSENTIMIENTO ──

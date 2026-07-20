@@ -138,6 +138,7 @@ a{color:inherit}
         <button class="subtab" onclick="mostrarSubtab('conversacion',this)">Conversación con Soul</button>
         <button class="subtab" onclick="mostrarSubtab('matches',this)">Matches</button>
         <button class="subtab" onclick="mostrarSubtab('seguridad',this)">Seguridad</button>
+        <button class="subtab" onclick="mostrarSubtab('feedback',this)">Feedback</button>
       </div>
       <div id="subtabDatos"></div>
       <div id="subtabPerfil" class="oculto"></div>
@@ -145,6 +146,7 @@ a{color:inherit}
       <div id="subtabConversacion" class="oculto"></div>
       <div id="subtabMatches" class="oculto"></div>
       <div id="subtabSeguridad" class="oculto"></div>
+      <div id="subtabFeedback" class="oculto"></div>
     </div>
   </div>
 </div>
@@ -241,6 +243,31 @@ async function cargarMetricas(){
     div.innerHTML=html;
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al calcular las métricas.</p>';
+  }
+}
+
+// Fuerza el cierre del chat inicial para una persona ya trabada (sin
+// perfil pese a tener conversacion guardada) -- ver forzarCierrePerfil en
+// api/admin/matches.js. Recarga la Hoja de Vida al terminar para que se
+// vea el perfil recien armado.
+async function forzarCierrePerfil(usuarioId){
+  var btn=document.getElementById('btnForzarCierre');
+  var div=document.getElementById('forzarCierreResultado');
+  btn.disabled=true;
+  div.innerHTML='<p class="cargando">Extrayendo el perfil con lo que se charló hasta ahora...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/matches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'forzarCierrePerfil',usuarioId:usuarioId})});
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.mensaje||data.error||'No se pudo forzar el cierre')+'</p>';
+      btn.disabled=false;
+      return;
+    }
+    div.innerHTML='<p style="color:#4ecb71">✓ Perfil armado. Módulo esencial detectado: '+esc(data.moduloEsencial||'(ninguno)')+'</p>';
+    await abrirHojaDeVida(usuarioId);
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión al forzar el cierre.</p>';
+    btn.disabled=false;
   }
 }
 
@@ -363,7 +390,7 @@ async function abrirHojaDeVida(id){
 function mostrarSubtab(nombre,el){
   document.querySelectorAll('.subtab').forEach(function(b){b.classList.remove('activo')});
   el.classList.add('activo');
-  ['datos','perfil','modulos','conversacion','matches','seguridad'].forEach(function(n){
+  ['datos','perfil','modulos','conversacion','matches','seguridad','feedback'].forEach(function(n){
     document.getElementById('subtab'+n.charAt(0).toUpperCase()+n.slice(1)).classList.toggle('oculto',n!==nombre);
   });
 }
@@ -483,6 +510,18 @@ function renderHojaDeVida(data){
   htmlDatos+=campoHtml('Negociables',u.negociables);
   htmlDatos+=campoHtml('Etapa actual',etapaLegible(u.etapa_actual));
   htmlDatos+='</div>';
+  // Charló bastante con Soul pero nunca quedó perfil armado -- Soul dependia
+  // 100% de decidir sola cuando cerrar, sin ningun limite (ver el fix en
+  // soul.html). Esto pasa con conversaciones de ANTES de ese fix; no se
+  // vuelve a corregir solo con recargar, hace falta forzarlo desde aca.
+  var conv=(data.conversacion&&data.conversacion.historial)||[];
+  if(!data.perfil&&conv.length>=4){
+    htmlDatos+='<div style="margin-top:1rem;padding:.9rem;border:1px solid rgba(201,168,76,.3);border-radius:8px;background:rgba(201,168,76,.05)">';
+    htmlDatos+='<p style="font-size:.85rem;color:#d8cdd2;margin-bottom:.6rem">Tiene '+conv.length+' mensajes con Soul pero todavía no tiene perfil armado -- probablemente Soul nunca decidió cerrar la charla sola.</p>';
+    htmlDatos+='<button class="btn-secundario" id="btnForzarCierre" onclick="forzarCierrePerfil(\''+esc(u.id)+'\')">Forzar cierre y armar el perfil ahora →</button>';
+    htmlDatos+='<div id="forzarCierreResultado" style="margin-top:.6rem;font-size:.82rem"></div>';
+    htmlDatos+='</div>';
+  }
   document.getElementById('subtabDatos').innerHTML=htmlDatos;
 
   // ── PERFIL (extraido por Soul) ──
@@ -701,6 +740,28 @@ function renderHojaDeVida(data){
     });
   }
   document.getElementById('subtabSeguridad').innerHTML=htmlSeguridad;
+
+  // ── FEEDBACK (encuesta post-recorrido del piloto) ──
+  var REPRESENTA_LEGIBLE={si:'Sí',mas_o_menos:'Más o menos',no:'No'};
+  var fb=data.feedbackPiloto;
+  var htmlFeedback='';
+  if(!fb){
+    htmlFeedback='<p class="cargando">Todavía no respondió el feedback.</p>';
+  }else{
+    var fechaFb=fb.creado_en?new Date(fb.creado_en).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
+    if(fechaFb)htmlFeedback+='<p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Respondido el '+esc(fechaFb)+'</p>';
+    htmlFeedback+='<div class="campo-grupo">';
+    htmlFeedback+=campoHtml('Comprensión (1-5)',fb.comprension);
+    htmlFeedback+=campoHtml('Comentario sobre la conversación',fb.comentario_conversacion);
+    htmlFeedback+=campoHtml('¿El perfil la representaba?',REPRESENTA_LEGIBLE[fb.perfil_representa]||fb.perfil_representa);
+    htmlFeedback+=campoHtml('Comentario sobre los módulos',fb.comentario_modulos);
+    htmlFeedback+=campoHtml('Comodidad compartiendo (1-5)',fb.comodidad);
+    htmlFeedback+=campoHtml('Problemas técnicos',fb.problemas_tecnicos);
+    htmlFeedback+=campoHtml('Recomendación (0-10)',fb.recomendacion);
+    htmlFeedback+=campoHtml('Qué cambiaría',fb.que_cambiarias);
+    htmlFeedback+='</div>';
+  }
+  document.getElementById('subtabFeedback').innerHTML=htmlFeedback;
 }
 
 function toggleTranscripto(cual){

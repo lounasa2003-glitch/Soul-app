@@ -430,6 +430,109 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
   return res.status(200).json({ ok: true, email: PREVIEW_EMAIL_A, password: PREVIEW_PASSWORD, instrucciones });
 }
 
+// ── Forzar cierre del chat inicial sin depender de que Soul cierre sola ──
+// El cierre normal (soul.html, enviarAlChat) dependia 100% de que Soul
+// decidiera que ya cubrio los 9 temas del checklist y repitiera una frase
+// exacta -- sin ningun limite. El fix del lado del cliente (umbral de
+// mensajes que fuerza el cierre) solo se aplica cuando la persona manda un
+// mensaje nuevo, no retroactivamente sobre conversaciones ya guardadas --
+// asi que las cuentas que ya quedaron trabadas antes de ese fix necesitan
+// esto: repite el mismo pipeline (extraer perfil, detectar modulo, armar
+// perfiles) a partir de la conversacion ya guardada, sin que la persona
+// tenga que volver a entrar.
+const EXTRACT_PROMPT_ADMIN = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}
+
+MUY IMPORTANTE -- NO INVENTES: si un campo específico no tiene información real en la conversación (no se tocó, o se tocó de forma demasiado vaga para decir algo concreto), su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Esto incluye "no_puede_faltar"/"no_puede_estar" (el límite real, narrativo, que la persona haya contado con contexto -- no lo inventes ni lo confundas con una lista genérica) y "reciprocidad" (cómo tiende a darse en sus vínculos pasados). Es preferible un campo en null a uno con contenido inventado -- el sistema de matching necesita saber qué se comparó de verdad y qué no.`;
+
+const MODULO_DETECCION_PROMPT_ADMIN = `Analizá este perfil vincular y la conversación resumida. Elegí el módulo esencial (el que más urge) y el recomendado (el segundo) en base a las señales concretas que aparecen en la charla -- patrones consistentes, no frases aisladas -- no por intuición general.
+
+"modulo_esencial" y "modulo_recomendado" solo pueden ser uno de estos CUATRO (usá el nombre tal cual, con esta capitalización exacta, en tu respuesta). Existe un quinto módulo, "Capacidad de volver a elegir", pero ese NUNCA va en estos dos campos -- se suma siempre después para todos, no compite por este lugar.
+
+"Apertura al compromiso" -- la tensión entre libertad y vínculo, cuando el compromiso se asocia automáticamente con pérdida.
+Señales: externaliza los conflictos relacionales ("siempre me tocan personas complicadas"), asocia compromiso con pérdida de libertad ("necesito sentir que nadie me limite"), lenguaje ambiguo y sostenido sobre lo que busca ("que fluya", "no me gusta poner etiquetas"), describe pareja ideal con expectativas contradictorias, entusiasmo por el comienzo pero evita hablar de construir, cambia de tiempo verbal (presente definido para el deseo, futuro vago para el compromiso), usa absolutos ("nunca", "siempre", "nadie").
+
+"Autonomía emocional" -- cuánto depende el bienestar del vínculo, en lugar de sostenerse desde adentro.
+Señales: la pareja como fuente principal de bienestar ("con la persona indicada todo se acomoda"), miedo recurrente a la pérdida sin evidencia clara, necesidad elevada de validación y confirmaciones frecuentes, habla del otro como necesidad más que como elección, idealización de la pareja como solución, dificultad para poner límites en relaciones pasadas, identidad muy fusionada (le cuesta hablar de sí sin referirse al otro).
+
+"Poder personal" -- la posición frente a la responsabilidad relacional: verse como protagonista o como receptor de lo que pasa en los vínculos.
+Señales: el otro siempre tiene el poder ("siempre me tocó la peor gente"), poco espacio para autorreflexión al narrar conflictos, generalizaciones rígidas ("todos son iguales"), lenguaje de impotencia ("no tenía opción", "no dependía de mí"), explicaciones centradas afuera (suerte, destino, los demás), espera de rescate ("que me haga volver a creer"), dificultad para reconocer agencia ante "¿qué podrías hacer diferente?". El indicador más valioso es la evolución del discurso durante la charla -- de una narrativa rígida a una más compleja -- eso importa más que el punto de partida.
+
+"Coherencia interna" -- la distancia entre valores declarados y conducta real, y sobre todo la conciencia de esa brecha.
+Señales: valores declarados vs. ejemplos concretos contradictorios ("la honestidad es fundamental" + "prefiero desaparecer sin explicar"), lo que busca vs. lo que elige no coincide, justificaciones frecuentes ("es que...", "lo que pasa es que..."), cambios bruscos en el discurso sin poder integrarlos, emoción y contenido verbal que no coinciden ("ya lo superé" con tono de enojo intenso), inestabilidad narrativa. Alguien que reconoce su propia incoherencia tiene más potencial de crecimiento que alguien con discurso impecable pero rígido -- eso también es señal a favor de este módulo.
+
+Respondé ÚNICAMENTE con JSON sin backticks: {"modulo_esencial":"nombre del módulo más urgente","modulo_recomendado":"nombre del segundo","senales_detectadas":"descripción concreta, en 2-3 frases, de las señales específicas de la charla que llevaron a elegir el módulo esencial -- para que alguien pueda auditar la elección, no una etiqueta genérica","referencias_culturales":"lista de referencias que mencionó la persona","fortalezas":["fortaleza breve y cálida 1","fortaleza breve y cálida 2","fortaleza breve y cálida 3"],"oportunidades":["oportunidad de crecimiento presentada con cuidado, nunca como critica 1","oportunidad de crecimiento presentada con cuidado 2"]}. En "modulo_esencial" y "modulo_recomendado" usá el nombre EXACTO tal como aparece entre comillas arriba (ej. "Poder personal", no "PODER PERSONAL" ni "poder personal").`;
+
+async function forzarCierrePerfil(req, res, supabaseUrl, headers) {
+  const { usuarioId } = req.body;
+  if (!usuarioId) return res.status(400).json({ error: 'Falta usuarioId' });
+
+  const convRes = await fetch(`${supabaseUrl}/rest/v1/conversaciones?select=id,historial&usuario_id=eq.${encodeURIComponent(usuarioId)}`, { headers });
+  const convs = convRes.ok ? await convRes.json() : [];
+  const conv = convs[0];
+  if (!conv || !conv.historial || conv.historial.length < 4) {
+    return res.status(400).json({ error: 'sin_conversacion', mensaje: 'Esta persona no tiene suficiente conversación guardada para extraer un perfil.' });
+  }
+
+  const transcripto = conv.historial.map((m) => (m.role === 'assistant' ? 'Soul: ' : 'Usuario: ') + m.content).join('\n');
+
+  const { json: perfil, usage: usagePerfil } = await llamarClaudeJSON({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1200,
+    system: EXTRACT_PROMPT_ADMIN,
+    messages: [{ role: 'user', content: 'Analizá esta conversación:\n\n' + transcripto }]
+  });
+  await registrarUsoTokens({ usuarioId, endpoint: 'adminForzarCierrePerfil', usage: usagePerfil });
+
+  const { json: moduloInfo, usage: usageModulo } = await llamarClaudeJSON({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1024,
+    system: MODULO_DETECCION_PROMPT_ADMIN,
+    messages: [{ role: 'user', content: 'Perfil: ' + JSON.stringify(perfil) + '\n\nConversación resumida: ' + conv.historial.slice(-10).map((m) => m.role + ': ' + m.content).join('\n') }]
+  });
+  await registrarUsoTokens({ usuarioId, endpoint: 'adminForzarCierrePerfil', usage: usageModulo });
+
+  // Mismo shape que guardarPerfil()/continuarTrasValidacion() en soul.html --
+  // referencias_culturales solo lleva lo detectado en la charla: lo que la
+  // persona haya tipeado en el paso del wizard (pelicula/cancion/libro)
+  // vivia solo en el DOM de esa sesion y nunca llego a guardarse en ningun
+  // lado, asi que no hay forma de recuperarlo desde aca.
+  const perfilRes = await fetch(`${supabaseUrl}/rest/v1/perfiles?on_conflict=usuario_id`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({
+      usuario_id: usuarioId,
+      grupo1: perfil.grupo1,
+      grupo2: perfil.grupo2,
+      grupo3: perfil.grupo3,
+      grupo4: perfil.grupo4,
+      indice_disponibilidad: (perfil.grupo4 && perfil.grupo4.indice_disponibilidad) || null,
+      referencias_culturales: JSON.stringify({ pelicula: null, cancion: null, libro: null, detectado_en_charla: moduloInfo.referencias_culturales || null }),
+      sintesis_espejo: JSON.stringify({ fortalezas: moduloInfo.fortalezas || [], oportunidades: moduloInfo.oportunidades || [] }),
+      modulo_esencial: moduloInfo.modulo_esencial || null,
+      modulo_recomendado: moduloInfo.modulo_recomendado || null,
+      modulo_fase: moduloInfo.modulo_esencial ? 'esencial' : null,
+      senales_modulo: moduloInfo.senales_detectadas || null
+    })
+  });
+  if (!perfilRes.ok) {
+    console.error('Error guardando perfil forzado:', perfilRes.status, await perfilRes.text());
+    return res.status(500).json({ error: 'No se pudo guardar el perfil' });
+  }
+
+  await Promise.all([
+    fetch(`${supabaseUrl}/rest/v1/conversaciones?id=eq.${encodeURIComponent(conv.id)}`, {
+      method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ completada: true })
+    }),
+    fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuarioId)}`, {
+      method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ etapa_actual: 'modulos' })
+    })
+  ]);
+
+  return res.status(200).json({ ok: true, moduloEsencial: moduloInfo.modulo_esencial || null });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -456,6 +559,9 @@ export default async function handler(req, res) {
     }
     if (accion === 'sembrarPreview') {
       return await sembrarPreview(req, res, supabaseUrl, supabaseKey, headers);
+    }
+    if (accion === 'forzarCierrePerfil') {
+      return await forzarCierrePerfil(req, res, supabaseUrl, headers);
     }
     return res.status(400).json({ error: 'Acción no válida' });
   } catch (error) {

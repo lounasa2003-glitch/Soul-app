@@ -101,7 +101,7 @@ export default async function handler(req, res) {
     }
 
     // ── Hoja de vida completa ──
-    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes, reportesRes] = await Promise.all([
+    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes, reportesRes, feedbackRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?select=*&id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/conversaciones?select=*&usuario_id=eq.${idEnc}`, { headers }),
@@ -110,7 +110,8 @@ export default async function handler(req, res) {
       // Reportes RECIBIDOS por esta persona (los que hizo ella misma sobre
       // otros no se muestran acá -- lo relevante para la administradora es
       // detectar patrones de conducta reportada, no quién reporta seguido).
-      fetch(`${supabaseUrl}/rest/v1/reportes?select=*&usuario_reportado=eq.${idEnc}&order=created_at.desc`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/reportes?select=*&usuario_reportado=eq.${idEnc}&order=created_at.desc`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/feedback_piloto?select=*&usuario_id=eq.${idEnc}&order=creado_en.desc`, { headers })
     ]);
 
     const usuarios = usuarioRes.ok ? await usuarioRes.json() : [];
@@ -119,6 +120,7 @@ export default async function handler(req, res) {
     const matches = matchesRes.ok ? await matchesRes.json() : [];
     const intentosFuga = intentosFugaRes.ok ? await intentosFugaRes.json() : [];
     const reportesRecibidos = reportesRes.ok ? await reportesRes.json() : [];
+    const feedbackPiloto = feedbackRes.ok ? await feedbackRes.json() : [];
 
     if (!usuarios[0]) {
       return res.status(404).json({ error: 'No encontrada' });
@@ -190,7 +192,8 @@ export default async function handler(req, res) {
       conversacion: conversaciones.length > 0 ? conversaciones[conversaciones.length - 1] : null,
       matches: matchesConNombre,
       intentosFuga,
-      reportesRecibidos: reportesConNombre
+      reportesRecibidos: reportesConNombre,
+      feedbackPiloto: feedbackPiloto.length > 0 ? feedbackPiloto[0] : null
     });
   } catch (error) {
     console.error('Error en /api/admin/personas:', error);
