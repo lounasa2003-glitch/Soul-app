@@ -132,24 +132,33 @@ export default async function handler(req, res) {
       // bandas en vez del umbral viejo (50/65), que con el prompt anterior
       // dejaba pasar casi cualquier par -- una persona real del piloto
       // llego a tener 17 matches simultaneos con eso.
-      if (comp.compatibilidad_hoy >= 60 || comp.potencial_construccion >= 75) {
-        const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-          body: JSON.stringify({
-            usuario_a: usuarioId,
-            usuario_b: otro.usuario_id,
-            compatibilidad_hoy: comp.compatibilidad_hoy,
-            potencial_construccion: comp.potencial_construccion,
-            fortalezas: comp.fortalezas,
-            desafio: comp.desafio,
-            mensaje_dupla: comp.mensaje_dupla,
-            analisis_por_variable: comp.analisis_por_variable || null,
-            estado: 'pendiente',
-            activado_por: 'sistema'
-          })
-        });
-        const matchRows = matchRes.ok ? await matchRes.json() : [];
+      const supera = comp.compatibilidad_hoy >= 60 || comp.potencial_construccion >= 75;
+      // Se guarda la comparacion aunque no supere el umbral (estado
+      // "descartado") -- mismo motivo que en calcularRanking de
+      // api/admin/matches.js: le permite a la administradora activarlo a
+      // mano desde el panel con su propio criterio, y evita volver a
+      // gastar Claude comparando este mismo par de nuevo (yaMatcheados,
+      // mas arriba en este archivo, ya trata cualquier estado como "ya
+      // comparado"). listarMisMatches excluye "descartado" explicitamente,
+      // asi que la persona real nunca lo ve como si fuera un match.
+      const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        body: JSON.stringify({
+          usuario_a: usuarioId,
+          usuario_b: otro.usuario_id,
+          compatibilidad_hoy: comp.compatibilidad_hoy,
+          potencial_construccion: comp.potencial_construccion,
+          fortalezas: comp.fortalezas,
+          desafio: comp.desafio,
+          mensaje_dupla: comp.mensaje_dupla,
+          analisis_por_variable: comp.analisis_por_variable || null,
+          estado: supera ? 'pendiente' : 'descartado',
+          activado_por: 'sistema'
+        })
+      });
+      const matchRows = matchRes.ok ? await matchRes.json() : [];
+      if (supera) {
         matchEncontrado = true;
         matchData = {
           id: matchRows[0] ? matchRows[0].id : null,

@@ -110,10 +110,15 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
   });
 
+  // Se guarda CUALQUIER comparacion (no solo la que supera el umbral) para
+  // que la administradora pueda activar un match igual con su propio
+  // criterio (ver "descartado" y cambiarEstado) -- antes, un par por debajo
+  // del umbral nunca quedaba como fila en 'matches', asi que no habia nada
+  // que activar a mano, ni se guardaban fortalezas/desafio/mensaje_dupla
+  // para mostrar si mas adelante se decidia activarlo.
   const inserts = [];
   comparaciones.forEach(({ otro, comp }) => {
     const supera = comp.compatibilidad_hoy >= UMBRAL_COMPATIBILIDAD_HOY || comp.potencial_construccion >= UMBRAL_POTENCIAL;
-    if (!supera) return;
     const clave = [personaId, otro.usuario_id].sort().join('|');
     if (paresExistentes.has(clave)) return;
     paresExistentes.add(clave);
@@ -126,7 +131,7 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
       desafio: comp.desafio,
       mensaje_dupla: comp.mensaje_dupla,
       analisis_por_variable: comp.analisis_por_variable || null,
-      estado: 'pendiente',
+      estado: supera ? 'pendiente' : 'descartado',
       activado_por: 'sistema'
     });
   });

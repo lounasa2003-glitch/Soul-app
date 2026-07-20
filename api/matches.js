@@ -22,8 +22,12 @@ import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 // sin que el cliente tenga que pedirlo aparte.
 async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
+  // "descartado" es un estado interno: pares por debajo del umbral que
+  // ahora se guardan igual (ver calcularRanking en api/admin/matches.js)
+  // para que la administradora los pueda activar a mano, pero que la
+  // persona real nunca debe ver como si fueran un match sugerido.
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
+    `${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})&estado=neq.descartado`,
     { headers }
   );
   const matches = response.ok ? await response.json() : [];
