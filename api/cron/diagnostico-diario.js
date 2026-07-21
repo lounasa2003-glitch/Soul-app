@@ -19,6 +19,21 @@ function haceHoras(horas) {
   return new Date(Date.now() - horas * 3600 * 1000).toISOString();
 }
 
+// Este HTML se guarda en diagnosticos_diarios.texto_resumen y despues se
+// inserta con innerHTML en el panel admin (ver cargarDiagnosticos en
+// panel-admin.html) -- varios de los valores que arma este reporte son
+// texto libre de usuarios reales (nombre, email, y el subject de mails que
+// puede incluir el nombre de otra persona via notificarNuevoMatch). Sin
+// escapar, alguien podria poner algo como su nombre y quedar guardado en
+// la base para ejecutarse en el navegador de la administradora la proxima
+// vez que abra esta pestaña -- mismo criterio que esc() en soul.html y
+// panel-admin.html.
+function esc(valor) {
+  return String(valor == null ? '' : valor).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 async function leerSupabase(tabla, params) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
@@ -105,7 +120,7 @@ export default async function handler(req, res) {
 
     lineas.push(`<h3>Errores silenciosos: ${errores.length}</h3>`);
     if (errores.length) {
-      lineas.push('<ul>' + Object.entries(erroresPorContexto).map(([c, n]) => `<li>${c}: ${n}</li>`).join('') + '</ul>');
+      lineas.push('<ul>' + Object.entries(erroresPorContexto).map(([c, n]) => `<li>${esc(c)}: ${n}</li>`).join('') + '</ul>');
     } else {
       lineas.push('<p>Ninguno. 👍</p>');
     }
@@ -115,12 +130,12 @@ export default async function handler(req, res) {
 
     lineas.push(`<h3>Mails con problemas de entrega (Resend): ${resend.problematicos.length} de ${resend.totalEnviados} enviados</h3>`);
     if (resend.problematicos.length) {
-      lineas.push('<ul>' + resend.problematicos.map(p => `<li>${p.to} — ${p.estado} (${p.asunto})</li>`).join('') + '</ul>');
+      lineas.push('<ul>' + resend.problematicos.map(p => `<li>${esc(p.to)} — ${esc(p.estado)} (${esc(p.asunto)})</li>`).join('') + '</ul>');
     }
 
     lineas.push(`<h3>Cuentas trabadas sin confirmar mail (+${UMBRAL_SIN_CONFIRMAR_HORAS}hs): ${sinConfirmar.length}</h3>`);
     if (sinConfirmar.length) {
-      lineas.push('<ul>' + sinConfirmar.map(u => `<li>${u.nombre || '(sin nombre)'} — ${u.email}</li>`).join('') + '</ul>');
+      lineas.push('<ul>' + sinConfirmar.map(u => `<li>${esc(u.nombre || '(sin nombre)')} — ${esc(u.email)}</li>`).join('') + '</ul>');
     }
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);

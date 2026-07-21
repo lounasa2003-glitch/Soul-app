@@ -18,6 +18,23 @@ import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 // capa 1 en vez de intentar un insert nuevo que chocaria con la constraint.
 const UPSERT_CONFLICT_COLUMN = { perfiles: 'usuario_id', usuarios: 'email' };
 
+// El cliente (soul.html) siempre manda estos campos ya re-codificados por
+// su propio canvas.toDataURL('image/jpeg', ...) -- nunca el archivo crudo
+// que la persona subio. Pero nada impide que alguien llame a este endpoint
+// directo (sin pasar por el navegador) con un string armado a mano: sin
+// este chequeo, ese string se guarda tal cual y despues se inserta como
+// atributo src="..." en panel-admin.html (perfilAHtml/renderHojaDeVida) --
+// un valor con comillas dobles rompe el atributo e inyecta HTML/JS en el
+// navegador de la administradora. El patron exige exactamente lo que un
+// canvas real produce (nunca comillas, angulos, ni nada fuera del alfabeto
+// base64), y el limite de tamaño corta cualquier intento de mandar un
+// payload gigante para agotar recursos.
+const FOTO_REGEX = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+const FOTO_MAX_CHARS = 3_000_000; // ~2.2MB decodificados -- de sobra para 800px de lado a calidad .75
+function fotoValida(valor) {
+  return typeof valor === 'string' && valor.length <= FOTO_MAX_CHARS && FOTO_REGEX.test(valor);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -54,6 +71,14 @@ export default async function handler(req, res) {
       esUpsert = Object.prototype.hasOwnProperty.call(UPSERT_CONFLICT_COLUMN, tabla);
     } else if (!(await filtroDeEscrituraValido(tabla, filtro, usuario))) {
       return res.status(403).json({ error: 'No autorizado para modificar estos datos' });
+    }
+
+    if (tabla === 'usuarios') {
+      for (const campo of ['foto_cara', 'foto_cuerpo']) {
+        if (datosFinales[campo] != null && !fotoValida(datosFinales[campo])) {
+          return res.status(400).json({ error: 'foto_invalida', mensaje: 'La foto no tiene un formato válido.' });
+        }
+      }
     }
 
     // Mismo motivo que en /api/leer: reconstruir con el valor re-codificado
