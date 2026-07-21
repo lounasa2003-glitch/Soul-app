@@ -1795,7 +1795,12 @@ async function guardarTabla(tabla,datos,filtro){
       body:JSON.stringify(body)
     });
   });
-  if(!res.ok){throw new Error('error_guardando_'+tabla);}
+  if(!res.ok){
+    var errData=await res.json().catch(function(){return null});
+    var err=new Error('error_guardando_'+tabla);
+    err.data=errData;
+    throw err;
+  }
   return res.json();
 }
 
@@ -1949,6 +1954,17 @@ async function guardarUsuarioYContinuar(){
       }
     }catch(e){
       console.error('Error guardando usuario (intento '+intento+'):',e);
+      // Si el servidor rechazo por faltar datos basicos, no tiene sentido
+      // reintentar (el problema no es de conexion) -- se corta al toque y
+      // se le dice exactamente que falta, en vez de dejarla reintentando
+      // "revisá tu conexión" sin salida cuando el problema real es otro.
+      if(e.data&&e.data.error==='datos_incompletos'){
+        btn.disabled=false;
+        btn.textContent='Hablar con Soul →';
+        errEl.textContent=e.data.mensaje||'Faltan datos básicos antes de poder continuar. Revisá que hayas completado todos los pasos.';
+        errEl.style.display='block';
+        return;
+      }
     }
     if(intento===1) await new Promise(function(r){setTimeout(r,1000);});
   }

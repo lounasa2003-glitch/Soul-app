@@ -390,7 +390,8 @@ function aplicarFiltrosPersonas(){
     var tr=document.createElement('tr');
     tr.className='persona-row';
     tr.onclick=function(){ abrirHojaDeVida(p.id); };
-    tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>';
+    var badgeIncompleto=p.basicosIncompletos?' <span title="Le faltan datos básicos (fecha de nacimiento, género o preferencia) pese a haber avanzado" style="color:#d98a9e;font-weight:700;cursor:help">⚠</span>':'';
+    tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+badgeIncompleto+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>';
     tbody.appendChild(tr);
   });
   document.getElementById('personasTabla').classList.toggle('oculto',filtradas.length===0);

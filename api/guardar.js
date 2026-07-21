@@ -35,6 +35,28 @@ function fotoValida(valor) {
   return typeof valor === 'string' && valor.length <= FOTO_MAX_CHARS && FOTO_REGEX.test(valor);
 }
 
+// Mismo listado que CAMPOS_FORMULARIO en soul.html -- ahi solo se usa para
+// calcular un porcentaje informativo, nunca bloqueaba nada. Se encontraron
+// cuentas reales (Ezequiel, Marcela) que llegaron a etapa 'chat'/'match' con
+// todo esto en null pese a tener perfil y conversacion completos -- el
+// chequeo por-paso del formulario (chkStep en soul.html) nunca deberia
+// dejar pasar eso, pero lo que sea que haya pasado ahi, esto lo cierra del
+// lado del servidor: nadie puede terminar el intake (etapa_actual:'chat')
+// sin que estos campos + fotos + consentimiento esten realmente cargados,
+// sin importar que mande el cliente.
+const CAMPOS_BASICOS_REQUERIDOS = ['fecha_nacimiento', 'ciudad', 'distancia_max', 'genero', 'preferencia_genero', 'tipo_vinculo', 'hijos', 'estado_civil', 'ocupacion', 'no_negociables', 'negociables'];
+function campoLleno(valor) {
+  if (valor == null) return false;
+  if (typeof valor === 'string') return valor.trim().length > 0;
+  if (Array.isArray(valor)) return valor.length > 0;
+  return true;
+}
+function basicosCompletos(datos) {
+  return CAMPOS_BASICOS_REQUERIDOS.every((c) => campoLleno(datos[c]))
+    && campoLleno(datos.foto_cara) && campoLleno(datos.foto_cuerpo)
+    && datos.consentimiento_aceptado === true;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -90,6 +112,14 @@ export default async function handler(req, res) {
         if (datosFinales[campo] != null && !fotoValida(datosFinales[campo])) {
           return res.status(400).json({ error: 'foto_invalida', mensaje: 'La foto no tiene un formato válido.' });
         }
+      }
+      // Solo se valida en el momento exacto de terminar el intake (pasar a
+      // etapa 'chat') -- guardarUsuarioYContinuar() en soul.html siempre
+      // manda todos estos campos juntos en un solo pedido en ese momento,
+      // asi que datosFinales ya trae todo lo necesario para verificar sin
+      // tener que leer el estado previo de la fila.
+      if (datosFinales.etapa_actual === 'chat' && !basicosCompletos(datosFinales)) {
+        return res.status(400).json({ error: 'datos_incompletos', mensaje: 'Faltan datos básicos antes de poder empezar a hablar con Soul.' });
       }
     }
 

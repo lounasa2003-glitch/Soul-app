@@ -86,11 +86,20 @@ export default async function handler(req, res) {
     if (!id) {
       // ── Listado de personas ──
       const usuariosRes = await fetch(
-        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual`,
+        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual,fecha_nacimiento,genero,preferencia_genero`,
         { headers }
       );
       const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
-      return res.status(200).json({ personas: usuarios });
+      // Deberia ser imposible pasar de 'nuevo' sin estos 3 campos (ver el
+      // chequeo server-side en api/guardar.js), pero un par de cuentas
+      // reales (Ezequiel, Marcela) quedaron asi de antes de que existiera
+      // -- se marca para que sea visible de un vistazo, no solo abriendo
+      // la Hoja de Vida.
+      const personas = usuarios.map((u) => ({
+        ...u,
+        basicosIncompletos: u.etapa_actual !== 'nuevo' && (!u.fecha_nacimiento || !u.genero || !u.preferencia_genero)
+      }));
+      return res.status(200).json({ personas });
     }
 
     const idEnc = encodeURIComponent(id);
