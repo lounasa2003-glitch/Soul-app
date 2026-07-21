@@ -48,6 +48,18 @@ export default async function handler(req, res) {
   }
 
   try {
+    // navigator.sendBeacon (usado por soul.html para guardar la charla al
+    // cerrar/refrescar/navegar afuera, ver guardarConversacionBeacon) no
+    // permite mandar headers propios -- no hay forma de que ese pedido
+    // lleve el Authorization de siempre. Como alternativa SOLO para ese
+    // caso, el token viaja en el cuerpo (accessTokenBeacon); si no vino
+    // ningun header, se usa ese valor de la misma forma que verificarUsuario
+    // ya validaria un Bearer normal (mismo chequeo contra Supabase Auth,
+    // ninguna confianza ciega en el valor).
+    if (!req.headers.authorization && req.body && req.body.accessTokenBeacon) {
+      req.headers.authorization = `Bearer ${req.body.accessTokenBeacon}`;
+    }
+
     const usuario = await verificarUsuario(req);
     if (!usuario) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });

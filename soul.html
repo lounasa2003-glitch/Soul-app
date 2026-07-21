@@ -836,6 +836,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <span onclick="pedirPausaChat()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
       </div>
     </div>
+    <div id="avisoNoGuardado" style="padding:.5rem 1.2rem;text-align:center;color:#9a8e96;background:rgba(201,168,76,.06);font-family:Georgia,serif;font-style:italic;font-size:.78rem">Todavía no se guardó nada de esta charla — seguí un poco más para que tu progreso quede guardado automáticamente.</div>
     <div class="chat-area" id="chatArea"></div>
     <div id="chatAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
     <div class="chat-input-area">
@@ -2016,6 +2017,35 @@ async function guardarConversacion(completada){
     if(data&&data[0]&&data[0].id) conversacionId=data[0].id;
   }
 }
+
+// Red de seguridad para cuando la persona cierra la pestaña, refresca o
+// navega afuera SIN pasar por "Dejar por ahora" -- un fetch() normal
+// disparado en ese momento no tiene garantia de completarse, el navegador
+// puede cortarlo a mitad de camino. sendBeacon es la unica API que el
+// navegador garantiza que sigue viva mas alla del cierre de la pagina, pero
+// no permite mandar headers propios (no se puede mandar el Authorization
+// de siempre) -- por eso el access token va en el cuerpo del pedido, y
+// api/guardar.js lo acepta ahi como alternativa solo para este caso. Se
+// arma como Blob con type 'application/json' (no un string plano) para que
+// el Content-Type quede bien seteado y el servidor pueda parsear el body
+// como JSON normal.
+function guardarConversacionBeacon(){
+  if(!usuarioId||!accessToken||chatHistory.length===0)return;
+  var datos={historial:chatHistory,completada:false};
+  var payload={tabla:'conversaciones',datos:datos,accessTokenBeacon:accessToken};
+  if(conversacionId){
+    payload.filtro='id=eq.'+conversacionId;
+  }else{
+    datos.usuario_id=usuarioId;
+  }
+  var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+  navigator.sendBeacon('/api/guardar',blob);
+}
+window.addEventListener('pagehide',guardarConversacionBeacon);
+window.addEventListener('beforeunload',guardarConversacionBeacon);
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden')guardarConversacionBeacon();
+});
 
 // ── AUTENTICACIÓN ──
 var authMode='registro';
@@ -3439,6 +3469,23 @@ var UMBRAL_VIABLE_PAUSA=6;
 // comentario junto a UMBRAL_FORZAR_CIERRE en enviarAlChat().
 var UMBRAL_MOSTRAR_BOTON_AVANZAR=30;
 var UMBRAL_FORZAR_CIERRE=50;
+
+// Mensajes en chatHistory (usuario+Soul) a partir de los cuales se
+// garantiza que la charla ya quedó guardada -- antes de esto, si la
+// persona cierra la pestaña, refresca o se va sin usar "Dejar por ahora",
+// no había ningún guardado disparado todavía (el autosave periódico recién
+// entra en juego cada INTERCAMBIOS_AUTOSAVE intercambios). El aviso visible
+// (id="avisoNoGuardado") le avisa a la persona de esto mientras dura, y
+// desaparece apenas se cruza el umbral y se dispara un guardado inmediato.
+var UMBRAL_GUARDADO_TEMPRANO=5;
+var guardadoTempranoHecho=false;
+function chequearGuardadoTemprano(){
+  if(guardadoTempranoHecho||chatHistory.length<UMBRAL_GUARDADO_TEMPRANO)return;
+  guardadoTempranoHecho=true;
+  var aviso=document.getElementById('avisoNoGuardado');
+  if(aviso)aviso.style.display='none';
+  guardarConversacion(false).catch(function(){});
+}
 var cierreForzadoDisparado=false;
 // Bloque de blindaje anti-fuga / anti-inyeccion, agregado al final de todos
 // los prompts conversacionales (chat principal, modulos, cita, debriefing)
@@ -3663,6 +3710,7 @@ function avanzarManualmente(){
 
 async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
+  chequearGuardadoTemprano();
   showTyping();
   try{
     // Streaming: el texto de Soul se va mostrando a medida que llega, en vez
@@ -3679,6 +3727,7 @@ async function enviarAlChat(txt){
     hideTyping();
     if(soulEl)soulEl.textContent=reply;else addMsg('soul',reply);
     chatHistory.push({role:'assistant',content:reply});
+    chequearGuardadoTemprano();
     actualizarAvisoLimiteRestante('chatAvisoLimite',window.limiteChatRestante);
 
     intercambiosDesdeGuardado++;
