@@ -88,14 +88,18 @@ export default async function handler(req, res) {
   try {
     const desde = haceHoras(VENTANA_HORAS);
 
-    const [errores, reportes, fugas, tokens, resend, sinConfirmar] = await Promise.all([
+    const [errores, reportes, fugas, tokens, resend, sinConfirmar, reportesTecnicos] = await Promise.all([
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
       leerSupabase('intentos_fuga_prompt', `select=id,usuario_id,mensaje,endpoint,created_at&created_at=gte.${encodeURIComponent(desde)}`),
       leerSupabase('uso_tokens', `select=endpoint,input_tokens,output_tokens&created_at=gte.${encodeURIComponent(desde)}`),
       chequearResend(desde),
-      leerSupabase('usuarios', `select=id,nombre,email,ultima_actividad&etapa_actual=eq.chat&mail_confirmado=eq.false&created_at=lte.${encodeURIComponent(haceHoras(UMBRAL_SIN_CONFIRMAR_HORAS))}`)
+      leerSupabase('usuarios', `select=id,nombre,email,ultima_actividad&etapa_actual=eq.chat&mail_confirmado=eq.false&created_at=lte.${encodeURIComponent(haceHoras(UMBRAL_SIN_CONFIRMAR_HORAS))}`),
+      leerSupabase('reportes_tecnicos', `select=id,usuario_id,email,contexto,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc`)
     ]);
+
+    const reportesTecnicosPorContexto = {};
+    reportesTecnicos.forEach(r => { reportesTecnicosPorContexto[r.contexto] = (reportesTecnicosPorContexto[r.contexto] || 0) + 1; });
 
     const erroresPorContexto = {};
     errores.forEach(e => { erroresPorContexto[e.contexto] = (erroresPorContexto[e.contexto] || 0) + 1; });
@@ -111,6 +115,7 @@ export default async function handler(req, res) {
       intentosFuga: { total: fugas.length, filas: fugas },
       resend,
       cuentasSinConfirmar: { total: sinConfirmar.length, filas: sinConfirmar },
+      reportesTecnicos: { total: reportesTecnicos.length, porContexto: reportesTecnicosPorContexto, filas: reportesTecnicos },
       tokens: { totalInput, totalOutput, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
@@ -127,6 +132,11 @@ export default async function handler(req, res) {
 
     lineas.push(`<h3>Reportes de usuarios: ${reportes.length}</h3>`);
     lineas.push(`<h3>Intentos de fuga de prompt: ${fugas.length}</h3>`);
+
+    lineas.push(`<h3>Avisos de "algo no funciona" de usuarios: ${reportesTecnicos.length}</h3>`);
+    if (reportesTecnicos.length) {
+      lineas.push('<ul>' + Object.entries(reportesTecnicosPorContexto).map(([c, n]) => `<li>${esc(c)}: ${n}</li>`).join('') + '</ul>');
+    }
 
     lineas.push(`<h3>Mails con problemas de entrega (Resend): ${resend.problematicos.length} de ${resend.totalEnviados} enviados</h3>`);
     if (resend.problematicos.length) {
@@ -156,7 +166,7 @@ export default async function handler(req, res) {
     if (adminEmail) {
       mailEnviado = await notificarDiagnosticoDiario({
         email: adminEmail,
-        asunto: `Diagnóstico diario de Soul — ${errores.length} errores, ${reportes.length} reportes, ${resend.problematicos.length} mails con problema`,
+        asunto: `Diagnóstico diario de Soul — ${errores.length} errores, ${reportes.length} reportes, ${reportesTecnicos.length} avisos de usuarios, ${resend.problematicos.length} mails con problema`,
         html
       });
     }

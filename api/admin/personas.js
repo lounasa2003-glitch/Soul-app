@@ -113,7 +113,7 @@ export default async function handler(req, res) {
     }
 
     // ── Hoja de vida completa ──
-    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes, reportesRes, feedbackRes] = await Promise.all([
+    const [usuarioRes, perfilRes, convRes, matchesRes, intentosFugaRes, reportesRes, feedbackRes, reportesTecnicosRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?select=*&id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${idEnc}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/conversaciones?select=*&usuario_id=eq.${idEnc}`, { headers }),
@@ -123,7 +123,8 @@ export default async function handler(req, res) {
       // otros no se muestran acá -- lo relevante para la administradora es
       // detectar patrones de conducta reportada, no quién reporta seguido).
       fetch(`${supabaseUrl}/rest/v1/reportes?select=*&usuario_reportado=eq.${idEnc}&order=created_at.desc`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/feedback_piloto?select=*&usuario_id=eq.${idEnc}&order=creado_en.desc`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/feedback_piloto?select=*&usuario_id=eq.${idEnc}&order=creado_en.desc`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/reportes_tecnicos?select=*&usuario_id=eq.${idEnc}&order=creado_en.desc`, { headers })
     ]);
 
     const usuarios = usuarioRes.ok ? await usuarioRes.json() : [];
@@ -133,6 +134,7 @@ export default async function handler(req, res) {
     const intentosFuga = intentosFugaRes.ok ? await intentosFugaRes.json() : [];
     const reportesRecibidos = reportesRes.ok ? await reportesRes.json() : [];
     const feedbackPiloto = feedbackRes.ok ? await feedbackRes.json() : [];
+    const reportesTecnicos = reportesTecnicosRes.ok ? await reportesTecnicosRes.json() : [];
 
     if (!usuarios[0]) {
       return res.status(404).json({ error: 'No encontrada' });
@@ -205,6 +207,7 @@ export default async function handler(req, res) {
       matches: matchesConNombre,
       intentosFuga,
       reportesRecibidos: reportesConNombre,
+      reportesTecnicos,
       feedbackPiloto: feedbackPiloto.length > 0 ? feedbackPiloto[0] : null
     });
   } catch (error) {

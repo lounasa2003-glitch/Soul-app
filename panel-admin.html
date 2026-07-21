@@ -795,6 +795,17 @@ function renderHojaDeVida(data){
       htmlSeguridad+='<div class="campo"><div class="campo-nombre">'+esc(fecha)+(it.endpoint?' — '+esc(it.endpoint):'')+'</div><div class="campo-valor">'+esc(it.mensaje)+'</div></div>';
     });
   }
+
+  var reportesTecnicos=data.reportesTecnicos||[];
+  htmlSeguridad+='<p class="campo-grupo-titulo" style="margin-top:1.2rem">Avisos de "algo no funciona" de esta persona ('+reportesTecnicos.length+')</p>';
+  if(reportesTecnicos.length===0){
+    htmlSeguridad+='<p class="cargando">Sin avisos.</p>';
+  }else{
+    reportesTecnicos.forEach(function(rt){
+      var fecha=new Date(rt.creado_en).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      htmlSeguridad+='<div class="campo"><div class="campo-nombre">'+esc(fecha)+'</div><div class="campo-valor">'+esc(rt.contexto)+'</div></div>';
+    });
+  }
   document.getElementById('subtabSeguridad').innerHTML=htmlSeguridad;
 
   // ── FEEDBACK (encuesta post-recorrido del piloto) ──

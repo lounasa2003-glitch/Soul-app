@@ -35,6 +35,29 @@ export default async function handler(req, res) {
   try {
     const { accion, email, password, refresh_token } = req.body;
 
+    // Unico caso que no requiere sesion ni email -- se usa desde las
+    // pantallas de login/registro/recuperar cuando algo falla ahi mismo,
+    // antes de que exista ninguna sesion valida (ver reportarProblema en
+    // soul.html; los casos con sesion ya activa van por
+    // guardarTabla('reportes_tecnicos',...) en api/guardar.js en vez de
+    // por aca). Se limita por IP, no por email, porque puede no haber
+    // ningun email cargado todavia en pantalla.
+    if (accion === 'reportarProblema') {
+      const { contexto } = req.body;
+      if (!contexto) return res.status(400).json({ error: 'Falta contexto' });
+      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || 'ip_desconocida';
+      const limiteInfo = await chequearLimite(ip, 'reportarProblema', 10, 3600);
+      if (!limiteInfo.permitido) {
+        return res.status(429).json({ error: 'limite_alcanzado' });
+      }
+      await fetch(`${supabaseUrl}/rest/v1/reportes_tecnicos`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ contexto: String(contexto).slice(0, 200), email: email ? String(email).slice(0, 200) : null })
+      });
+      return res.status(200).json({ ok: true });
+    }
+
     const limiteConfig = LIMITES_AUTH[accion];
     if (limiteConfig) {
       if (!email) return res.status(400).json({ error: 'Falta email' });
