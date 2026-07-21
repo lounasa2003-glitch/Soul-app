@@ -3607,11 +3607,37 @@ function buildSoulPrompt(){
   return prompt;
 }
 
-function initChat(){
+// Antes esto siempre arrancaba un saludo nuevo, ignorando cualquier charla
+// que ya hubiera quedado guardada (ver guardarConversacionBeacon/
+// chequearGuardadoTemprano) -- si la persona se habia ido a mitad de
+// camino, al volver perdia el hilo igual aunque los datos ya estuvieran
+// en la base. Ahora, si hay una conversacion sin terminar guardada para
+// esta persona, se retoma esa en vez de empezar de cero.
+async function initChat(){
   if(chatHistory.length>0)return;
+  if(usuarioId){
+    try{
+      var convs=await leerTabla('conversaciones','usuario_id=eq.'+usuarioId);
+      var previa=convs&&convs.length>0?convs[convs.length-1]:null;
+      if(previa&&!previa.completada&&previa.historial&&previa.historial.length>0){
+        conversacionId=previa.id;
+        chatHistory=previa.historial.slice();
+        chatHistory.forEach(function(m){addMsg(m.role==='assistant'?'soul':'user',m.content)});
+        scrollAlFondo('chatArea');
+        guardadoTempranoHecho=true;
+        var aviso=document.getElementById('avisoNoGuardado');
+        if(aviso)aviso.style.display='none';
+        adjuntarListenersChat();
+        return;
+      }
+    }catch(e){}
+  }
   var saludo=window.userNombre?('Hola '+window.userNombre+', ¿cómo estás?'):'Hola. ¿Cómo estás?';
   addMsg('soul',saludo);
   chatHistory.push({role:'assistant',content:saludo});
+  adjuntarListenersChat();
+}
+function adjuntarListenersChat(){
   document.getElementById('chatIn').addEventListener('keydown',function(e){if(e.key==='Enter')sendMsg()});
   // Listeners para inputs
 document.getElementById('fnac').addEventListener('change',function(){chkStep(0)});
