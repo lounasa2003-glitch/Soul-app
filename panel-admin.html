@@ -856,8 +856,15 @@ function renderHojaDeVida(data){
         }
         html+='</div>';
       }
-      html+='<button class="btn-secundario" style="margin-top:.5rem" onclick="toggleCitaTranscripto(\''+esc(cita.id)+'\',this)">Ver conversación completa'+(cita.estado!=='cerrada'?' (en curso)':'')+' →</button>';
-      html+='<div id="citaTranscripto'+esc(cita.id)+'" class="oculto" style="margin-top:.6rem"></div>';
+      // Solo se puede ver la conversación completa una vez que el encuentro
+      // cerró -- ver "Durante el piloto" en legal.html/soul.html. Mientras
+      // sigue en curso no hay forma de abrirla (nada de vista "en vivo").
+      if(cita.estado==='cerrada'){
+        html+='<button class="btn-secundario" style="margin-top:.5rem" onclick="toggleCitaTranscripto(\''+esc(cita.id)+'\',this)">Ver conversación completa →</button>';
+        html+='<div id="citaTranscripto'+esc(cita.id)+'" class="oculto" style="margin-top:.6rem"></div>';
+      }else{
+        html+='<p style="font-size:.78rem;color:#7a6e78;margin-top:.5rem;font-style:italic">Este encuentro todavía está en curso -- vas a poder verlo completo cuando cierre.</p>';
+      }
       html+='</div>';
     });
     if(m.analisis_por_variable){
@@ -1007,13 +1014,11 @@ function toggleTranscripto(cual){
   document.getElementById(id).classList.toggle('oculto');
 }
 
-// Ver la conversacion cruda de una cita (encuentro) -- disclosado
-// explicitamente en el consentimiento ("Durante el piloto"). Si la cita
-// sigue en curso, se refresca sola cada 6s mientras el panel esta abierto
-// (para poder seguirla mientras pasa, no solo despues de cerrada) -- se
-// corta el intervalo al volver a plegarlo para no dejar timers sueltos
-// dando vueltas en segundo plano.
-var citaTranscriptoTimers={};
+// Ver la conversacion completa de una cita (encuentro) ya cerrada --
+// disclosado explicitamente en el consentimiento ("Durante el piloto").
+// Texto estatico, sin refresco automatico: no hay vista "en vivo" de un
+// encuentro en curso (el boton para abrir esto ni siquiera se muestra
+// mientras la cita sigue activa, ver matchCardHtml).
 // Toggle genérico para bloques ya renderizados en memoria (a diferencia de
 // toggleCitaTranscripto, que carga la conversación recién al abrir) -- lo
 // usa el perfil punto por punto extraído de la cita, que ya viene incluido
@@ -1026,7 +1031,6 @@ async function toggleCitaTranscripto(citaId,btn){
   var abierta=!div.classList.contains('oculto');
   if(abierta){
     div.classList.add('oculto');
-    if(citaTranscriptoTimers[citaId]){clearInterval(citaTranscriptoTimers[citaId]);delete citaTranscriptoTimers[citaId];}
     return;
   }
   div.classList.remove('oculto');
@@ -1039,7 +1043,7 @@ async function cargarCitaTranscripto(citaId,div){
     var res=await llamarAdmin('/api/admin/personas?modo=citaMensajes&citaId='+encodeURIComponent(citaId));
     var data=await res.json();
     if(!res.ok){
-      div.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo cargar la conversación')+'</p>';
+      div.innerHTML='<p class="error-msg">'+esc(data.mensaje||data.error||'No se pudo cargar la conversación')+'</p>';
       return;
     }
     if(data.mensajes.length===0){
@@ -1049,12 +1053,6 @@ async function cargarCitaTranscripto(citaId,div){
         var quien=m.usuario_id===null?'Soul':esc(m.remitente_nombre||'(sin nombre)');
         return '<div class="msg '+(m.usuario_id===null?'assistant':'user')+'" style="max-width:100%"><strong style="font-size:.72rem;color:#c9a84c;display:block;margin-bottom:.15rem">'+quien+'</strong>'+esc(m.contenido)+'</div>';
       }).join('');
-    }
-    if(data.estadoCita!=='cerrada'&&!citaTranscriptoTimers[citaId]){
-      citaTranscriptoTimers[citaId]=setInterval(function(){
-        if(div.classList.contains('oculto')){clearInterval(citaTranscriptoTimers[citaId]);delete citaTranscriptoTimers[citaId];return;}
-        cargarCitaTranscripto(citaId,div);
-      },6000);
     }
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al cargar la conversación.</p>';

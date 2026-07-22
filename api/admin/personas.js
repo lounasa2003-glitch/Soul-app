@@ -1,5 +1,6 @@
 import { verificarAdmin } from '../../lib/verificarAdmin.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
+import { cerrarSiInactiva } from '../../lib/cierreCita.js';
 
 // Fusiona lo que antes eran admin/personas.js (listado), admin/persona.js
 // (hoja de vida completa) y admin/perfil.js (par de perfiles para comparar)
@@ -116,25 +117,35 @@ export default async function handler(req, res) {
     }
 
     if (modo === 'citaMensajes') {
-      // ── Transcripto crudo de una cita, para la administradora -- ver
-      // "Durante el piloto" en el consentimiento (soul.html/legal.html):
-      // esto se disclosea explicitamente ahi, incluida la posibilidad de
-      // revisarla mientras esta en curso, no solo despues de cerrada. Sin
-      // filtro de estado a proposito -- funciona igual si la cita sigue
-      // activa o ya cerro. ──
+      // ── Transcripto de una cita, para la administradora -- ver "Durante
+      // el piloto" en el consentimiento (soul.html/legal.html): solo se
+      // revisa UNA VEZ CERRADA, nunca en vivo (antes se podia ver mientras
+      // seguia activa, pero eso invitaba a leerla como si fuera una charla
+      // en curso -- refrescando sola, con un estado de "en vivo" que no
+      // reflejaba la realidad si nadie habia vuelto a entrar en dias).
+      // Antes de responder, se corre el mismo chequeo de inactividad que
+      // corre del lado de las dos personas (ver lib/cierreCita.js): si el
+      // encuentro lleva 48hs sin mensajes nuevos, se cierra aca mismo en
+      // vez de esperar a que alguna de las dos vuelva a abrir la app. ──
       const { citaId } = req.query;
       if (!citaId) return res.status(400).json({ error: 'Falta citaId' });
       const citaIdEnc = encodeURIComponent(citaId);
       const [citaRes, msgsRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,estado&id=eq.${citaIdEnc}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,ultima_actividad&id=eq.${citaIdEnc}`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=*&cita_id=eq.${citaIdEnc}&order=created_at.asc`, { headers })
       ]);
-      const citaFila = citaRes.ok ? (await citaRes.json())[0] : null;
+      let citaFila = citaRes.ok ? (await citaRes.json())[0] : null;
       if (!citaFila) return res.status(404).json({ error: 'Cita no encontrada' });
       const mensajes = msgsRes.ok ? await msgsRes.json() : [];
 
       const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(citaFila.match_id)}`, { headers });
       const match = matchRes.ok ? (await matchRes.json())[0] : null;
+      if (match) citaFila = await cerrarSiInactiva(supabaseUrl, headers, citaFila, match);
+
+      if (citaFila.estado !== 'cerrada') {
+        return res.status(409).json({ error: 'cita_en_curso', mensaje: 'Este encuentro todavía está en curso -- vas a poder verlo completo cuando cierre.' });
+      }
+
       let nombrePorId = {};
       if (match) {
         const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
@@ -253,10 +264,17 @@ export default async function handler(req, res) {
     if (matches.length > 0) {
       const idsMatches = matches.map(m => m.id);
       const citasRes = await fetch(
-        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,resumen_ia,refinamiento_a,refinamiento_b,consiente_analisis_a,consiente_analisis_b&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})&order=created_at.asc`,
+        `${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,ultima_actividad,resumen_ia,refinamiento_a,refinamiento_b,consiente_analisis_a,consiente_analisis_b,perfil_cita_a,perfil_cita_b,compatibilidad_cita_a,compatibilidad_cita_b&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})&order=created_at.asc`,
         { headers }
       );
-      const citas = citasRes.ok ? await citasRes.json() : [];
+      let citas = citasRes.ok ? await citasRes.json() : [];
+      // Mismo chequeo de inactividad que corre del lado de las dos personas
+      // (ver lib/cierreCita.js) -- asi un encuentro abandonado (nadie volvio
+      // a entrar) aparece cerrado aca aunque nadie lo haya disparado antes.
+      citas = await Promise.all(citas.map(async (c) => {
+        const matchDeEsta = matches.find(m => m.id === c.match_id);
+        return matchDeEsta ? await cerrarSiInactiva(supabaseUrl, headers, c, matchDeEsta) : c;
+      }));
       citas.forEach(c => {
         if (!citasPorMatch[c.match_id]) citasPorMatch[c.match_id] = [];
         citasPorMatch[c.match_id].push(c);
