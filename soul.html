@@ -2478,22 +2478,17 @@ async function recolectarPendientes(){
         if(c.estado!=='cerrada'){
           pendientes.push({tipo:'cita',label:'Cita en curso con '+otroNombre,cita:c});
         }else{
-          // Decision de la Sala de Encuentros (seguir en Soul / intercambiar
-          // / cerrar) -- por lado, independiente de si la otra persona ya
-          // contesto o no (mismo patron que eleccion_usuario_a/b). Cuando
-          // decidirSalaEncuentros() resuelve a "intercambiar" o "cerrar"
-          // (estado del match pasa a aceptado/rechazado), decision_a/b se
-          // resetean a null en el servidor -- sin este chequeo de estado,
-          // esa misma cita ya resuelta volvia a aparecer como pendiente en
-          // el proximo login, mandando de nuevo a la Sala de Encuentros y,
-          // 2.2s despues de elegir cualquier opcion, otra vez al debriefing
-          // (bug real: "elijo intercambiar y termino de nuevo en el
-          // debriefing"). "seguir_soul" no lo sufre porque ahi se crea un
-          // encuentro nuevo, que pasa a ser el mas reciente y tapa a este.
-          var soyADecision=c.match.usuario_a===usuarioId;
-          var miDecision=soyADecision?c.match.decision_a:c.match.decision_b;
-          var salaYaResuelta=c.match.estado==='aceptado'||c.match.estado==='rechazado';
-          if(!miDecision&&!salaYaResuelta){
+          // El debriefing entra por defecto apenas la cita cierra (ver el
+          // auto-redirect en cargarCita) -- esto es solo el respaldo para
+          // cuando la persona no estaba mirando la app en ese momento (la
+          // cita cerro por inactividad, o la cerro la otra persona) y
+          // todavia no hizo SU debriefing de este encuentro puntual. La
+          // decision de "como seguir" (Sala de Encuentros) ya NO se fuerza
+          // aca -- queda siempre disponible desde Mis matches, sin apuro
+          // (ver elegirComoSeguir).
+          var soyADebriefing=c.match.usuario_a===usuarioId;
+          var yaHiceDebriefing=soyADebriefing?c.refinamiento_a:c.refinamiento_b;
+          if(!yaHiceDebriefing){
             pendientes.push({tipo:'debriefing',label:'Debriefing pendiente con '+otroNombre,cita:c});
           }
         }
@@ -2522,10 +2517,7 @@ function entrarAPendiente(item){
     return;
   }
   if(item.tipo==='debriefing'){
-    var m=item.cita.match;
-    window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
-    window.citaActualId=item.cita.id;
-    ir(8);
+    abrirReflexionDesdeCita(item.cita.id);
     return;
   }
 }
@@ -2750,14 +2742,29 @@ async function mostrarMisMatches(){
       html+='<span onclick="eliminarMatch(\''+esc(m.id)+'\')" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;white-space:nowrap;opacity:.7">Eliminar</span>';
       html+='</div>';
       // Mas reciente primero, pero numerado en orden real de cuando pasaron.
+      var soyADecision=m.usuario_a===usuarioId;
+      var miDecision=soyADecision?m.decision_a:m.decision_b;
+      var salaYaResuelta=m.estado==='aceptado'||m.estado==='rechazado';
       citasDelMatch.slice().reverse().forEach(function(cita,idxInv){
         var numero=citasDelMatch.length-idxInv;
+        var esLaMasReciente=idxInv===0;
         html+='<div style="margin-left:.8rem;padding-left:.8rem;border-left:2px solid #2a1f28;margin-top:.5rem">';
         html+='<p style="font-family:\'Inter\',sans-serif;font-size:.9rem;color:#7a6e78;margin-bottom:.5rem">Encuentro '+numero+': '+esc(CITA_ESTADO_LEGIBLE[cita.estado]||cita.estado)+'</p>';
         html+='<div style="display:flex;gap:.5rem;flex-wrap:wrap">';
         html+='<button style="'+estiloBtn+'" onclick="abrirCitaDesdeM(\''+esc(cita.id)+'\')">Ver encuentro →</button>';
         if(cita.estado==='cerrada'){
           html+='<button style="'+estiloBtn+'" onclick="abrirReflexionDesdeCita(\''+esc(cita.id)+'\')">Ver debriefing →</button>';
+          // "Elegir cómo seguir" queda siempre disponible aca, en vez de
+          // forzarse una sola vez despues del debriefing (ver Sala de
+          // Encuentros permanente) -- solo en el encuentro mas reciente,
+          // y solo si esta persona todavia no eligio.
+          if(esLaMasReciente&&!salaYaResuelta){
+            if(miDecision){
+              html+='<p style="font-family:Georgia,serif;font-style:italic;font-size:.82rem;color:#7a6e78;margin:.2rem 0 0">Ya elegiste -- esperando la respuesta de '+esc(nombre)+'.</p>';
+            }else{
+              html+='<button style="'+estiloBtn+'" onclick="elegirComoSeguir(\''+esc(cita.id)+'\',\''+esc(m.id)+'\')">Elegir cómo seguir →</button>';
+            }
+          }
         }
         html+='</div></div>';
       });
@@ -2767,6 +2774,21 @@ async function mostrarMisMatches(){
   }catch(e){
     lista.innerHTML='<p class="auth-err" style="display:block">No pudimos cargar tus matches. Probá de nuevo.'+htmlBotonReportar('matches_lista')+'</p>';
   }
+}
+// Entra a la pantalla de 3 caminos (seguir en Soul / intercambiar datos /
+// cerrar) para un encuentro puntual ya cerrado -- reusa la Etapa 8, que
+// antes solo se alcanzaba una vez, forzado justo despues del debriefing.
+// Ahora es un boton mas dentro de Mis matches, disponible cuando quiera.
+function elegirComoSeguir(citaId,matchId){
+  window.matchData={id:matchId};
+  window.citaActualId=citaId;
+  // Reset de estado -- antes esta pantalla se entraba una sola vez por
+  // sesion, pero ahora es revisitable (una vez por match, desde Mis
+  // matches), asi que sin esto la segunda visita arrancaba con los
+  // botones ya ocultos y el mensaje de cierre de la eleccion anterior.
+  document.getElementById('eleccionBtns').style.display='';
+  document.getElementById('eleccionFinal').style.display='none';
+  ir(8);
 }
 // "Eliminar" un match: deja de aparecer en la propia lista y la otra
 // persona no puede volver a escribir (queda como si nunca más respondiera,
@@ -4387,12 +4409,11 @@ async function cargarCita(){
     // de mandar.
     if(data.cita.estado==='cerrada'&&!window.citaModoRevisita){
       if(citaPollTimer)clearInterval(citaPollTimer);
-      var matchesInfo=await obtenerMisMatches();
-      var m=(matchesInfo.matches||[]).find(function(x){return x.id===data.cita.match_id});
-      if(m){
-        window.matchData={id:m.id,compatibilidad_hoy:m.compatibilidad_hoy,potencial_construccion:m.potencial_construccion,mensaje_dupla:m.mensaje_dupla};
-      }
-      setTimeout(function(){ir(8)},1500);
+      // Entra por defecto al debriefing apenas la cita cierra -- la
+      // decision de "como seguir" (Sala de Encuentros) ya no se fuerza
+      // aca, queda disponible cuando quiera desde Mis matches (ver
+      // elegirComoSeguir).
+      setTimeout(function(){ abrirReflexionDesdeCita(data.cita.id); },1500);
     }
   }catch(e){}
 }
@@ -4624,13 +4645,6 @@ function decidirSala(decision){
     fetchConSesion(function(){
       return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'decidirSalaEncuentros',matchId:matchId,decision:decision})});
     }).catch(function(){});
-  }
-  // Independiente de la decision sobre el vinculo, esta persona entra a su
-  // propio debriefing privado sobre la cita puntual que acaba de tener
-  // (no sobre el match en general -- cada encuentro tiene el suyo).
-  var citaId=window.citaActualId;
-  if(citaId){
-    setTimeout(function(){ abrirReflexionDesdeCita(citaId); },2200);
   }
 }
 </script>
