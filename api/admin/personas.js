@@ -83,6 +83,36 @@ export default async function handler(req, res) {
       return res.status(200).json({ diagnosticos });
     }
 
+    if (modo === 'citaMensajes') {
+      // ── Transcripto crudo de una cita, para la administradora -- ver
+      // "Durante el piloto" en el consentimiento (soul.html/legal.html):
+      // esto se disclosea explicitamente ahi, incluida la posibilidad de
+      // revisarla mientras esta en curso, no solo despues de cerrada. Sin
+      // filtro de estado a proposito -- funciona igual si la cita sigue
+      // activa o ya cerro. ──
+      const { citaId } = req.query;
+      if (!citaId) return res.status(400).json({ error: 'Falta citaId' });
+      const citaIdEnc = encodeURIComponent(citaId);
+      const [citaRes, msgsRes] = await Promise.all([
+        fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,estado&id=eq.${citaIdEnc}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=*&cita_id=eq.${citaIdEnc}&order=created_at.asc`, { headers })
+      ]);
+      const citaFila = citaRes.ok ? (await citaRes.json())[0] : null;
+      if (!citaFila) return res.status(404).json({ error: 'Cita no encontrada' });
+      const mensajes = msgsRes.ok ? await msgsRes.json() : [];
+
+      const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(citaFila.match_id)}`, { headers });
+      const match = matchRes.ok ? (await matchRes.json())[0] : null;
+      let nombrePorId = {};
+      if (match) {
+        const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
+        const nombres = nRes.ok ? await nRes.json() : [];
+        nombres.forEach((u) => { nombrePorId[u.id] = u.nombre || u.email || null; });
+      }
+      const mensajesConNombre = mensajes.map((m) => ({ ...m, remitente_nombre: m.usuario_id ? (nombrePorId[m.usuario_id] || null) : 'Soul' }));
+      return res.status(200).json({ estadoCita: citaFila.estado, mensajes: mensajesConNombre });
+    }
+
     if (!id) {
       // ── Listado de personas ──
       const usuariosRes = await fetch(

@@ -690,6 +690,8 @@ function renderHojaDeVida(data){
         html+=campoHtml('Fortaleza observada (IA, con consentimiento)',refinamientoPropio.fortaleza_observada);
         html+=campoHtml('Algo para explorar (IA, con consentimiento)',refinamientoPropio.algo_para_explorar);
       }
+      html+='<button class="btn-secundario" style="margin-top:.5rem" onclick="toggleCitaTranscripto(\''+esc(cita.id)+'\',this)">Ver conversación completa'+(cita.estado!=='cerrada'?' (en curso)':'')+' →</button>';
+      html+='<div id="citaTranscripto'+esc(cita.id)+'" class="oculto" style="margin-top:.6rem"></div>';
       html+='</div>';
     });
     if(m.analisis_por_variable){
@@ -837,6 +839,53 @@ function renderHojaDeVida(data){
 function toggleTranscripto(cual){
   var id=cual==='modulos'?'transcriptoModulos':'transcriptoChat';
   document.getElementById(id).classList.toggle('oculto');
+}
+
+// Ver la conversacion cruda de una cita (encuentro) -- disclosado
+// explicitamente en el consentimiento ("Durante el piloto"). Si la cita
+// sigue en curso, se refresca sola cada 6s mientras el panel esta abierto
+// (para poder seguirla mientras pasa, no solo despues de cerrada) -- se
+// corta el intervalo al volver a plegarlo para no dejar timers sueltos
+// dando vueltas en segundo plano.
+var citaTranscriptoTimers={};
+async function toggleCitaTranscripto(citaId,btn){
+  var div=document.getElementById('citaTranscripto'+citaId);
+  var abierta=!div.classList.contains('oculto');
+  if(abierta){
+    div.classList.add('oculto');
+    if(citaTranscriptoTimers[citaId]){clearInterval(citaTranscriptoTimers[citaId]);delete citaTranscriptoTimers[citaId];}
+    return;
+  }
+  div.classList.remove('oculto');
+  await cargarCitaTranscripto(citaId,div);
+}
+
+async function cargarCitaTranscripto(citaId,div){
+  div.innerHTML='<p class="cargando">Cargando conversación...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=citaMensajes&citaId='+encodeURIComponent(citaId));
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo cargar la conversación')+'</p>';
+      return;
+    }
+    if(data.mensajes.length===0){
+      div.innerHTML='<p class="cargando">Todavía no hay mensajes en este encuentro.</p>';
+    }else{
+      div.innerHTML=data.mensajes.map(function(m){
+        var quien=m.usuario_id===null?'Soul':esc(m.remitente_nombre||'(sin nombre)');
+        return '<div class="msg '+(m.usuario_id===null?'assistant':'user')+'" style="max-width:100%"><strong style="font-size:.72rem;color:#c9a84c;display:block;margin-bottom:.15rem">'+quien+'</strong>'+esc(m.contenido)+'</div>';
+      }).join('');
+    }
+    if(data.estadoCita!=='cerrada'&&!citaTranscriptoTimers[citaId]){
+      citaTranscriptoTimers[citaId]=setInterval(function(){
+        if(div.classList.contains('oculto')){clearInterval(citaTranscriptoTimers[citaId]);delete citaTranscriptoTimers[citaId];return;}
+        cargarCitaTranscripto(citaId,div);
+      },6000);
+    }
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión al cargar la conversación.</p>';
+  }
 }
 
 function abrirComparador(){
