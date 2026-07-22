@@ -7,7 +7,7 @@ import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 // funciones serverless por deploy, y el proyecto ya estaba por encima de
 // eso. Se distingue por query params en vez de por ruta.
 export default async function handler(req, res) {
-  if (req.method !== 'GET') {
+  if (req.method !== 'GET' && req.method !== 'PATCH') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   if (!(await verificarAdmin(req))) {
@@ -22,6 +22,24 @@ export default async function handler(req, res) {
   const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
 
   const { id, modo } = req.query;
+
+  // Archivar/desarchivar una persona -- no borra nada, solo la saca de la
+  // vista principal del panel (ver "archivada" en la query de listado).
+  // Reversible en cualquier momento desde la sección "Archivadas".
+  if (req.method === 'PATCH') {
+    if (!id) return res.status(400).json({ error: 'Falta id' });
+    const { archivada } = req.body || {};
+    if (typeof archivada !== 'boolean') return res.status(400).json({ error: 'Falta archivada (boolean)' });
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ archivada })
+    });
+    if (!patchRes.ok) {
+      return res.status(500).json({ error: 'No se pudo actualizar' });
+    }
+    return res.status(200).json({ ok: true });
+  }
 
   try {
     if (modo === 'metricas') {
@@ -129,11 +147,22 @@ export default async function handler(req, res) {
 
     if (!id) {
       // ── Listado de personas ──
-      const usuariosRes = await fetch(
-        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual,fecha_nacimiento,genero,preferencia_genero`,
-        { headers }
-      );
+      const [usuariosRes, eventosRes] = await Promise.all([
+        fetch(
+          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual,fecha_nacimiento,genero,preferencia_genero,created_at,ultima_actividad,archivada`,
+          { headers }
+        ),
+        // Cuenta de eventos por persona -- sirve como proxy de "movimiento
+        // en la cuenta" para el orden por actividad (ver aplicarFiltrosPersonas
+        // en panel-admin.html). No es un conteo exacto de "entradas" (logins),
+        // pero es lo que ya se registra hoy (ver lib/logEvento.js) sin sumar
+        // una tabla/columna nueva solo para esto.
+        fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=usuario_id`, { headers })
+      ]);
       const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
+      const eventos = eventosRes.ok ? await eventosRes.json() : [];
+      const conteoEventos = {};
+      eventos.forEach((e) => { conteoEventos[e.usuario_id] = (conteoEventos[e.usuario_id] || 0) + 1; });
       // Deberia ser imposible pasar de 'nuevo' sin estos 3 campos (ver el
       // chequeo server-side en api/guardar.js), pero un par de cuentas
       // reales (Ezequiel, Marcela) quedaron asi de antes de que existiera
@@ -141,7 +170,8 @@ export default async function handler(req, res) {
       // la Hoja de Vida.
       const personas = usuarios.map((u) => ({
         ...u,
-        basicosIncompletos: u.etapa_actual !== 'nuevo' && (!u.fecha_nacimiento || !u.genero || !u.preferencia_genero)
+        basicosIncompletos: u.etapa_actual !== 'nuevo' && (!u.fecha_nacimiento || !u.genero || !u.preferencia_genero),
+        cantidadEventos: conteoEventos[u.id] || 0
       }));
       return res.status(200).json({ personas });
     }

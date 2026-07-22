@@ -35,6 +35,32 @@ a{color:inherit}
 .etapa-chip{display:inline-block;padding:.2rem .55rem;border-radius:10px;font-size:.7rem;background:rgba(201,168,76,.12);color:#c9a84c}
 .filtro-chip{padding:.35rem .75rem;border-radius:12px;font-size:.75rem;border:1px solid #2a1f28;color:#9a8e96;cursor:pointer;background:none;font-family:inherit}
 .filtro-chip.activo{background:linear-gradient(135deg,#8a6e2f,#c9a84c);border-color:transparent;color:#07050a;font-weight:600}
+.personas-orden{background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;font-family:inherit}
+
+/* ── SECCIONES PLEGABLES DE PERSONAS ── */
+.seccion-personas{border:1px solid #2a1f28;border-radius:8px;margin-bottom:.9rem;overflow:hidden}
+.seccion-personas-header{display:flex;align-items:center;gap:.5rem;padding:.8rem 1rem;cursor:pointer;background:rgba(36,26,32,.3)}
+.seccion-personas-header:hover{background:rgba(36,26,32,.5)}
+.seccion-personas-titulo{font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:1rem}
+.seccion-personas-cant{color:#7a6e78;font-size:.78rem}
+.seccion-personas-body.oculto{display:none}
+.seccion-personas-body .personas-tabla-wrap{overflow-x:auto}
+.seccion-personas-flecha{display:inline-block;color:#7a6e78;font-size:.7rem;transition:transform .15s}
+.seccion-personas-flecha.rotada{transform:rotate(90deg)}
+.seccion-personas-vacio{padding:.8rem 1rem;margin:0}
+
+/* ── RESPONSIVE: en pantallas angostas la tabla de personas se apila como
+   tarjetas (nombre/email/ciudad apretados en columnas fijas eran lo que
+   la volvia inutilizable en el celular). ── */
+@media (max-width:640px){
+  .personas-tabla thead{display:none}
+  .personas-tabla, .personas-tabla tbody, .personas-tabla tr, .personas-tabla td{display:block;width:100%}
+  .personas-tabla{border:none}
+  .persona-row{border:1px solid #1a1218;border-radius:6px;padding:.6rem .7rem;margin-bottom:.6rem}
+  .personas-tabla td{border-bottom:none;padding:.15rem 0;font-size:.85rem}
+  .personas-tabla td[data-label]:not([data-label=""])::before{content:attr(data-label) ": ";color:#7a6e78;font-size:.68rem;text-transform:uppercase;letter-spacing:.05em}
+  .panel-body{padding:1rem}
+}
 
 /* ── HOJA DE VIDA ── */
 .hv-header{display:flex;align-items:center;gap:1rem;margin-bottom:1.2rem}
@@ -121,15 +147,16 @@ a{color:inherit}
       </div>
       <p class="cargando" id="personasCargando">Cargando personas...</p>
       <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
-        <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="width:100%;max-width:340px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;margin-bottom:.7rem;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.7rem">
+          <input type="text" id="personasBuscar" placeholder="Buscar por nombre o email..." style="flex:1;min-width:200px;background:rgba(36,26,32,.5);border:1px solid #2a1f28;border-radius:6px;color:#f2ece4;font-size:.85rem;padding:.55rem .8rem;outline:none;box-sizing:border-box" oninput="aplicarFiltrosPersonas()">
+          <select id="personasOrden" class="personas-orden" onchange="aplicarFiltrosPersonas()">
+            <option value="recientes">Más recientes</option>
+            <option value="movimiento">Más movimiento</option>
+          </select>
+        </div>
         <div id="personasChipsEtapa" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
       </div>
-      <table class="personas-tabla oculto" id="personasTabla">
-        <thead>
-          <tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th></tr>
-        </thead>
-        <tbody id="personasBody"></tbody>
-      </table>
+      <div id="personasSecciones" class="oculto"></div>
       <p class="cargando oculto" id="personasSinResultados">Ninguna persona coincide con el filtro.</p>
     </div>
 
@@ -342,7 +369,7 @@ async function cargarPersonas(esLogin){
 
     construirChipsEtapa();
     document.getElementById('personasFiltros').classList.remove('oculto');
-    document.getElementById('personasTabla').classList.remove('oculto');
+    document.getElementById('personasSecciones').classList.remove('oculto');
     aplicarFiltrosPersonas();
   }catch(e){
     document.getElementById('personasCargando').textContent='Error al cargar personas.';
@@ -374,8 +401,114 @@ function construirChipsEtapa(){
   });
 }
 
+// Toda persona cae en exactamente una carpeta: Archivada (manual, gana a
+// todo lo demas) > Inactiva (7+ dias sin movimiento, aunque sea "nueva") >
+// Nueva (etapa_actual==='nuevo', todavia dentro de la ventana de 7 dias) >
+// Activa (el resto). Asi alguien que se registro y nunca volvio termina en
+// "Inactivas" en vez de quedar para siempre en "Nuevas".
+var SIETE_DIAS_MS=7*24*60*60*1000;
+function claseDePersona(p){
+  if(p.archivada)return 'archivadas';
+  var ultima=p.ultima_actividad?new Date(p.ultima_actividad).getTime():null;
+  var referencia=ultima!==null?ultima:new Date(p.created_at).getTime();
+  if((Date.now()-referencia)>SIETE_DIAS_MS)return 'inactivas';
+  if((p.etapa_actual||'—')==='nuevo')return 'nuevas';
+  return 'activas';
+}
+
+var SECCIONES_PERSONAS=[
+  {clave:'nuevas',titulo:'Nuevas',vacio:'No hay personas nuevas.'},
+  {clave:'inactivas',titulo:'Inactivas (7+ días sin movimiento)',vacio:'No hay personas inactivas.'},
+  {clave:'activas',titulo:'Activas',vacio:'No hay personas activas.'},
+  {clave:'archivadas',titulo:'Archivadas',vacio:'No archivaste a nadie todavía.'}
+];
+var seccionPersonasAbierta={nuevas:true,inactivas:true,activas:true,archivadas:false};
+
+function ordenarPersonas(lista,orden){
+  var copia=lista.slice();
+  if(orden==='movimiento'){
+    copia.sort(function(a,b){ return (b.cantidadEventos||0)-(a.cantidadEventos||0); });
+  }else{
+    copia.sort(function(a,b){
+      var fa=a.ultima_actividad?new Date(a.ultima_actividad).getTime():new Date(a.created_at).getTime();
+      var fb=b.ultima_actividad?new Date(b.ultima_actividad).getTime():new Date(b.created_at).getTime();
+      return fb-fa;
+    });
+  }
+  return copia;
+}
+
+function formatearUltimaEntrada(p){
+  if(p.ultima_actividad)return new Date(p.ultima_actividad).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  return 'Nunca entró';
+}
+
+function construirSeccionPersonas(def,lista){
+  var wrap=document.createElement('div');
+  wrap.className='seccion-personas';
+
+  var header=document.createElement('div');
+  header.className='seccion-personas-header';
+  header.innerHTML='<span class="seccion-personas-flecha'+(seccionPersonasAbierta[def.clave]?' rotada':'')+'">▶</span>'
+    +'<span class="seccion-personas-titulo">'+def.titulo+'</span>'
+    +'<span class="seccion-personas-cant">('+lista.length+')</span>';
+  header.onclick=function(){ seccionPersonasAbierta[def.clave]=!seccionPersonasAbierta[def.clave]; aplicarFiltrosPersonas(); };
+  wrap.appendChild(header);
+
+  var body=document.createElement('div');
+  body.className='seccion-personas-body'+(seccionPersonasAbierta[def.clave]?'':' oculto');
+
+  if(lista.length===0){
+    var vacio=document.createElement('p');
+    vacio.className='cargando seccion-personas-vacio';
+    vacio.textContent=def.vacio;
+    body.appendChild(vacio);
+  }else{
+    var tablaWrap=document.createElement('div');
+    tablaWrap.className='personas-tabla-wrap';
+    var tabla=document.createElement('table');
+    tabla.className='personas-tabla';
+    tabla.innerHTML='<thead><tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th><th>Última entrada</th><th></th></tr></thead>';
+    var tbody=document.createElement('tbody');
+    lista.forEach(function(p){
+      var tr=document.createElement('tr');
+      tr.className='persona-row';
+      tr.onclick=function(){ abrirHojaDeVida(p.id); };
+      var badgeIncompleto=p.basicosIncompletos?' <span title="Le faltan datos básicos (fecha de nacimiento, género o preferencia) pese a haber avanzado" style="color:#d98a9e;font-weight:700;cursor:help">⚠</span>':'';
+      var esArchivada=def.clave==='archivadas';
+      tr.innerHTML='<td data-label="Nombre">'+esc(p.nombre||'(sin nombre)')+badgeIncompleto+'</td>'
+        +'<td data-label="Email">'+esc(p.email||'')+'</td>'
+        +'<td data-label="Ciudad">'+esc(p.ciudad||'—')+'</td>'
+        +'<td data-label="Etapa"><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>'
+        +'<td data-label="Última entrada">'+esc(formatearUltimaEntrada(p))+'</td>'
+        +'<td data-label=""><button class="btn-secundario" style="padding:.3rem .6rem;font-size:.72rem">'+(esArchivada?'Desarchivar':'Archivar')+'</button></td>';
+      tr.querySelector('button').onclick=function(ev){
+        ev.stopPropagation();
+        archivarPersona(p.id,!esArchivada);
+      };
+      tbody.appendChild(tr);
+    });
+    tabla.appendChild(tbody);
+    tablaWrap.appendChild(tabla);
+    body.appendChild(tablaWrap);
+  }
+  wrap.appendChild(body);
+  return wrap;
+}
+
+async function archivarPersona(id,archivar){
+  try{
+    var res=await llamarAdmin('/api/admin/personas?id='+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivada:archivar})});
+    if(!res.ok)return;
+    var p=personasCache.find(function(x){return x.id===id;});
+    if(p)p.archivada=archivar;
+    aplicarFiltrosPersonas();
+  }catch(e){}
+}
+
 function aplicarFiltrosPersonas(){
   var texto=(document.getElementById('personasBuscar').value||'').trim().toLowerCase();
+  var orden=document.getElementById('personasOrden').value;
   var filtradas=personasCache.filter(function(p){
     var pasaEtapa=filtroEtapaActual==='todas'||(p.etapa_actual||'—')===filtroEtapaActual;
     if(!pasaEtapa)return false;
@@ -385,17 +518,15 @@ function aplicarFiltrosPersonas(){
     return nombre.indexOf(texto)>-1||email.indexOf(texto)>-1;
   });
 
-  var tbody=document.getElementById('personasBody');
-  tbody.innerHTML='';
-  filtradas.forEach(function(p){
-    var tr=document.createElement('tr');
-    tr.className='persona-row';
-    tr.onclick=function(){ abrirHojaDeVida(p.id); };
-    var badgeIncompleto=p.basicosIncompletos?' <span title="Le faltan datos básicos (fecha de nacimiento, género o preferencia) pese a haber avanzado" style="color:#d98a9e;font-weight:700;cursor:help">⚠</span>':'';
-    tr.innerHTML='<td>'+esc(p.nombre||'(sin nombre)')+badgeIncompleto+'</td><td>'+esc(p.email||'')+'</td><td>'+esc(p.ciudad||'—')+'</td><td><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>';
-    tbody.appendChild(tr);
+  var porSeccion={nuevas:[],inactivas:[],activas:[],archivadas:[]};
+  filtradas.forEach(function(p){ porSeccion[claseDePersona(p)].push(p); });
+
+  var cont=document.getElementById('personasSecciones');
+  cont.innerHTML='';
+  SECCIONES_PERSONAS.forEach(function(def){
+    cont.appendChild(construirSeccionPersonas(def,ordenarPersonas(porSeccion[def.clave],orden)));
   });
-  document.getElementById('personasTabla').classList.toggle('oculto',filtradas.length===0);
+
   document.getElementById('personasSinResultados').classList.toggle('oculto',filtradas.length>0);
 }
 
