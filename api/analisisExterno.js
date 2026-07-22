@@ -84,11 +84,17 @@ export default async function handler(req, res) {
       }
     });
 
-    await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
-      method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ analisis_usados: (usuario.analisisUsados || 0) + 1 })
-    });
+    // Si la conversacion pegada era demasiado vaga como para extraer nada
+    // real, el resultado viene todo en null (ver COMPARE_EXTERNO_PROMPT) --
+    // en ese caso no cuenta como uno de los 2 analisis gratuitos, porque no
+    // le dio nada util a la persona.
+    if (resultado.compatibilidad_hoy !== null && resultado.potencial_construccion !== null) {
+      await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ analisis_usados: (usuario.analisisUsados || 0) + 1 })
+      });
+    }
 
     return res.status(200).json({
       compatibilidad_hoy: resultado.compatibilidad_hoy,

@@ -3301,6 +3301,12 @@ async function analizarConversacionExterna(){
       return;
     }
 
+    if(resultado.compatibilidad_hoy===null||resultado.potencial_construccion===null){
+      errEl.textContent='Esa conversación tiene muy poco para analizar todavía -- pegá una charla con más contenido real (valores, cómo maneja los conflictos, qué busca) y volvé a intentar.';
+      errEl.style.display='block';
+      return;
+    }
+
     document.getElementById('anaHoy').textContent=resultado.compatibilidad_hoy+'%';
     document.getElementById('anaPot').textContent=resultado.potencial_construccion+'%';
     document.getElementById('anaVeredicto').textContent=resultado.veredicto;
