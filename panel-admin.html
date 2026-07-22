@@ -705,6 +705,8 @@ function renderHojaDeVida(data){
     if(m.estado==='pendiente'||m.estado==='pausado'||m.estado==='descartado'){
       var textoActivar=m.estado==='pausado'?'Reactivar →':(m.estado==='descartado'?'Activar de todos modos →':'Activar →');
       html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">'+textoActivar+'</button>';
+    }else if(m.estado==='cerrado'||m.estado==='no_avanza'){
+      html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'activar\')">Reactivar (reinicia la elección de ambas) →</button>';
     }else if(m.estado==='activo'){
       html+='<button class="btn-secundario" onclick="cambiarEstadoMatch(\''+esc(m.id)+'\',\'pausar\')">Pausar</button>';
     }

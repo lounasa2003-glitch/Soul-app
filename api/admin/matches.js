@@ -177,6 +177,26 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
     ? { estado: 'activo', activado_por: 'admin' }
     : { estado: 'pausado' };
 
+  // Reactivar un match 'cerrado'/'no_avanza' (el ciclo de decision ya se
+  // resolvio, con un rechazo de por medio) necesita mas que solo volver a
+  // poner estado:'activo' -- si no se resetea la eleccion de las dos
+  // partes, quien ya habia elegido queda marcado como "esperando
+  // respuesta" en vez de recibir una decision nueva de verdad, y la otra
+  // persona nunca ve la pantalla para decidir de nuevo (justo el caso de
+  // Ezequiel: rechazo para poder salir de la pantalla trabada, y no habia
+  // forma de darle una segunda oportunidad real al match). No se resetea
+  // al reactivar desde 'pausado' -- ahi el ciclo de decision nunca se
+  // resolvio, solo estaba en pausa, y borrar una eleccion ya tomada ahi
+  // seria destructivo sin motivo.
+  if (accion === 'activar') {
+    const actualRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=estado&id=eq.${encodeURIComponent(matchId)}`, { headers });
+    const actual = actualRes.ok ? (await actualRes.json())[0] : null;
+    if (actual && (actual.estado === 'cerrado' || actual.estado === 'no_avanza')) {
+      datos.eleccion_usuario_a = 'pendiente';
+      datos.eleccion_usuario_b = 'pendiente';
+    }
+  }
+
   const response = await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
     method: 'PATCH',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
