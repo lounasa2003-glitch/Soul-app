@@ -50,7 +50,7 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   const idsUnicos = [...new Set(otrosPerfiles.map(p => p.usuario_id))];
   const [nombresRes, matchesRes, miUsuarioRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,genero,preferencia_genero&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,compatibilidad_hoy,potencial_construccion,analisis_por_variable&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers }),
     fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=eq.${encodeURIComponent(personaId)}`, { headers })
   ]);
   const nombresRows = nombresRes.ok ? await nombresRes.json() : [];
@@ -61,9 +61,11 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   const miGeneroInfo = miUsuarioRows[0] || null;
 
   const matchesExistentes = matchesRes.ok ? await matchesRes.json() : [];
-  const paresExistentes = new Set(
-    matchesExistentes.map(m => [m.usuario_a, m.usuario_b].sort().join('|'))
-  );
+  const matchExistentePorUsuario = {};
+  matchesExistentes.forEach(m => {
+    const otroId = m.usuario_a === personaId ? m.usuario_b : m.usuario_a;
+    matchExistentePorUsuario[otroId] = m;
+  });
 
   // Filtra ANTES de gastar ninguna llamada a Claude -- ver
   // lib/matchCompatible.js: sin esto el ranking llegaba a comparar (y hasta
@@ -71,11 +73,28 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   // queres conectar?".
   otrosPerfiles = otrosPerfiles.filter(p => generosCompatibles(miGeneroInfo, generoPorId[p.usuario_id]));
 
+  // Un par que ya se comparo antes (en cualquier estado -- pendiente,
+  // descartado, activo, lo que sea) no necesita gastar Claude de nuevo: el
+  // resultado ya esta guardado en 'matches'. Antes esto solo se chequeaba
+  // DESPUES de comparar, nada mas que para decidir si insertar la fila --
+  // la llamada a Claude (la parte cara) se pagaba igual aunque el par ya
+  // existiera. Reusar el puntaje guardado en vez de recalcularlo corta ese
+  // gasto redundante; el trade-off es que un perfil que cambio desde la
+  // ultima comparacion no se refleja hasta que se vuelva a comparar de
+  // cero (par eliminado, o algun flujo futuro que fuerce recalculo).
+  const porComparar = [];
+  const reusados = [];
+  otrosPerfiles.forEach(p => {
+    const existente = matchExistentePorUsuario[p.usuario_id];
+    if (existente) reusados.push({ otro: p, existente });
+    else porComparar.push(p);
+  });
+
   let totalInputTokens = 0, totalOutputTokens = 0;
   const comparaciones = [];
 
-  for (let i = 0; i < otrosPerfiles.length; i += CONCURRENCIA) {
-    const lote = otrosPerfiles.slice(i, i + CONCURRENCIA);
+  for (let i = 0; i < porComparar.length; i += CONCURRENCIA) {
+    const lote = porComparar.slice(i, i + CONCURRENCIA);
     const resultadosLote = await Promise.all(lote.map(async (otro) => {
       try {
         const { json: comp, usage } = await llamarClaudeJSON({
@@ -104,25 +123,26 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     });
   }
 
-  await registrarUsoTokens({
-    usuarioId: null,
-    endpoint: 'adminRanking',
-    usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
-  });
+  if (totalInputTokens > 0 || totalOutputTokens > 0) {
+    await registrarUsoTokens({
+      usuarioId: null,
+      endpoint: 'adminRanking',
+      usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
+    });
+  }
 
   // Se guarda CUALQUIER comparacion (no solo la que supera el umbral) para
   // que la administradora pueda activar un match igual con su propio
   // criterio (ver "descartado" y cambiarEstado) -- antes, un par por debajo
   // del umbral nunca quedaba como fila en 'matches', asi que no habia nada
   // que activar a mano, ni se guardaban fortalezas/desafio/mensaje_dupla
-  // para mostrar si mas adelante se decidia activarlo.
-  const inserts = [];
-  comparaciones.forEach(({ otro, comp }) => {
+  // para mostrar si mas adelante se decidia activarlo. El veredicto se
+  // guarda adentro de analisis_por_variable (no tiene columna propia) para
+  // que quede disponible la proxima vez que se pida el ranking, en vez de
+  // perderse apenas se cierra esta pantalla.
+  const inserts = comparaciones.map(({ otro, comp }) => {
     const supera = comp.compatibilidad_hoy >= UMBRAL_COMPATIBILIDAD_HOY || comp.potencial_construccion >= UMBRAL_POTENCIAL;
-    const clave = [personaId, otro.usuario_id].sort().join('|');
-    if (paresExistentes.has(clave)) return;
-    paresExistentes.add(clave);
-    inserts.push({
+    return {
       usuario_a: personaId,
       usuario_b: otro.usuario_id,
       compatibilidad_hoy: comp.compatibilidad_hoy,
@@ -130,20 +150,20 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
       fortalezas: comp.fortalezas,
       desafio: comp.desafio,
       mensaje_dupla: comp.mensaje_dupla,
-      analisis_por_variable: comp.analisis_por_variable || null,
+      analisis_por_variable: { ...(comp.analisis_por_variable || {}), veredicto: comp.veredicto || null },
       estado: supera ? 'pendiente' : 'descartado',
       activado_por: 'sistema'
-    });
+    };
   });
 
   if (inserts.length > 0) {
-    // El chequeo de "paresExistentes" de arriba solo protege dentro de esta
-    // misma llamada -- si esta funcion se dispara dos veces casi al mismo
-    // tiempo para la misma persona (doble click, reintento de red), las dos
-    // pueden no ver el match de la otra todavia y terminar creando dos filas
-    // para el mismo par. `on_conflict=par_clave` + `ignore-duplicates` hace
-    // que Postgres directamente descarte el insert repetido en vez de crear
-    // la fila de mas (requiere el indice unico sobre `par_clave`).
+    // porComparar ya excluye los pares con fila existente, pero si esta
+    // funcion se dispara dos veces casi al mismo tiempo para la misma
+    // persona (doble click, reintento de red), las dos pueden no verse
+    // entre si todavia y terminar mandando el mismo insert dos veces.
+    // `on_conflict=par_clave` + `ignore-duplicates` hace que Postgres
+    // directamente descarte el insert repetido en vez de crear la fila de
+    // mas (requiere el indice unico sobre `par_clave`).
     const insertRes = await fetch(`${supabaseUrl}/rest/v1/matches?on_conflict=par_clave`, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=ignore-duplicates,return=minimal' },
@@ -154,18 +174,32 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     }
   }
 
-  const ranking = comparaciones
-    .map(({ otro, comp }) => ({
-      usuarioId: otro.usuario_id,
-      nombre: nombrePorId[otro.usuario_id] || null,
-      compatibilidad_hoy: comp.compatibilidad_hoy,
-      potencial_construccion: comp.potencial_construccion,
-      veredicto: comp.veredicto,
-      promedio: (comp.compatibilidad_hoy + comp.potencial_construccion) / 2
-    }))
-    .sort((a, b) => b.promedio - a.promedio);
+  const rankingNuevo = comparaciones.map(({ otro, comp }) => ({
+    usuarioId: otro.usuario_id,
+    nombre: nombrePorId[otro.usuario_id] || null,
+    compatibilidad_hoy: comp.compatibilidad_hoy,
+    potencial_construccion: comp.potencial_construccion,
+    veredicto: comp.veredicto,
+    reusado: false,
+    promedio: (comp.compatibilidad_hoy + comp.potencial_construccion) / 2
+  }));
+  const rankingReusado = reusados.map(({ otro, existente }) => ({
+    usuarioId: otro.usuario_id,
+    nombre: nombrePorId[otro.usuario_id] || null,
+    compatibilidad_hoy: existente.compatibilidad_hoy,
+    potencial_construccion: existente.potencial_construccion,
+    veredicto: (existente.analisis_por_variable && existente.analisis_por_variable.veredicto) || null,
+    reusado: true,
+    promedio: (existente.compatibilidad_hoy + existente.potencial_construccion) / 2
+  }));
+  const ranking = rankingNuevo.concat(rankingReusado).sort((a, b) => b.promedio - a.promedio);
 
-  return res.status(200).json({ ranking, totalComparados: comparaciones.length, totalPerfiles: otrosPerfiles.length });
+  return res.status(200).json({
+    ranking,
+    totalComparados: comparaciones.length,
+    totalReusados: rankingReusado.length,
+    totalPerfiles: otrosPerfiles.length
+  });
 }
 
 async function cambiarEstado(req, res, supabaseUrl, headers, accion) {

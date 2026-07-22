@@ -152,7 +152,10 @@ export default async function handler(req, res) {
           fortalezas: comp.fortalezas,
           desafio: comp.desafio,
           mensaje_dupla: comp.mensaje_dupla,
-          analisis_por_variable: comp.analisis_por_variable || null,
+          // veredicto no tiene columna propia -- va adentro de este jsonb
+          // para no perderse (mismo criterio que calcularRanking en
+          // api/admin/matches.js).
+          analisis_por_variable: { ...(comp.analisis_por_variable || {}), veredicto: comp.veredicto || null },
           estado: supera ? 'pendiente' : 'descartado',
           activado_por: 'sistema'
         })

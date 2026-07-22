@@ -1017,10 +1017,11 @@ async function pedirRanking(){
       div.innerHTML='<p class="cargando">No hay otros perfiles con datos suficientes para comparar todavía.</p>';
       return;
     }
-    var html='<p style="color:#c9a84c;margin-bottom:.6rem">Ranking de compatibilidad ('+data.ranking.length+' perfiles comparados)</p>';
+    var html='<p style="color:#c9a84c;margin-bottom:.2rem">Ranking de compatibilidad ('+data.ranking.length+' perfiles)</p>';
+    html+='<p style="font-size:.75rem;color:#7a6e78;margin-bottom:.6rem">'+data.totalComparados+' comparados ahora (gastaron tokens) · '+data.totalReusados+' reusados de una comparación anterior (gratis)</p>';
     data.ranking.forEach(function(r,i){
       html+='<div class="match-card">';
-      html+='<p style="color:#c9a84c">'+(i+1)+'. '+esc(r.nombre||'(sin nombre)')+'</p>';
+      html+='<p style="color:#c9a84c">'+(i+1)+'. '+esc(r.nombre||'(sin nombre)')+(r.reusado?' <span style="color:#7a6e78;font-size:.72rem;font-weight:400">(reusado)</span>':'')+'</p>';
       html+='<div class="match-scores"><div><div class="match-score">'+esc(r.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Compatibilidad hoy</div></div><div><div class="match-score">'+esc(r.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial</div></div></div>';
       if(r.veredicto)html+='<p style="font-size:.85rem;margin-top:.4rem">'+esc(r.veredicto)+'</p>';
       html+='</div>';
