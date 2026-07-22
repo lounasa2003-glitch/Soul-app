@@ -259,8 +259,8 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   });
 
   // Marca de actividad -- es lo que usa el cierre automático por
-  // inactividad (ver LIMITE_INACTIVIDAD_MS en obtenerCitaAutorizada) para
-  // saber cuándo fue el último mensaje real, no solo la creación de la cita.
+  // inactividad (ver cerrarSiInactiva en lib/cierreCita.js) para saber
+  // cuándo fue el último mensaje real, no solo la creación de la cita.
   const datosPatch = { ultima_actividad: new Date().toISOString() };
   if (auth.cita.estado === 'pendiente') {
     datosPatch.estado = 'activa';
