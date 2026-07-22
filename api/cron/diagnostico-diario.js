@@ -11,9 +11,15 @@ const VENTANA_HORAS = 24;
 const UMBRAL_SIN_CONFIRMAR_HORAS = 3;
 // Estimacion aproximada para claude-sonnet-4-6 -- ajustar si la facturacion
 // real difiere. Es solo una referencia rapida en el mail, no un numero
-// contable.
+// contable. Cache read/creation son fracciones estandar del precio de
+// input normal de Anthropic (lectura ~10%, escritura ~125%) -- sin esto
+// el costo quedaba subestimado, porque esos tokens de cache existen de
+// verdad y se cobran, pero no se contaban en ningun lado (ver
+// lib/logUso.js).
 const USD_POR_MILLON_INPUT = 3;
 const USD_POR_MILLON_OUTPUT = 15;
+const USD_POR_MILLON_CACHE_CREATION = USD_POR_MILLON_INPUT * 1.25;
+const USD_POR_MILLON_CACHE_READ = USD_POR_MILLON_INPUT * 0.1;
 
 function haceHoras(horas) {
   return new Date(Date.now() - horas * 3600 * 1000).toISOString();
@@ -92,7 +98,7 @@ export default async function handler(req, res) {
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
       leerSupabase('intentos_fuga_prompt', `select=id,usuario_id,mensaje,endpoint,created_at&created_at=gte.${encodeURIComponent(desde)}`),
-      leerSupabase('uso_tokens', `select=endpoint,input_tokens,output_tokens&created_at=gte.${encodeURIComponent(desde)}`),
+      leerSupabase('uso_tokens', `select=endpoint,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens&created_at=gte.${encodeURIComponent(desde)}`),
       chequearResend(desde),
       leerSupabase('usuarios', `select=id,nombre,email,ultima_actividad&etapa_actual=eq.chat&mail_confirmado=eq.false&created_at=lte.${encodeURIComponent(haceHoras(UMBRAL_SIN_CONFIRMAR_HORAS))}`),
       leerSupabase('reportes_tecnicos', `select=id,usuario_id,email,contexto,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc`)
@@ -104,9 +110,17 @@ export default async function handler(req, res) {
     const erroresPorContexto = {};
     errores.forEach(e => { erroresPorContexto[e.contexto] = (erroresPorContexto[e.contexto] || 0) + 1; });
 
-    let totalInput = 0, totalOutput = 0;
-    tokens.forEach(t => { totalInput += t.input_tokens || 0; totalOutput += t.output_tokens || 0; });
-    const costoEstimado = (totalInput / 1e6) * USD_POR_MILLON_INPUT + (totalOutput / 1e6) * USD_POR_MILLON_OUTPUT;
+    let totalInput = 0, totalOutput = 0, totalCacheCreation = 0, totalCacheRead = 0;
+    tokens.forEach(t => {
+      totalInput += t.input_tokens || 0;
+      totalOutput += t.output_tokens || 0;
+      totalCacheCreation += t.cache_creation_tokens || 0;
+      totalCacheRead += t.cache_read_tokens || 0;
+    });
+    const costoEstimado = (totalInput / 1e6) * USD_POR_MILLON_INPUT
+      + (totalOutput / 1e6) * USD_POR_MILLON_OUTPUT
+      + (totalCacheCreation / 1e6) * USD_POR_MILLON_CACHE_CREATION
+      + (totalCacheRead / 1e6) * USD_POR_MILLON_CACHE_READ;
 
     const resumen = {
       ventanaHoras: VENTANA_HORAS,
@@ -116,7 +130,7 @@ export default async function handler(req, res) {
       resend,
       cuentasSinConfirmar: { total: sinConfirmar.length, filas: sinConfirmar },
       reportesTecnicos: { total: reportesTecnicos.length, porContexto: reportesTecnicosPorContexto, filas: reportesTecnicos },
-      tokens: { totalInput, totalOutput, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
+      tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
     const lineas = [];
@@ -149,7 +163,7 @@ export default async function handler(req, res) {
     }
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);
-    lineas.push(`<p>Input: ${totalInput.toLocaleString()} | Output: ${totalOutput.toLocaleString()} | Costo estimado: ~$${costoEstimado.toFixed(2)} USD (aproximado, no es el numero de facturacion real)</p>`);
+    lineas.push(`<p>Input: ${totalInput.toLocaleString()} | Output: ${totalOutput.toLocaleString()} | Cache creado: ${totalCacheCreation.toLocaleString()} | Cache leído: ${totalCacheRead.toLocaleString()} | Costo estimado: ~$${costoEstimado.toFixed(2)} USD (aproximado, no es el numero de facturacion real)</p>`);
 
     const html = lineas.join('\n');
 

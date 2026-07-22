@@ -30,31 +30,45 @@ export default async function handler(req, res) {
       // personas), y el volumen de un piloto no justifica nada mas
       // elaborado. Se calcula al pedirlo, no en vivo/cacheado.
       const [tokensRes, eventosRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,input_tokens,output_tokens`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=tipo,usuario_id`, { headers })
       ]);
       const tokensFilas = tokensRes.ok ? await tokensRes.json() : [];
       const eventosFilas = eventosRes.ok ? await eventosRes.json() : [];
 
       // Tarifa de Claude Sonnet -- USD por millon de tokens. Ajustar aca si
-      // cambia el precio real; es una estimacion, no factura.
+      // cambia el precio real; es una estimacion, no factura. Cache
+      // read/creation son fracciones estandar del precio de input normal
+      // (lectura ~10%, escritura ~125%) -- el caching de prompts esta
+      // activo de verdad (systemConCache en anthropicClient.js) y esos
+      // tokens se cobran, asi que sin esto el costo quedaba subestimado.
       const PRECIO_INPUT_POR_MILLON = 3;
       const PRECIO_OUTPUT_POR_MILLON = 15;
+      const PRECIO_CACHE_CREATION_POR_MILLON = PRECIO_INPUT_POR_MILLON * 1.25;
+      const PRECIO_CACHE_READ_POR_MILLON = PRECIO_INPUT_POR_MILLON * 0.1;
+      const costoDe = (f) => (f.inputTokens / 1e6) * PRECIO_INPUT_POR_MILLON
+        + (f.outputTokens / 1e6) * PRECIO_OUTPUT_POR_MILLON
+        + (f.cacheCreationTokens / 1e6) * PRECIO_CACHE_CREATION_POR_MILLON
+        + (f.cacheReadTokens / 1e6) * PRECIO_CACHE_READ_POR_MILLON;
       const porEndpoint = {};
-      let totalInput = 0, totalOutput = 0;
+      let totalInput = 0, totalOutput = 0, totalCacheCreation = 0, totalCacheRead = 0;
       tokensFilas.forEach((f) => {
         const ep = f.endpoint || '(sin nombre)';
-        if (!porEndpoint[ep]) porEndpoint[ep] = { endpoint: ep, inputTokens: 0, outputTokens: 0, llamadas: 0 };
+        if (!porEndpoint[ep]) porEndpoint[ep] = { endpoint: ep, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, llamadas: 0 };
         porEndpoint[ep].inputTokens += f.input_tokens || 0;
         porEndpoint[ep].outputTokens += f.output_tokens || 0;
+        porEndpoint[ep].cacheCreationTokens += f.cache_creation_tokens || 0;
+        porEndpoint[ep].cacheReadTokens += f.cache_read_tokens || 0;
         porEndpoint[ep].llamadas += 1;
         totalInput += f.input_tokens || 0;
         totalOutput += f.output_tokens || 0;
+        totalCacheCreation += f.cache_creation_tokens || 0;
+        totalCacheRead += f.cache_read_tokens || 0;
       });
       const tokensPorEndpoint = Object.values(porEndpoint)
-        .map((f) => ({ ...f, costoEstimadoUsd: (f.inputTokens / 1e6) * PRECIO_INPUT_POR_MILLON + (f.outputTokens / 1e6) * PRECIO_OUTPUT_POR_MILLON }))
+        .map((f) => ({ ...f, costoEstimadoUsd: costoDe(f) }))
         .sort((a, b) => b.costoEstimadoUsd - a.costoEstimadoUsd);
-      const costoTotalEstimadoUsd = (totalInput / 1e6) * PRECIO_INPUT_POR_MILLON + (totalOutput / 1e6) * PRECIO_OUTPUT_POR_MILLON;
+      const costoTotalEstimadoUsd = costoDe({ inputTokens: totalInput, outputTokens: totalOutput, cacheCreationTokens: totalCacheCreation, cacheReadTokens: totalCacheRead });
 
       // Personas UNICAS por tipo de evento (no eventos crudos -- un tipo
       // como encuentro_agendado puede repetirse varias veces por persona).
@@ -67,7 +81,7 @@ export default async function handler(req, res) {
       const embudo = ORDEN_EMBUDO.map((tipo) => ({ tipo, personas: usuariosPorTipo[tipo] ? usuariosPorTipo[tipo].size : 0 }));
 
       return res.status(200).json({
-        tokens: { totalInput, totalOutput, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint },
+        tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint },
         embudo
       });
     }

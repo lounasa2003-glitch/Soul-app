@@ -135,7 +135,15 @@ export default async function handler(req, res) {
 
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
 
-      let inputTokens = 0, outputTokens = 0, buffer = '';
+      // message_start ya trae el usage completo (incluidos los campos de
+      // cache -- confirmado contra la API real) desde el arranque del
+      // stream, antes de que exista ningun texto generado todavia. Antes
+      // solo se leia input_tokens de ahi: el caching de prompts esta
+      // activo de verdad (systemConCache), pero cache_creation_input_tokens
+      // y cache_read_input_tokens nunca se guardaban, asi que el costo que
+      // mostraba el panel quedaba mas bajo que el que Anthropic cobra de
+      // verdad.
+      let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0, buffer = '';
       const reader = anthropicRes.body.getReader();
       const decoder = new TextDecoder();
       while (true) {
@@ -152,6 +160,8 @@ export default async function handler(req, res) {
           try { evt = JSON.parse(jsonStr); } catch (e) { continue; }
           if (evt.type === 'message_start' && evt.message && evt.message.usage) {
             inputTokens = evt.message.usage.input_tokens || 0;
+            cacheCreationTokens = evt.message.usage.cache_creation_input_tokens || 0;
+            cacheReadTokens = evt.message.usage.cache_read_input_tokens || 0;
           } else if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
             res.write(evt.delta.text);
           } else if (evt.type === 'message_delta' && evt.usage) {
@@ -165,7 +175,7 @@ export default async function handler(req, res) {
         usuarioId: usuario.usuarioId,
         endpoint: 'chat',
         moduloFase: contexto === 'modulo' ? moduloFase : null,
-        usage: { input_tokens: inputTokens, output_tokens: outputTokens }
+        usage: { input_tokens: inputTokens, output_tokens: outputTokens, cache_creation_input_tokens: cacheCreationTokens, cache_read_input_tokens: cacheReadTokens }
       }).catch(() => {});
       return;
     }

@@ -232,15 +232,16 @@ async function cargarMetricas(){
     var html='';
 
     html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Tokens y costo estimado</p>';
-    html+='<p style="font-size:.85rem;margin-bottom:.6rem">Total: '+(data.tokens.totalInput+data.tokens.totalOutput).toLocaleString('es-AR')+' tokens ('+data.tokens.totalInput.toLocaleString('es-AR')+' entrada / '+data.tokens.totalOutput.toLocaleString('es-AR')+' salida) — <strong style="color:#c9a84c">≈ USD '+data.tokens.costoTotalEstimadoUsd.toFixed(2)+'</strong></p>';
+    html+='<p style="font-size:.85rem;margin-bottom:.2rem">Total: '+(data.tokens.totalInput+data.tokens.totalOutput).toLocaleString('es-AR')+' tokens ('+data.tokens.totalInput.toLocaleString('es-AR')+' entrada / '+data.tokens.totalOutput.toLocaleString('es-AR')+' salida) — <strong style="color:#c9a84c">≈ USD '+data.tokens.costoTotalEstimadoUsd.toFixed(2)+'</strong></p>';
+    html+='<p style="font-size:.75rem;color:#9a8e98;margin-bottom:.6rem">Cache: '+data.tokens.totalCacheCreation.toLocaleString('es-AR')+' creado / '+data.tokens.totalCacheRead.toLocaleString('es-AR')+' leído (ya incluido en el USD de arriba)</p>';
     if(data.tokens.porEndpoint.length>0){
-      html+='<table class="personas-tabla" style="margin-bottom:1.2rem"><thead><tr><th>Función</th><th>Llamadas</th><th>Entrada</th><th>Salida</th><th>≈ USD</th></tr></thead><tbody>';
+      html+='<table class="personas-tabla" style="margin-bottom:1.2rem"><thead><tr><th>Función</th><th>Llamadas</th><th>Entrada</th><th>Salida</th><th>Cache creado</th><th>Cache leído</th><th>≈ USD</th></tr></thead><tbody>';
       data.tokens.porEndpoint.forEach(function(f){
-        html+='<tr><td>'+esc(f.endpoint)+'</td><td>'+f.llamadas.toLocaleString('es-AR')+'</td><td>'+f.inputTokens.toLocaleString('es-AR')+'</td><td>'+f.outputTokens.toLocaleString('es-AR')+'</td><td>'+f.costoEstimadoUsd.toFixed(2)+'</td></tr>';
+        html+='<tr><td>'+esc(f.endpoint)+'</td><td>'+f.llamadas.toLocaleString('es-AR')+'</td><td>'+f.inputTokens.toLocaleString('es-AR')+'</td><td>'+f.outputTokens.toLocaleString('es-AR')+'</td><td>'+f.cacheCreationTokens.toLocaleString('es-AR')+'</td><td>'+f.cacheReadTokens.toLocaleString('es-AR')+'</td><td>'+f.costoEstimadoUsd.toFixed(2)+'</td></tr>';
       });
       html+='</tbody></table>';
     }
-    html+='<p style="font-size:.7rem;color:#5a5058;margin-bottom:1.2rem">Estimado a tarifa de Claude Sonnet (USD 3/millón entrada, USD 15/millón salida) -- ajustar si cambia el precio real. No incluye costos de Vercel/Supabase.</p>';
+    html+='<p style="font-size:.7rem;color:#5a5058;margin-bottom:1.2rem">Estimado a tarifa de Claude Sonnet (USD 3/millón entrada, USD 15/millón salida, cache creado ~125% de entrada, cache leído ~10% de entrada) -- ajustar si cambia el precio real. No incluye costos de Vercel/Supabase.</p>';
 
     html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Embudo (personas únicas por etapa)</p>';
     html+='<table class="personas-tabla"><tbody>';
