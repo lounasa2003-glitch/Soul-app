@@ -821,6 +821,40 @@ function renderHojaDeVida(data){
         html+=campoHtml('Debriefing -- qué descubrió sobre sí misma',refinamientoPropio.aprendizaje);
         html+=campoHtml('Fortaleza observada (IA, con consentimiento)',refinamientoPropio.fortaleza_observada);
         html+=campoHtml('Algo para explorar (IA, con consentimiento)',refinamientoPropio.algo_para_explorar);
+        html+=campoHtml('Compatibilidad -- resumen para la persona',refinamientoPropio.compatibilidad_resumen);
+      }
+      // Perfil punto por punto + compatibilidad con cifra, extraídos de ESTA
+      // cita real (mismo mecanismo que el extractor de conversaciones
+      // externas) -- independiente de refinamiento_* de arriba, que es la
+      // versión narrada para la persona. Solo existe con consentimiento de
+      // las dos partes (ver extraerPerfilYCompatibilidadEnSegundoPlano en
+      // api/citas.js).
+      if(cita.compatibilidad_cita_a||cita.compatibilidad_cita_b){
+        var esUsuarioA=m.usuario_a===data.usuario.id;
+        var nombrePropio=esc(data.usuario.nombre||'esta persona');
+        var nombreOtro=esc(m.otra_persona_nombre||'la otra persona');
+        var compatPropia=esUsuarioA?cita.compatibilidad_cita_a:cita.compatibilidad_cita_b;
+        var compatOtra=esUsuarioA?cita.compatibilidad_cita_b:cita.compatibilidad_cita_a;
+        html+='<p class="campo-grupo-titulo" style="margin-top:.6rem">Compatibilidad calculada en base a esta cita real</p>';
+        if(compatPropia){
+          html+='<div class="match-scores"><div><div class="match-score">'+esc(compatPropia.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Hoy -- '+nombrePropio+'</div></div><div><div class="match-score">'+esc(compatPropia.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial -- '+nombrePropio+'</div></div></div>';
+          html+=campoHtml('Veredicto para '+nombrePropio,compatPropia.veredicto);
+        }
+        if(compatOtra){
+          html+='<div class="match-scores"><div><div class="match-score">'+esc(compatOtra.compatibilidad_hoy)+'%</div><div class="match-score-lbl">Hoy -- '+nombreOtro+'</div></div><div><div class="match-score">'+esc(compatOtra.potencial_construccion)+'%</div><div class="match-score-lbl">Potencial -- '+nombreOtro+'</div></div></div>';
+          html+=campoHtml('Veredicto para '+nombreOtro,compatOtra.veredicto);
+        }
+        html+='<button class="btn-secundario" style="margin-top:.4rem" onclick="toggleOculto(\'citaPerfil'+esc(cita.id)+'\')">Ver perfil punto por punto revelado en la cita →</button>';
+        html+='<div id="citaPerfil'+esc(cita.id)+'" class="oculto" style="margin-top:.6rem">';
+        if(cita.perfil_cita_a){
+          html+='<p class="campo-grupo-titulo">Perfil revelado -- '+(m.usuario_a===data.usuario.id?nombrePropio:nombreOtro)+'</p>';
+          html+=perfilAHtml(cita.perfil_cita_a);
+        }
+        if(cita.perfil_cita_b){
+          html+='<p class="campo-grupo-titulo">Perfil revelado -- '+(m.usuario_a===data.usuario.id?nombreOtro:nombrePropio)+'</p>';
+          html+=perfilAHtml(cita.perfil_cita_b);
+        }
+        html+='</div>';
       }
       html+='<button class="btn-secundario" style="margin-top:.5rem" onclick="toggleCitaTranscripto(\''+esc(cita.id)+'\',this)">Ver conversación completa'+(cita.estado!=='cerrada'?' (en curso)':'')+' →</button>';
       html+='<div id="citaTranscripto'+esc(cita.id)+'" class="oculto" style="margin-top:.6rem"></div>';
@@ -980,6 +1014,13 @@ function toggleTranscripto(cual){
 // corta el intervalo al volver a plegarlo para no dejar timers sueltos
 // dando vueltas en segundo plano.
 var citaTranscriptoTimers={};
+// Toggle genérico para bloques ya renderizados en memoria (a diferencia de
+// toggleCitaTranscripto, que carga la conversación recién al abrir) -- lo
+// usa el perfil punto por punto extraído de la cita, que ya viene incluido
+// en la respuesta de la Hoja de Vida.
+function toggleOculto(id){
+  document.getElementById(id).classList.toggle('oculto');
+}
 async function toggleCitaTranscripto(citaId,btn){
   var div=document.getElementById('citaTranscripto'+citaId);
   var abierta=!div.classList.contains('oculto');

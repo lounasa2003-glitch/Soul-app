@@ -547,6 +547,19 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <div><div class="chat-nm" id="reflexionTitulo">Pensando en tu encuentro</div><div class="chat-st">privado, solo para vos</div></div>
     </div>
     <div class="chat-area" id="reflexionArea"></div>
+    <div id="reflexionCompat" style="display:none;margin:0 1.2rem 1rem;text-align:center;padding:1.2rem 1rem;border:1px solid #2a1f28;border-radius:8px;background:rgba(36,26,32,.3)">
+      <div style="display:flex;justify-content:center;gap:2rem;margin-bottom:1rem">
+        <div>
+          <div style="font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:2rem;color:#a8b0c2" id="reflexionCompatHoy">—</div>
+          <div style="font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#7a6e78">Hoy</div>
+        </div>
+        <div>
+          <div style="font-family:'Cormorant Garamond',serif;font-style:italic;font-weight:600;font-size:2rem;color:#c9a84c" id="reflexionCompatPot">—</div>
+          <div style="font-size:.65rem;letter-spacing:.1em;text-transform:uppercase;color:#7a6e78">Potencial</div>
+        </div>
+      </div>
+      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.05rem;color:#f2ece4;line-height:1.6" id="reflexionCompatResumen"></p>
+    </div>
     <div class="chat-input-area">
       <input type="text" class="chat-in" id="reflexionIn" placeholder="Escribile a Soul...">
       <button class="send-btn" id="reflexionSendBtn" onclick="enviarReflexion()">→</button>
@@ -1070,13 +1083,13 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="cita-title">El encuentro ✦</p>
       <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
-        <div class="ritmo-opt" onclick="pedirAyudaPrivada('generar_tema')">Generar un tema</div>
-        <div class="ritmo-opt" onclick="pedirAyudaPrivada('salir_incomodidad')">Salir de una situación incómoda</div>
+        <div class="ritmo-opt" id="ayudaOptGenerarTema" onclick="pedirAyudaPrivada('generar_tema')">Generar un tema</div>
+        <div class="ritmo-opt" id="ayudaOptSalirIncomodidad" onclick="pedirAyudaPrivada('salir_incomodidad')">Salir de una situación incómoda</div>
         <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar el encuentro</div>
       </div>
     </div>
     <div id="consentimientoCita" style="display:none;padding:.8rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(201,168,76,.08)">
-      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#d8cdd2;line-height:1.5;margin-bottom:.6rem">Al finalizar el encuentro, Soul puede analizar la conversación para ayudarte a conocerte mejor y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
+      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#d8cdd2;line-height:1.5;margin-bottom:.6rem">Al finalizar el encuentro, Soul puede analizar la conversación para ayudarte a conocerte mejor, mostrarte una estimación de compatibilidad con esta persona en base a esta charla real, y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
       <div style="display:flex;gap:.6rem">
         <button onclick="responderConsentimientoCita(true)" style="padding:.5rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.72rem;font-weight:600;cursor:pointer">Sí, acepto</button>
         <button onclick="responderConsentimientoCita(false)" style="padding:.5rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Prefiero que no</button>
@@ -2979,6 +2992,7 @@ function abrirReflexionDesdeCita(citaId){
   reflexionIntercambios=0;
   reflexionCerrada=false;
   document.getElementById('reflexionArea').innerHTML='';
+  document.getElementById('reflexionCompat').style.display='none';
   ir('ReflexionCita');
   initReflexionCita();
 }
@@ -3028,6 +3042,7 @@ async function initReflexionCita(){
     reflexionHistory=data.historial||[];
     reflexionIntercambios=reflexionHistory.filter(function(m){return m.role==='user'}).length;
     reflexionCerrada=!!data.cerrada;
+    if(reflexionCerrada)mostrarCompatibilidadReflexion(data.compatibilidadHoy,data.potencialConstruccion,data.compatibilidadResumen);
     var area=document.getElementById('reflexionArea');
     area.innerHTML='';
     reflexionHistory.forEach(function(m){
@@ -3057,6 +3072,13 @@ function cerrarConversacionReflexion(){
   nota.textContent='Esta conversación se cerró acá.';
   document.getElementById('reflexionArea').appendChild(nota);
   scrollAlFondo('reflexionArea');
+}
+function mostrarCompatibilidadReflexion(hoy,potencial,resumen){
+  if(hoy===null||hoy===undefined||potencial===null||potencial===undefined)return;
+  document.getElementById('reflexionCompatHoy').textContent=hoy+'%';
+  document.getElementById('reflexionCompatPot').textContent=potencial+'%';
+  document.getElementById('reflexionCompatResumen').textContent=resumen||'';
+  document.getElementById('reflexionCompat').style.display='block';
 }
 function addReflexionMsg(tipo,txt){
   var div=document.createElement('div');div.className='msg '+tipo;div.textContent=txt;
@@ -3104,6 +3126,7 @@ async function enviarReflexion(){
         addReflexionMsg('soul',dataCierre.mensajeNivel2);
         reflexionHistory.push({role:'assistant',content:dataCierre.mensajeNivel2});
       }
+      mostrarCompatibilidadReflexion(dataCierre.compatibilidadHoy,dataCierre.potencialConstruccion,dataCierre.compatibilidadResumen);
     }catch(e){
       var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
       addReflexionMsg('soul','Gracias por pensar esto conmigo.');
@@ -4303,10 +4326,24 @@ function initCita(){
   }
 }
 function mostrarSugerenciaProfundizar(){
+  // A partir del 2do encuentro, Soul no interviene en la charla en vivo
+  // (por el momento) -- ver actualizarUISegunEncuentro().
+  if((window.citaNumeroEncuentro||1)>1)return;
   if(citaSugerenciaMostrada)return;
   citaSugerenciaMostrada=true;
   var el=document.getElementById('citaSugerenciaProfundizar');
   if(el)el.style.display='block';
+}
+// Soul solo guía activamente la charla (sugerir tema, ayudar a salir de una
+// incomodidad) en el 1er encuentro de la Sala de Encuentros -- a partir del
+// 2do, la charla queda abierta entre las dos personas. Cerrar el encuentro
+// (botón "salir") sigue disponible siempre, en cualquier número de encuentro.
+function actualizarUISegunEncuentro(){
+  var esPrimerEncuentro=(window.citaNumeroEncuentro||1)===1;
+  var elTema=document.getElementById('ayudaOptGenerarTema');
+  var elIncomodidad=document.getElementById('ayudaOptSalirIncomodidad');
+  if(elTema)elTema.style.display=esPrimerEncuentro?'':'none';
+  if(elIncomodidad)elIncomodidad.style.display=esPrimerEncuentro?'':'none';
 }
 function usarSugerenciaProfundizar(){
   document.getElementById('citaSugerenciaProfundizar').style.display='none';
@@ -4329,6 +4366,8 @@ async function cargarCita(){
     if(!res.ok)return;
     var data=await res.json();
     window.citaSoyA=data.soyA;
+    window.citaNumeroEncuentro=data.numeroEncuentro||1;
+    actualizarUISegunEncuentro();
     renderCita(data.cita,data.mensajes);
     // Consentimiento para el analisis posterior -- se pregunta una sola vez
     // por persona, mientras la cita siga en curso (no tiene sentido
