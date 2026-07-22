@@ -1,5 +1,5 @@
 import { verificarUsuario } from '../lib/authUtil.js';
-import { llamarClaude, systemConCache } from '../lib/anthropicClient.js';
+import { llamarClaude, systemConCache, messagesConCache } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { detectarIntentoDeFuga, RESPUESTA_INTENTO_FUGA, registrarIntentoFuga } from '../lib/seguridadPrompt.js';
@@ -123,7 +123,12 @@ export default async function handler(req, res) {
           model: req.body.rapido ? MODELO_RAPIDO : MODELO_FIJO,
           max_tokens: Math.min(max_tokens || 1024, MAX_TOKENS_TOPE),
           system: systemConCache(system),
-          messages,
+          // El chat principal, los modulos y la reflexion post-cita son las
+          // unicas charlas de ida y vuelta que pasan por este endpoint
+          // (ver messagesConCache en anthropicClient.js) -- el camino sin
+          // stream de mas abajo es de un solo mensaje (extraccion/resumen)
+          // y no debe cachearse.
+          messages: messagesConCache(messages),
           stream: true
         })
       });
