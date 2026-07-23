@@ -2,7 +2,7 @@ import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
-import { notificarMensajeCita } from '../lib/email.js';
+import { notificarMensajeCita, notificarSalaEncuentrosPendiente } from '../lib/email.js';
 import { EXTRACT_PROMPT } from './analisisExterno.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
@@ -539,6 +539,32 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ [campoPropio]: decision })
     });
+    // Aviso por mail SOLO cuando lo que se eligio es seguir hablando -- las
+    // dos partes tienen que aceptar para que se abra el proximo encuentro,
+    // y sin este aviso la otra persona podia no enterarse nunca de que hay
+    // una decision esperandola (ver notificarSalaEncuentrosPendiente).
+    if (decision === 'seguir_soul') {
+      try {
+        const otroId = soyA ? match.usuario_b : match.usuario_a;
+        const usuariosRes = await fetch(
+          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
+          { headers }
+        );
+        const usuariosFilas = usuariosRes.ok ? await usuariosRes.json() : [];
+        const yo = usuariosFilas.find(u => u.id === usuario.usuarioId);
+        const otro = usuariosFilas.find(u => u.id === otroId);
+        if (otro && otro.email) {
+          await notificarSalaEncuentrosPendiente({
+            nombre: otro.nombre,
+            email: otro.email,
+            remitenteNombre: yo ? (yo.nombre || yo.email) : null
+          });
+        }
+      } catch (e) {
+        console.error('Error avisando Sala de Encuentros pendiente:', e);
+        await registrarErrorSilencioso({ contexto: 'api/citas: aviso sala de encuentros pendiente', error: e, meta: { matchId } });
+      }
+    }
   }
 
   // Mi parte ya termino -- vuelvo a 'chat', el estado normal de espera.
