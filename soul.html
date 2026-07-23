@@ -2393,6 +2393,19 @@ async function cargarProgreso(email){
       usuarioId=u.id;
       window.userNombre=u.nombre;
 
+      // Si dejó los datos básicos a medias (se registró, empezó la Etapa 1
+      // y no la terminó), vuelve derecho ahí en vez de pasar a "¿Qué querés
+      // hacer hoy?" -- de ahí "Seguir con Soul" caía directo al chat
+      // principal (ir(4)) sin haber completado nunca fecha de nacimiento,
+      // género, preferencia, etc. El servidor ya rechaza terminar la Etapa
+      // 1 sin estos datos (ver basicosCompletos en api/guardar.js) y ahora
+      // también rechaza el chat mismo (ver etapaActual en api/chat.js) --
+      // esto evita directamente que la persona llegue a intentarlo.
+      if(!u.etapa_actual||u.etapa_actual==='nuevo'){
+        ir(1);
+        return;
+      }
+
       var perfil=null;
       try{
         var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);

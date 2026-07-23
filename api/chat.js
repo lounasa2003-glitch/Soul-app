@@ -30,6 +30,14 @@ export default async function handler(req, res) {
     if (!usuario) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
+    // Nadie puede conversar con Soul (ni chat principal ni modulos) antes de
+    // terminar la Etapa 1 (datos basicos) -- el cliente ya evita mandar a
+    // alguien ahi (ver cargarProgreso en soul.html), pero esto lo cierra del
+    // lado del servidor sin importar que mande el cliente, mismo criterio
+    // que basicosCompletos en api/guardar.js.
+    if (usuario.etapaActual === 'nuevo') {
+      return res.status(403).json({ error: 'intake_incompleto', mensaje: 'Todavía no completaste tus datos básicos para poder hablar con Soul.' });
+    }
 
     const limiteInfo = await chequearLimite(usuario.email, 'chat', LIMITE_CHAT, VENTANA_CHAT_SEGUNDOS);
     if (!limiteInfo.permitido) {
