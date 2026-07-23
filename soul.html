@@ -1087,6 +1087,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="ritmo-opt" onclick="pedirAyudaPrivada('cerrar')">Quiero cerrar el encuentro</div>
       </div>
     </div>
+    <div id="avisoInactividadCita" style="display:none;padding:.6rem 1.2rem;text-align:center;color:#9a8e96;font-family:Georgia,serif;font-style:italic;font-size:.78rem;border-bottom:1px solid #2a1f28;background:rgba(36,26,32,.35)">Si pasan 24 horas sin mensajes nuevos, este encuentro se cierra solo. Después van a poder abrir uno nuevo, luego de la devolución de este.</div>
     <div id="consentimientoCita" style="display:none;padding:.8rem 1.2rem;border-bottom:1px solid #2a1f28;background:rgba(201,168,76,.08)">
       <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#d8cdd2;line-height:1.5;margin-bottom:.6rem">Al finalizar el encuentro, Soul puede analizar la conversación para ayudarte a conocerte mejor, mostrarte una estimación de compatibilidad con esta persona en base a esta charla real, y mejorar futuras conexiones. El análisis se realiza únicamente si ambas personas aceptan.</p>
       <div style="display:flex;gap:.6rem">
@@ -4384,6 +4385,7 @@ function initCita(){
   citaUltimaCita={};
   citaUltimosMensajes=[];
   document.getElementById('consentimientoCita').style.display='none';
+  document.getElementById('avisoInactividadCita').style.display='none';
   document.getElementById('citaSugerenciaProfundizar').style.display='none';
   document.getElementById('citaAvisoLimite').style.display='none';
   document.getElementById('citaEncuentroCerrado').style.display='none';
@@ -4457,6 +4459,12 @@ async function cargarCita(){
     }else{
       document.getElementById('consentimientoCita').style.display='none';
     }
+    // Aviso de cierre por inactividad -- solo mientras el encuentro es
+    // nuevo (todavia nadie escribio nada, estado 'pendiente'); apenas llega
+    // el primer mensaje pasa a 'activa' y este aviso ya no vuelve a
+    // mostrarse. No aplica a una revisita de algo ya viejo.
+    document.getElementById('avisoInactividadCita').style.display=
+      (data.cita.estado==='pendiente'&&!window.citaModoRevisita)?'block':'none';
     // Si vine desde "Mis citas" a revisitar una cita que ya estaba cerrada
     // de antes, NO hay que mandar a debriefing -- eso es solo para cuando
     // la cita se cierra recien ahora, en vivo. Sin este chequeo, con solo
