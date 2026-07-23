@@ -386,13 +386,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <p class="sesion-sub" id="sesionSub">¿Qué querés hacer hoy?</p>
 
     <div class="sesion-opt" onclick="elegirSesion('soul')">
-      <p class="sesion-opt-title">Seguir con Soul</p>
+      <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
       <p class="sesion-opt-desc">Continuá tu proceso — los módulos que te van a preparar mejor para el encuentro.</p>
-    </div>
-
-    <div class="sesion-opt" id="sesionOptAnalisis" onclick="elegirSesion('analisis')">
-      <p class="sesion-opt-title">Analizar una conversación</p>
-      <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
 
     <div class="sesion-opt" onclick="mostrarMisMatches()">
@@ -405,37 +400,20 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-desc">Las personas con las que ya tuviste al menos un encuentro -- volvé a hablar cuando quieras.</p>
     </div>
 
-    <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
-  </div>
-</div>
-
-<!-- ══ NAVEGACIÓN CENTRAL (desde "Salir" en la cita) ══ -->
-<div class="etapa" id="eNavCentral">
-  <div class="scroll" style="max-width:420px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.5rem;text-align:center">¿A dónde querés ir?</p>
-    <div class="sesion-opt" onclick="mostrarMisMatches()">
-      <p class="sesion-opt-title">Matches</p>
-      <p class="sesion-opt-desc">Ver todos tus matches, tus citas y tus debriefings.</p>
-    </div>
-    <div class="sesion-opt" onclick="mostrarSalaDeEncuentros()">
-      <p class="sesion-opt-title">Sala de Encuentros</p>
-      <p class="sesion-opt-desc">Las personas con las que ya tuviste al menos un encuentro -- volvé a hablar cuando quieras.</p>
-    </div>
-    <div class="sesion-opt" onclick="ir('AnalisisExterno')">
-      <p class="sesion-opt-title">Analizar una conversación</p>
+    <div class="sesion-opt" id="sesionOptAnalisis" onclick="elegirSesion('analisis')">
+      <p class="sesion-opt-title">Analizar candidato externo</p>
       <p class="sesion-opt-desc">¿Conociste a alguien fuera de Soul? Pegá la charla y la cruzamos con tu perfil real.</p>
     </div>
+
     <div class="sesion-opt" onclick="mostrarMiPerfil()">
       <p class="sesion-opt-title">Mi perfil</p>
       <p class="sesion-opt-desc">Tus fotos y tus datos -- podés cambiarlos cuando quieras.</p>
     </div>
-    <div class="sesion-opt" onclick="retomarModulosDesdeNav()">
-      <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
-      <p class="sesion-opt-desc">Retomar los módulos si te falta terminar alguno.</p>
-    </div>
-    <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
+
+    <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Salir</p>
   </div>
 </div>
+
 
 <!-- ══ MI PERFIL (ver/editar datos y fotos guardados en el onboarding) ══ -->
 <div class="etapa" id="eMiPerfil">
@@ -534,7 +512,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="auth-loading" id="miPerfilExito" style="display:none;color:#4ecb71">✓ Guardado.</p>
 
       <button class="btn-gold" id="miPerfilGuardarBtn" onclick="guardarMiPerfil()" style="width:100%;margin-top:.5rem">Guardar cambios →</button>
-      <button class="btn-back" onclick="mostrarNavCentral()">← Volver</button>
+      <button class="btn-back" onclick="volverAMenuPrincipal()">← Volver</button>
     </div>
   </div>
 </div>
@@ -875,7 +853,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e4b">
   <div class="chat-wrap">
     <div class="chat-header">
-      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">← Salir</span>
+      <span onclick="volverAMenuPrincipal()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">← Salir</span>
       <div class="chat-orb"></div>
       <div>
         <div class="chat-nm">Soul</div>
@@ -1088,7 +1066,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e7">
   <div class="cita-wrap">
     <div class="cita-header">
-      <span onclick="mostrarNavCentral()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Salir</span>
+      <span onclick="volverAMenuPrincipal()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Salir</span>
       <p class="cita-title">El encuentro ✦</p>
       <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.7rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
@@ -2424,6 +2402,20 @@ async function cargarProgreso(email){
       var pct=calcularPorcentajePerfil(u,perfil);
       window.usuarioParaSesion=u;
       window.pctParaSesion=pct;
+
+      // La charla inicial con Soul (y los módulos que siguen) no tienen
+      // botón para salir a mitad de camino a propósito -- tienen que
+      // terminarse. 'chat' también es el estado de "en espera" de alguien
+      // que YA terminó todo esto y solo está esperando un match (ver
+      // decidirSalaEncuentros en api/citas.js, que vuelve a 'chat' al
+      // resolver la Sala de Encuentros) -- se distinguen por si el módulo
+      // ya quedó completo o no. Solo en el primer caso se fuerza la
+      // vuelta directa a la charla, sin pasar por el menú principal.
+      if(u.etapa_actual==='chat'&&!(perfil&&perfil.modulo_fase==='completo')){
+        elegirSesion('soul');
+        return;
+      }
+
       var pendientes=await recolectarPendientes();
       if(pendientes.length===0){
         mostrarEleccionSesion(u,pct);
@@ -2856,24 +2848,24 @@ function abrirCitaDesdeM(citaId){
   ir(7);
 }
 function volverDeMisMatches(){
-  mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
+  volverAMenuPrincipal();
 }
 function mostrarSalaDeEncuentros(){
   mostrarMisMatches(true);
 }
 
-// Panel de navegación central, accesible desde "Salir" en la cita -- salir
-// de ahi NO significa cerrar la cita ni dejar de hablar con esa persona,
-// solo alejarse por ahora: la cita y las conversaciones ya viven
-// server-side, volver a entrar (Matches -> esa cita) las retoma tal cual,
-// con todos los mensajes. Se corta el polling de la cita para no seguir
-// pidiendo en segundo plano sin necesidad mientras no se esta mirando.
-function mostrarNavCentral(){
+// Vuelta al ÚNICO menú principal -- antes había dos pantallas de navegación
+// distintas (esta y "¿A dónde querés ir?"), con opciones parcialmente
+// repetidas y nombres inconsistentes. Se usa desde "Salir" en la cita, "←
+// Volver" en Módulos y en Mi perfil. Salir de la cita NO significa cerrarla
+// ni dejar de hablar con esa persona, solo alejarse por ahora: la cita ya
+// vive server-side, volver a entrar (Matches -> esa cita) la retoma tal
+// cual, con todos los mensajes. Se corta el polling de la cita para no
+// seguir pidiendo en segundo plano sin necesidad mientras no se esta
+// mirando (no-op si no habia ninguna cita en curso).
+function volverAMenuPrincipal(){
   if(citaPollTimer){clearInterval(citaPollTimer);citaPollTimer=null;}
-  ir('NavCentral');
-}
-function retomarModulosDesdeNav(){
-  elegirSesion('soul');
+  mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
 }
 
 // ── MI PERFIL (ver/editar lo que se cargo en el onboarding) ──
