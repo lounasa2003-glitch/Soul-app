@@ -942,7 +942,7 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const citasFila = citaRes.ok ? await citaRes.json() : [];
   const cita = citasFila[0];
   if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(cita.match_id)}`, { headers });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,decision_a,decision_b,estado&id=eq.${encodeURIComponent(cita.match_id)}`, { headers });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -951,6 +951,12 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   }
   const soyA = match.usuario_a === usuario.usuarioId;
   const dinamicaPropia = soyA ? cita.insights_debriefing_a : cita.insights_debriefing_b;
+  // Si esta persona todavia no eligio como seguir con este match (y la Sala
+  // de Encuentros no se resolvio ya de otra forma), el cliente le pregunta
+  // "como seguir" apenas termina de cerrar el debriefing -- ver soul.html.
+  const miDecisionPrevia = soyA ? match.decision_a : match.decision_b;
+  const salaYaResuelta = match.estado === 'aceptado' || match.estado === 'rechazado';
+  const preguntarComoSeguir = !miDecisionPrevia && !salaYaResuelta;
   // Compatibilidad ya calculada al abrir el debriefing (ver
   // extraerPerfilYCompatibilidadEnSegundoPlano) -- el cierre solo la
   // traduce a una frase, las cifras se muestran tal cual, sin que el modelo
@@ -1013,7 +1019,9 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     mensajeNivel2,
     compatibilidadResumen: resultado.compatibilidad_resumen || null,
     compatibilidadHoy: compatibilidadPropia ? compatibilidadPropia.compatibilidad_hoy : null,
-    potencialConstruccion: compatibilidadPropia ? compatibilidadPropia.potencial_construccion : null
+    potencialConstruccion: compatibilidadPropia ? compatibilidadPropia.potencial_construccion : null,
+    matchId: cita.match_id,
+    preguntarComoSeguir
   });
 }
 

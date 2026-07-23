@@ -125,7 +125,7 @@ export default async function handler(req, res) {
       // reflejaba la realidad si nadie habia vuelto a entrar en dias).
       // Antes de responder, se corre el mismo chequeo de inactividad que
       // corre del lado de las dos personas (ver lib/cierreCita.js): si el
-      // encuentro lleva 2hs sin mensajes nuevos, se cierra aca mismo en
+      // encuentro lleva 24hs sin mensajes nuevos, se cierra aca mismo en
       // vez de esperar a que alguna de las dos vuelva a abrir la app. ──
       const { citaId } = req.query;
       if (!citaId) return res.status(400).json({ error: 'Falta citaId' });

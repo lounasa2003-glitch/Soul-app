@@ -3197,6 +3197,14 @@ async function enviarReflexion(){
         reflexionHistory.push({role:'assistant',content:dataCierre.mensajeNivel2});
       }
       mostrarCompatibilidadReflexion(dataCierre.compatibilidadHoy,dataCierre.potencialConstruccion,dataCierre.compatibilidadResumen);
+      // Apenas termina el debriefing, se le pregunta a esta persona si
+      // quiere seguir hablando con quien tuvo la cita -- pero solo si
+      // todavia no eligio (o la Sala de Encuentros ya se resolvio de otra
+      // forma para este match, ver preguntarComoSeguir en cerrarReflexion).
+      if(dataCierre.preguntarComoSeguir&&dataCierre.matchId){
+        var citaParaSeguir=reflexionCitaIdActual,matchParaSeguir=dataCierre.matchId;
+        setTimeout(function(){ elegirComoSeguir(citaParaSeguir,matchParaSeguir); },2800);
+      }
     }catch(e){
       var t2=document.getElementById('reflexionTyping');if(t2)t2.remove();
       addReflexionMsg('soul','Gracias por pensar esto conmigo.');
