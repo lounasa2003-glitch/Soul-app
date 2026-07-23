@@ -3,7 +3,7 @@ import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
 import { notificarNuevoMatch } from '../../lib/email.js';
-import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible } from '../../lib/matchCompatible.js';
+import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCompatibles } from '../../lib/matchCompatible.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 // Fusiona lo que antes eran admin/ranking.js y admin/activarMatch.js en un
@@ -48,7 +48,7 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   }
 
   const idsUnicos = [...new Set(otrosPerfiles.map(p => p.usuario_id))];
-  const SELECT_FILTRO_ADMIN = 'id,nombre,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max';
+  const SELECT_FILTRO_ADMIN = 'id,nombre,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max,hijos,preferencia_hijos,no_negociables,negociables';
   const [nombresRes, matchesRes, miUsuarioRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO_ADMIN}&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
     fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,compatibilidad_hoy,potencial_construccion,analisis_por_variable&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers }),
@@ -76,7 +76,8 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     const candidato = generoPorId[p.usuario_id];
     return generosCompatibles(miGeneroInfo, candidato)
       && tipoVinculoCompatible(miGeneroInfo, candidato)
-      && distanciaCompatible(miGeneroInfo, candidato);
+      && distanciaCompatible(miGeneroInfo, candidato)
+      && hijosCompatibles(miGeneroInfo, candidato);
   });
 
   // Un par que ya se comparo antes (en cualquier estado -- pendiente,
@@ -103,13 +104,19 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
     const lote = porComparar.slice(i, i + CONCURRENCIA);
     const resultadosLote = await Promise.all(lote.map(async (otro) => {
       try {
+        const candidatoUsuario = generoPorId[otro.usuario_id];
         const { json: comp, usage } = await llamarClaudeJSON({
           model: 'claude-sonnet-4-6',
           max_tokens: 1200,
           system: COMPARE_PROMPT,
           messages: [{
             role: 'user',
-            content: 'Perfil A:\n' + JSON.stringify(miPerfil) + '\n\nPerfil B:\n' + JSON.stringify(otro)
+            content: 'Perfil A:\n' + JSON.stringify(miPerfil) +
+              '\nNo negociables de A: ' + (miGeneroInfo && miGeneroInfo.no_negociables || 'null') +
+              '\nNegociables de A: ' + (miGeneroInfo && miGeneroInfo.negociables || 'null') +
+              '\n\nPerfil B:\n' + JSON.stringify(otro) +
+              '\nNo negociables de B: ' + (candidatoUsuario && candidatoUsuario.no_negociables || 'null') +
+              '\nNegociables de B: ' + (candidatoUsuario && candidatoUsuario.negociables || 'null')
           }]
         });
         return { otro, comp, usage };

@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const [resA, resB, usuariosRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(idA)}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(idB)}`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(idA)},${encodeURIComponent(idB)})`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,no_negociables,negociables&id=in.(${encodeURIComponent(idA)},${encodeURIComponent(idB)})`, { headers })
     ]);
     const perfilesA = resA.ok ? await resA.json() : [];
     const perfilesB = resB.ok ? await resB.json() : [];
@@ -49,7 +49,11 @@ export default async function handler(req, res) {
       messages: [{
         role: 'user',
         content: 'Perfil A:\n' + JSON.stringify(perfilesA[perfilesA.length - 1]) +
-          '\n\nPerfil B:\n' + JSON.stringify(perfilesB[perfilesB.length - 1])
+          '\nNo negociables de A: ' + (usuarioA && usuarioA.no_negociables || 'null') +
+          '\nNegociables de A: ' + (usuarioA && usuarioA.negociables || 'null') +
+          '\n\nPerfil B:\n' + JSON.stringify(perfilesB[perfilesB.length - 1]) +
+          '\nNo negociables de B: ' + (usuarioB && usuarioB.no_negociables || 'null') +
+          '\nNegociables de B: ' + (usuarioB && usuarioB.negociables || 'null')
       }]
     });
     await registrarUsoTokens({ usuarioId: null, endpoint: 'adminComparar', usage });

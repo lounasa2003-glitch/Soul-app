@@ -491,6 +491,12 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="chip" onclick="selChipPerfil(this,'hijos')">Sí, adolescentes</div>
         <div class="chip" onclick="selChipPerfil(this,'hijos')">Sí, adultos</div>
       </div>
+      <p class="step-sub">¿Te importa si la otra persona tiene hijos?</p>
+      <div class="chips" id="mpPrefHijosChips">
+        <div class="chip" onclick="selChipPerfil(this,'prefHijos')">No me importa</div>
+        <div class="chip" onclick="selChipPerfil(this,'prefHijos')">Prefiero que no tenga</div>
+        <div class="chip" onclick="selChipPerfil(this,'prefHijos')">Prefiero que sí tenga</div>
+      </div>
 
       <p class="step-sub">Estado civil</p>
       <div class="chips" id="mpCivilChips">
@@ -756,6 +762,12 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
           <div class="chip" onclick="selChip(this,'hijos')">Sí, pequeños</div>
           <div class="chip" onclick="selChip(this,'hijos')">Sí, adolescentes</div>
           <div class="chip" onclick="selChip(this,'hijos')">Sí, adultos</div>
+        </div>
+        <p class="step-sub">¿Te importa si la otra persona tiene hijos?</p>
+        <div class="chips" id="prefHijosChips">
+          <div class="chip" onclick="selChip(this,'prefHijos')">No me importa</div>
+          <div class="chip" onclick="selChip(this,'prefHijos')">Prefiero que no tenga</div>
+          <div class="chip" onclick="selChip(this,'prefHijos')">Prefiero que sí tenga</div>
         </div>
         <button class="btn-gold" id="btn3" disabled onclick="nextStep(3)" style="width:100%">Continuar →</button>
       </div>
@@ -1930,6 +1942,7 @@ async function guardarUsuarioYContinuar(){
     preferencia_genero: chipSels['pref']||null,
     tipo_vinculo: chipSels['vinc']||null,
     hijos: chipSels['hijos']||null,
+    preferencia_hijos: chipSels['prefHijos']||null,
     estado_civil: chipSels['civil']||null,
     ocupacion: document.getElementById('ocup').value||null,
     no_negociables: document.getElementById('noNeg').value||null,
@@ -1980,7 +1993,7 @@ async function guardarUsuarioYContinuar(){
 
 // ── % DE PERFIL COMPLETO ──
 var UMBRAL_PERFIL=70;
-var CAMPOS_FORMULARIO=['fecha_nacimiento','ciudad','distancia_max','genero','preferencia_genero','tipo_vinculo','hijos','estado_civil','ocupacion','no_negociables','negociables'];
+var CAMPOS_FORMULARIO=['fecha_nacimiento','ciudad','distancia_max','genero','preferencia_genero','tipo_vinculo','hijos','preferencia_hijos','estado_civil','ocupacion','no_negociables','negociables'];
 var CAMPOS_GRUPOS={
   grupo1:['valores','estilo_comunicacion','ritmo_emocional','mascara_vs_autentico','momento_evolutivo'],
   grupo2:['tipo_vinculo','proyecto_vida','necesidades_intimidad','no_puede_faltar','no_puede_estar'],
@@ -2876,7 +2889,7 @@ function volverAMenuPrincipal(){
 // chips tambien son distintos (mpDistChips vs distChips, etc.) para que
 // selChip/selChipM del onboarding nunca puedan pisar esto por accidente.
 var perfilChipSels={};
-var MP_CHIP_CONTAINER={dist:'mpDistChips',gen:'mpGenChips',pref:'mpPrefChips',vinc:'mpVincChips',hijos:'mpHijosChips',civil:'mpCivilChips'};
+var MP_CHIP_CONTAINER={dist:'mpDistChips',gen:'mpGenChips',pref:'mpPrefChips',vinc:'mpVincChips',hijos:'mpHijosChips',prefHijos:'mpPrefHijosChips',civil:'mpCivilChips'};
 
 function selChipPerfil(el,g){
   document.querySelectorAll('#'+MP_CHIP_CONTAINER[g]+' .chip').forEach(function(c){c.classList.remove('sel')});
@@ -2955,6 +2968,7 @@ async function mostrarMiPerfil(){
     preseleccionarChipPerfil('gen',u.genero);
     preseleccionarChipPerfil('pref',u.preferencia_genero);
     preseleccionarChipPerfil('hijos',u.hijos);
+    preseleccionarChipPerfil('prefHijos',u.preferencia_hijos);
     preseleccionarChipPerfil('civil',u.estado_civil);
     preseleccionarChipsMultiPerfil('vinc',u.tipo_vinculo);
     perfilChipSels={dist:u.distancia_max||null,gen:u.genero||null,pref:u.preferencia_genero||null,hijos:u.hijos||null,civil:u.estado_civil||null,vinc:u.tipo_vinculo||null};
@@ -2989,6 +3003,7 @@ async function guardarMiPerfil(){
     preferencia_genero: perfilChipSels['pref']||null,
     tipo_vinculo: perfilChipSels['vinc']||null,
     hijos: perfilChipSels['hijos']||null,
+    preferencia_hijos: perfilChipSels['prefHijos']||null,
     estado_civil: perfilChipSels['civil']||null,
     ocupacion: document.getElementById('mpOcup').value.trim()||null,
     no_negociables: document.getElementById('mpNoNeg').value.trim()||null,
@@ -3508,7 +3523,7 @@ function chkStep(s){
   if(s===0)ok=!!document.getElementById('fnac').value;
   if(s===1)ok=document.getElementById('ciudad').value.trim().length>0&&chipSels['dist'];
   if(s===2)ok=chipSels['gen']&&chipSels['pref'];
-  if(s===3)ok=(chipSels['vinc']&&chipSels['vinc'].length>0)&&chipSels['hijos'];
+  if(s===3)ok=(chipSels['vinc']&&chipSels['vinc'].length>0)&&chipSels['hijos']&&chipSels['prefHijos'];
   if(s===4)ok=chipSels['civil']&&document.getElementById('ocup').value.trim().length>0;
   if(s===5)ok=document.getElementById('noNeg').value.trim().length>2&&document.getElementById('neg').value.trim().length>2;
   if(s===6)ok=caraOk&&cuerpoOk;

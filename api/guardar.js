@@ -44,7 +44,7 @@ function fotoValida(valor) {
 // lado del servidor: nadie puede terminar el intake (etapa_actual:'chat')
 // sin que estos campos + fotos + consentimiento esten realmente cargados,
 // sin importar que mande el cliente.
-const CAMPOS_BASICOS_REQUERIDOS = ['fecha_nacimiento', 'ciudad', 'distancia_max', 'genero', 'preferencia_genero', 'tipo_vinculo', 'hijos', 'estado_civil', 'ocupacion', 'no_negociables', 'negociables'];
+const CAMPOS_BASICOS_REQUERIDOS = ['fecha_nacimiento', 'ciudad', 'distancia_max', 'genero', 'preferencia_genero', 'tipo_vinculo', 'hijos', 'preferencia_hijos', 'estado_civil', 'ocupacion', 'no_negociables', 'negociables'];
 function campoLleno(valor) {
   if (valor == null) return false;
   if (typeof valor === 'string') return valor.trim().length > 0;

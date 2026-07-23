@@ -5,7 +5,7 @@ import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
-import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible } from '../lib/matchCompatible.js';
+import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCompatibles } from '../lib/matchCompatible.js';
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
@@ -94,8 +94,12 @@ export default async function handler(req, res) {
     const idsCandidatos = otrosPerfilesSinMatch.map((p) => p.usuario_id);
     let miGeneroInfo = null;
     let otrosPerfilesCompatibles = [];
+    // Se usa tambien mas abajo, al armar el mensaje para Claude (no
+    // negociables de cada candidato) -- declarada afuera del if para que
+    // el loop de comparacion pueda leerla.
+    let generoPorId = {};
     if (idsCandidatos.length > 0) {
-      const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max';
+      const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max,hijos,preferencia_hijos,no_negociables,negociables';
       const [miUsuarioRes, otrosUsuariosRes] = await Promise.all([
         fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=eq.${encodeURIComponent(usuarioId)}`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers })
@@ -103,13 +107,13 @@ export default async function handler(req, res) {
       const miUsuarioRows = miUsuarioRes.ok ? await miUsuarioRes.json() : [];
       miGeneroInfo = miUsuarioRows[0] || null;
       const otrosUsuarios = otrosUsuariosRes.ok ? await otrosUsuariosRes.json() : [];
-      const generoPorId = {};
       otrosUsuarios.forEach((u) => { generoPorId[u.id] = u; });
       otrosPerfilesCompatibles = otrosPerfilesSinMatch.filter((p) => {
         const candidato = generoPorId[p.usuario_id];
         return generosCompatibles(miGeneroInfo, candidato)
           && tipoVinculoCompatible(miGeneroInfo, candidato)
-          && distanciaCompatible(miGeneroInfo, candidato);
+          && distanciaCompatible(miGeneroInfo, candidato)
+          && hijosCompatibles(miGeneroInfo, candidato);
       });
     }
 
@@ -121,13 +125,19 @@ export default async function handler(req, res) {
     let totalInputTokens = 0, totalOutputTokens = 0;
 
     for (const otro of otrosPerfilesCompatibles) {
+      const candidatoUsuario = generoPorId[otro.usuario_id];
       const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
         max_tokens: 1200,
         system: COMPARE_PROMPT,
         messages: [{
           role: 'user',
-          content: 'Perfil A:\n' + JSON.stringify(miPerfil) + '\n\nPerfil B:\n' + JSON.stringify(otro)
+          content: 'Perfil A:\n' + JSON.stringify(miPerfil) +
+            '\nNo negociables de A: ' + (miGeneroInfo && miGeneroInfo.no_negociables || 'null') +
+            '\nNegociables de A: ' + (miGeneroInfo && miGeneroInfo.negociables || 'null') +
+            '\n\nPerfil B:\n' + JSON.stringify(otro) +
+            '\nNo negociables de B: ' + (candidatoUsuario && candidatoUsuario.no_negociables || 'null') +
+            '\nNegociables de B: ' + (candidatoUsuario && candidatoUsuario.negociables || 'null')
         }]
       });
       if (usage) {
