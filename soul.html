@@ -400,6 +400,11 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="sesion-opt-desc">Volvé a alguna conversación, o hablá con Soul sobre cómo te fue.</p>
     </div>
 
+    <div class="sesion-opt" onclick="mostrarSalaDeEncuentros()">
+      <p class="sesion-opt-title">Sala de Encuentros</p>
+      <p class="sesion-opt-desc">Las personas con las que ya tuviste al menos un encuentro -- volvé a hablar cuando quieras.</p>
+    </div>
+
     <p onclick="cerrarSesion()" style="text-align:center;margin-top:1.5rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Cerrar sesión</p>
   </div>
 </div>
@@ -411,6 +416,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <div class="sesion-opt" onclick="mostrarMisMatches()">
       <p class="sesion-opt-title">Matches</p>
       <p class="sesion-opt-desc">Ver todos tus matches, tus citas y tus debriefings.</p>
+    </div>
+    <div class="sesion-opt" onclick="mostrarSalaDeEncuentros()">
+      <p class="sesion-opt-title">Sala de Encuentros</p>
+      <p class="sesion-opt-desc">Las personas con las que ya tuviste al menos un encuentro -- volvé a hablar cuando quieras.</p>
     </div>
     <div class="sesion-opt" onclick="ir('AnalisisExterno')">
       <p class="sesion-opt-title">Analizar una conversación</p>
@@ -533,7 +542,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <!-- ══ MATCHES (jerarquia: match -> cita -> debriefing) ══ -->
 <div class="etapa" id="eMisMatches">
   <div class="scroll" style="max-width:520px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem;text-align:center">Matches</p>
+    <p id="misMatchesTitulo" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1.2rem;text-align:center">Matches</p>
     <div id="misMatchesLista"></div>
     <button class="btn-back" onclick="volverDeMisMatches()">← Volver</button>
   </div>
@@ -2704,8 +2713,9 @@ var MATCH_ESTADO_LEGIBLE={
 // Pantalla "Matches": TODOS los matches de la persona (no solo los que ya
 // tienen cita), con la cita y el debriefing anidados debajo de cada uno
 // cuando existen -- Match -> Cita -> Debriefing, cada hilo independiente.
-async function mostrarMisMatches(){
+async function mostrarMisMatches(soloConCitas){
   var lista=document.getElementById('misMatchesLista');
+  document.getElementById('misMatchesTitulo').textContent=soloConCitas?'Sala de Encuentros':'Matches';
   lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Cargando...</p>';
   ir('MisMatches');
   try{
@@ -2734,6 +2744,18 @@ async function mostrarMisMatches(){
     Object.keys(citasPorMatch).forEach(function(mid){
       citasPorMatch[mid].sort(function(a,b){return new Date(a.created_at)-new Date(b.created_at)});
     });
+
+    // Sala de Encuentros: pantalla propia y permanente (antes esto vivia
+    // mezclado sin nombre dentro de "Matches" y nadie la reconocia como una
+    // seccion aparte) -- solo gente con la que ya hubo al menos un
+    // encuentro real, no matches que todavia estan esperando la cita.
+    if(soloConCitas){
+      matches=matches.filter(function(m){return (citasPorMatch[m.id]||[]).length>0});
+      if(matches.length===0){
+        lista.innerHTML='<p style="text-align:center;color:#7a6e78;font-family:Georgia,serif;font-style:italic">Todavía no tuviste ningún encuentro con nadie.</p>';
+        return;
+      }
+    }
 
     // Se guarda la lista cruda (no escapada) para que eliminarMatch() pueda
     // buscar el nombre real ahi en vez de recibirlo como string embebido en
@@ -2835,6 +2857,9 @@ function abrirCitaDesdeM(citaId){
 }
 function volverDeMisMatches(){
   mostrarEleccionSesion(window.usuarioParaSesion||{nombre:window.userNombre},window.pctParaSesion||0);
+}
+function mostrarSalaDeEncuentros(){
+  mostrarMisMatches(true);
 }
 
 // Panel de navegación central, accesible desde "Salir" en la cita -- salir
@@ -3032,7 +3057,10 @@ function abrirReflexionDesdeCita(citaId){
   initReflexionCita();
 }
 function volverDeReflexion(){
-  mostrarMisMatches();
+  // Vuelve a la Sala de Encuentros (no a "Matches" a secas) -- es el lugar
+  // natural despues de un debriefing: ahi esta la accion de seguir
+  // hablando con esa persona (o cualquier otra con la que ya tuvo cita).
+  mostrarSalaDeEncuentros();
 }
 
 // Esta es la UNICA respuesta "normal" del debriefing corto (la que sigue a
