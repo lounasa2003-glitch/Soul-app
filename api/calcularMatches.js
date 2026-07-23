@@ -5,7 +5,7 @@ import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
-import { generosCompatibles } from '../lib/matchCompatible.js';
+import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible } from '../lib/matchCompatible.js';
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
@@ -83,25 +83,34 @@ export default async function handler(req, res) {
     );
     const otrosPerfilesSinMatch = otrosPerfiles.filter((p) => !idsYaMatcheados.has(p.usuario_id));
 
-    // El genero/preferencia vive en 'usuarios', no en 'perfiles' -- hace
-    // falta traerlo aparte para filtrar ANTES de gastar ninguna llamada a
-    // Claude (ver lib/matchCompatible.js: sin esto se llegaron a crear
+    // Genero/preferencia, tipo de vinculo, ciudad y distancia viven en
+    // 'usuarios', no en 'perfiles' -- hace falta traerlos aparte para
+    // filtrar ANTES de gastar ninguna llamada a Claude (ver
+    // lib/matchCompatible.js: sin el filtro de genero se llegaron a crear
     // matches que cruzaban lo que la persona eligio en "¿Con quien queres
-    // conectar?").
+    // conectar?"; tipo de vinculo y distancia son la misma idea aplicada a
+    // datos que ya se piden en la Etapa 1 y hasta ahora no se usaban para
+    // nada mas que mostrarse en el panel).
     const idsCandidatos = otrosPerfilesSinMatch.map((p) => p.usuario_id);
     let miGeneroInfo = null;
     let otrosPerfilesCompatibles = [];
     if (idsCandidatos.length > 0) {
+      const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max';
       const [miUsuarioRes, otrosUsuariosRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=eq.${encodeURIComponent(usuarioId)}`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=eq.${encodeURIComponent(usuarioId)}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers })
       ]);
       const miUsuarioRows = miUsuarioRes.ok ? await miUsuarioRes.json() : [];
       miGeneroInfo = miUsuarioRows[0] || null;
       const otrosUsuarios = otrosUsuariosRes.ok ? await otrosUsuariosRes.json() : [];
       const generoPorId = {};
       otrosUsuarios.forEach((u) => { generoPorId[u.id] = u; });
-      otrosPerfilesCompatibles = otrosPerfilesSinMatch.filter((p) => generosCompatibles(miGeneroInfo, generoPorId[p.usuario_id]));
+      otrosPerfilesCompatibles = otrosPerfilesSinMatch.filter((p) => {
+        const candidato = generoPorId[p.usuario_id];
+        return generosCompatibles(miGeneroInfo, candidato)
+          && tipoVinculoCompatible(miGeneroInfo, candidato)
+          && distanciaCompatible(miGeneroInfo, candidato);
+      });
     }
 
     let matchEncontrado = false;

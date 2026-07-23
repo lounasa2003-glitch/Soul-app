@@ -3,7 +3,7 @@ import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
 import { notificarNuevoMatch } from '../../lib/email.js';
-import { generosCompatibles } from '../../lib/matchCompatible.js';
+import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible } from '../../lib/matchCompatible.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 // Fusiona lo que antes eran admin/ranking.js y admin/activarMatch.js en un
@@ -48,10 +48,11 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   }
 
   const idsUnicos = [...new Set(otrosPerfiles.map(p => p.usuario_id))];
+  const SELECT_FILTRO_ADMIN = 'id,nombre,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max';
   const [nombresRes, matchesRes, miUsuarioRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,genero,preferencia_genero&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO_ADMIN}&id=in.(${idsUnicos.map(encodeURIComponent).join(',')})`, { headers }),
     fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,compatibilidad_hoy,potencial_construccion,analisis_por_variable&or=(usuario_a.eq.${encodeURIComponent(personaId)},usuario_b.eq.${encodeURIComponent(personaId)})`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,genero,preferencia_genero&id=eq.${encodeURIComponent(personaId)}`, { headers })
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO_ADMIN}&id=eq.${encodeURIComponent(personaId)}`, { headers })
   ]);
   const nombresRows = nombresRes.ok ? await nombresRes.json() : [];
   const nombrePorId = {};
@@ -70,8 +71,13 @@ async function calcularRanking(req, res, supabaseUrl, headers) {
   // Filtra ANTES de gastar ninguna llamada a Claude -- ver
   // lib/matchCompatible.js: sin esto el ranking llegaba a comparar (y hasta
   // matchear) personas que cruzaban lo que cada una eligio en "¿Con quien
-  // queres conectar?".
-  otrosPerfiles = otrosPerfiles.filter(p => generosCompatibles(miGeneroInfo, generoPorId[p.usuario_id]));
+  // queres conectar?", en el tipo de vinculo que busca, o en la distancia.
+  otrosPerfiles = otrosPerfiles.filter(p => {
+    const candidato = generoPorId[p.usuario_id];
+    return generosCompatibles(miGeneroInfo, candidato)
+      && tipoVinculoCompatible(miGeneroInfo, candidato)
+      && distanciaCompatible(miGeneroInfo, candidato);
+  });
 
   // Un par que ya se comparo antes (en cualquier estado -- pendiente,
   // descartado, activo, lo que sea) no necesita gastar Claude de nuevo: el
