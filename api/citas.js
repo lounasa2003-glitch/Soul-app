@@ -1026,6 +1026,18 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
     body: JSON.stringify({ [soyA ? 'refinamiento_a' : 'refinamiento_b']: refinamiento })
   });
 
+  // Si le toca elegir cómo seguir, la marco como 'sala_encuentros' para que
+  // el panel la distinga de quien sigue en pleno debriefing -- si ya no hay
+  // nada que decidir (preguntarComoSeguir false), decidirSalaEncuentros ya
+  // se encarga de devolverla a 'chat' cuando corresponda.
+  if (preguntarComoSeguir) {
+    await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ etapa_actual: 'sala_encuentros' })
+    }).catch(() => {});
+  }
+
   const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
   const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario.usuarioId);
   if (mensajeNivel2) historialFinal.push({ role: 'assistant', content: mensajeNivel2 });

@@ -246,6 +246,17 @@ var EMBUDO_ETIQUETA={
   eleccion_post_encuentro:'Eligieron cómo seguir tras un encuentro'
 };
 
+var ETAPA_COSTO_ETIQUETA={
+  onboarding_y_chat:'Onboarding y chat general',
+  modulos_perfil:'Módulos de profundización',
+  calculo_matches:'Cálculo de matches',
+  extractor_perfil_externo:'Extractor de perfil (análisis externo)',
+  encuentro_ayuda:'Ayuda privada durante el encuentro',
+  debriefing:'Debriefing',
+  operativo_admin:'Operativo (admin, no escala por persona)',
+  otro:'Otro'
+};
+
 async function cargarMetricas(){
   var div=document.getElementById('metricasContenido');
   div.innerHTML='<p class="cargando">Calculando...</p>';
@@ -269,6 +280,18 @@ async function cargarMetricas(){
       html+='</tbody></table>';
     }
     html+='<p style="font-size:.7rem;color:#5a5058;margin-bottom:1.2rem">Estimado a tarifa de Claude Sonnet (USD 3/millón entrada, USD 15/millón salida, cache creado ~125% de entrada, cache leído ~10% de entrada) -- ajustar si cambia el precio real. No incluye costos de Vercel/Supabase.</p>';
+
+    html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Costo por etapa del recorrido</p>';
+    if(data.tokens.porEtapa && data.tokens.porEtapa.length>0){
+      html+='<table class="personas-tabla" style="margin-bottom:.3rem"><thead><tr><th>Etapa</th><th>Llamadas</th><th>≈ USD total</th><th>Personas</th><th>≈ USD / persona</th></tr></thead><tbody>';
+      data.tokens.porEtapa.forEach(function(f){
+        var personas=f.personas==null?'—':f.personas;
+        var porPersona=f.costoPorPersonaUsd==null?'—':('USD '+f.costoPorPersonaUsd.toFixed(3));
+        html+='<tr><td>'+esc(ETAPA_COSTO_ETIQUETA[f.etapa]||f.etapa)+'</td><td>'+f.llamadas.toLocaleString('es-AR')+'</td><td>'+f.costoEstimadoUsd.toFixed(2)+'</td><td>'+personas+'</td><td>'+porPersona+'</td></tr>';
+      });
+      html+='</tbody></table>';
+    }
+    html+='<p style="font-size:.7rem;color:#5a5058;margin-bottom:1.2rem">"USD / persona" divide el costo de esa etapa por la cantidad de personas que llegaron a la etapa del embudo correspondiente (no 1 a 1 con el embudo de abajo, son categorías de costo más finas) -- "—" significa que todavía no hay nadie en esa etapa o que el costo no depende de una persona individual (operativo/admin). Con pocos usuarios estos promedios pueden estar sesgados por uso atípico.</p>';
 
     html+='<p style="font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:#7a6e78;margin-bottom:.4rem">Embudo (personas únicas por etapa)</p>';
     html+='<table class="personas-tabla"><tbody>';
@@ -591,7 +614,8 @@ var ETAPAS_LEGIBLES={
   modulos:'En los módulos',
   match:'Match',
   cita:'En la cita virtual',
-  debriefing:'Debriefing (post-cita)'
+  debriefing:'Debriefing (post-cita)',
+  sala_encuentros:'Sala de Encuentros'
 };
 function etapaLegible(etapa){
   return ETAPAS_LEGIBLES[etapa]||etapa||'—';
