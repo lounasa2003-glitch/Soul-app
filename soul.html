@@ -851,6 +851,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <span onclick="pedirPausaChat()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.78rem;cursor:pointer">Dejar por ahora</span>
       </div>
     </div>
+    <div id="avisoInicioChat" style="display:none;padding:.5rem 1.2rem;text-align:center;color:#9a8e96;background:rgba(201,168,76,.06);font-family:Georgia,serif;font-style:italic;font-size:.78rem">Esto es una charla para conocerte de verdad, no un formulario — no hay apuro ni respuestas correctas. Podés cortar cuando quieras y seguimos después; solo hace falta que la terminemos en algún momento antes de empezar a buscar posibles vínculos para vos.</div>
     <div id="avisoNoGuardado" style="padding:.5rem 1.2rem;text-align:center;color:#9a8e96;background:rgba(201,168,76,.06);font-family:Georgia,serif;font-style:italic;font-size:.78rem">Todavía no se guardó nada de esta charla — seguí un poco más para que tu progreso quede guardado automáticamente.</div>
     <div class="chat-area" id="chatArea"></div>
     <div id="chatAvisoLimite" style="display:none;padding:.3rem 1.2rem;text-align:center;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.78rem"></div>
@@ -3773,6 +3774,8 @@ async function initChat(){
   var saludo=window.userNombre?('Hola '+window.userNombre+', ¿cómo estás?'):'Hola. ¿Cómo estás?';
   addMsg('soul',saludo);
   chatHistory.push({role:'assistant',content:saludo});
+  var avisoInicio=document.getElementById('avisoInicioChat');
+  if(avisoInicio)avisoInicio.style.display='block';
   adjuntarListenersChat();
 }
 function adjuntarListenersChat(){
@@ -3874,6 +3877,8 @@ function avanzarManualmente(){
 
 async function enviarAlChat(txt){
   addMsg('user',txt);chatHistory.push({role:'user',content:txt});
+  var avisoInicio=document.getElementById('avisoInicioChat');
+  if(avisoInicio)avisoInicio.style.display='none';
   chequearGuardadoTemprano();
   showTyping();
   try{
