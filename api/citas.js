@@ -141,9 +141,12 @@ async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const otrosIds = [...new Set(matches.map(m => (m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a)))];
   let nombrePorId = {};
   if (otrosIds.length > 0) {
+    // 'usuarios' ya tiene politica RLS de "solo el dueño" -- leer el
+    // nombre/email de las OTRAS personas del match necesita la service role
+    // key, el token propio solo veria la fila de esta persona.
     const usuariosRes = await fetch(
       `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
-      { headers }
+      { headers: headersServicePerfiles(headers) }
     );
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
     // Algunas personas del piloto nunca guardaron "nombre" (solo email) --
@@ -234,7 +237,9 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   const receptorId = soyA ? match.usuario_b : match.usuario_a;
   const campoEmail = soyA ? 'ultimo_email_b' : 'ultimo_email_a';
 
-  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers });
+  // Lectura cruzada (remitente Y receptor) -- service role, ninguno de los
+  // dos tokens propios alcanza para ver la fila del otro.
+  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers: headersServicePerfiles(headers) });
   const usuarios = uRes.ok ? await uRes.json() : [];
   const receptor = usuarios.find(u => u.id === receptorId);
   const remitente = usuarios.find(u => u.id === remitenteId);
@@ -619,9 +624,10 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
     if (decision === 'seguir_soul') {
       try {
         const otroId = soyA ? match.usuario_b : match.usuario_a;
+        // Lectura cruzada (mi nombre Y el de la otra persona) -- service role.
         const usuariosRes = await fetch(
           `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
-          { headers }
+          { headers: headersServicePerfiles(headers) }
         );
         const usuariosFilas = usuariosRes.ok ? await usuariosRes.json() : [];
         const yo = usuariosFilas.find(u => u.id === usuario.usuarioId);
@@ -641,8 +647,9 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
   }
 
   // Mi parte ya termino -- vuelvo a 'chat', el estado normal de espera.
+  // Fila propia -- token propio, no el anon key.
   await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
-    method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    method: 'PATCH', headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ etapa_actual: 'chat' })
   }).catch(() => {});
   return res.status(200).json({ ok: true });
@@ -925,7 +932,8 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   }
   const soyA = match.usuario_a === usuario.usuarioId;
   const otraId = soyA ? match.usuario_b : match.usuario_a;
-  const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=eq.${encodeURIComponent(otraId)}`, { headers });
+  // Nombre/email de la OTRA persona -- service role, mi token no la alcanza.
+  const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=eq.${encodeURIComponent(otraId)}`, { headers: headersServicePerfiles(headers) });
   const otras = otraRes.ok ? await otraRes.json() : [];
   const otraPersonaNombre = otras[0] ? (otras[0].nombre || otras[0].email || null) : null;
 
@@ -1001,9 +1009,11 @@ Si hay un patrón real y consistente, escribí un mensaje breve (2-3 frases), en
 
 Respondé ÚNICAMENTE con JSON válido sin backticks: {"mensaje":null}`;
 
-async function revisarNivel2(supabaseUrl, headers, usuarioId) {
+async function revisarNivel2(supabaseUrl, headers, usuario) {
+  const usuarioId = usuario.usuarioId;
   try {
-    const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=ultimo_nivel2_mostrado&id=eq.${encodeURIComponent(usuarioId)}`, { headers });
+    // Fila propia -- token propio, no el anon key.
+    const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=ultimo_nivel2_mostrado&id=eq.${encodeURIComponent(usuarioId)}`, { headers: headersPropios(headers, usuario) });
     const usuarios = uRes.ok ? await uRes.json() : [];
     const ultimoMostrado = usuarios[0] ? (usuarios[0].ultimo_nivel2_mostrado || 0) : 0;
 
@@ -1025,7 +1035,7 @@ async function revisarNivel2(supabaseUrl, headers, usuarioId) {
     // patron real -- no tiene sentido re-evaluar el mismo tramo de citas
     // la proxima vez.
     await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuarioId)}`, {
-      method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      method: 'PATCH', headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ ultimo_nivel2_mostrado: proximoUmbral })
     });
 
@@ -1107,15 +1117,16 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   // nada que decidir (preguntarComoSeguir false), decidirSalaEncuentros ya
   // se encarga de devolverla a 'chat' cuando corresponda.
   if (preguntarComoSeguir) {
+    // Fila propia -- token propio, no el anon key.
     await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ etapa_actual: 'sala_encuentros' })
     }).catch(() => {});
   }
 
   const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
-  const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario.usuarioId);
+  const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario);
   if (mensajeNivel2) historialFinal.push({ role: 'assistant', content: mensajeNivel2 });
   await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario, historialFinal);
   await registrarEvento({
@@ -1190,8 +1201,9 @@ export default async function handler(req, res) {
       // Marca de presencia: mientras el cliente este polleando la cita
       // activamente, se lo considera "conectado" y no hace falta mandarle
       // mail cuando le llega un mensaje nuevo.
+      // Fila propia -- token propio, no el anon key.
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
-        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        method: 'PATCH', headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ ultima_actividad: new Date().toISOString() })
       }).catch(() => {});
       return await obtenerCita(req, res, supabaseUrl, headers, usuario);

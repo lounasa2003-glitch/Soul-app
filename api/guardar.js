@@ -134,10 +134,14 @@ export default async function handler(req, res) {
     }
     if (esUpsert) url += `?on_conflict=${UPSERT_CONFLICT_COLUMN[tabla]}`;
 
-    // Mismo criterio que en api/leer.js: 'conversaciones' y 'matches' ya
-    // tienen politica RLS real, asi que necesitan el token propio de la
-    // persona para que auth.uid() resuelva. El resto sigue con el anon key.
-    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles'];
+    // Mismo criterio que en api/leer.js: estas tablas ya tienen politica RLS
+    // real, asi que necesitan el token propio de la persona para que
+    // auth.uid() resuelva -- 'usuarios' incluida (ver
+    // migracion_rls_usuarios.sql): tanto el INSERT inicial de registro
+    // (auth_id ya viaja en datosFinales, ver mas arriba) como el PATCH de
+    // etapa_actual/datos basicos son siempre sobre la fila propia. El resto
+    // sigue con el anon key.
+    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles', 'usuarios'];
     const bearer = TABLAS_CON_RLS.includes(tabla) ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       method: filtro ? 'PATCH' : 'POST',
@@ -170,9 +174,11 @@ export default async function handler(req, res) {
       // pedir el reenvio desde la pantalla de "Revisá tu email".
       try {
         const token = crypto.randomBytes(24).toString('hex');
+        // 'usuarios' ya tiene politica RLS real -- token propio, misma
+        // persona que se acaba de insertar en este mismo request.
         await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(data[0].id)}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'return=minimal' },
+          headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${usuario.token}`, Prefer: 'return=minimal' },
           body: JSON.stringify({ token_confirmacion: token })
         });
         await notificarConfirmarMail({ nombre: data[0].nombre, email: data[0].email, token });

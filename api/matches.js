@@ -65,9 +65,13 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   const otrosIds = [...new Set(matches.map(m => (m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a)))];
   let nombrePorId = {};
   if (otrosIds.length > 0) {
+    // 'usuarios' ya tiene politica RLS de "solo el dueño" -- leer el
+    // nombre/email de las OTRAS personas de cada match necesita la service
+    // role key, mi token propio solo veria mi propia fila.
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const usuariosRes = await fetch(
       `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
-      { headers }
+      { headers: { ...headers, apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
     );
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
     usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
@@ -170,9 +174,12 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   // la OTRA persona para armar su bio necesita la service role key, el
   // token de quien pide la presentacion solo veria su propia fila.
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const headersService = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  // 'usuarios' tambien tiene politica RLS de "solo el dueño" -- misma razon
+  // que 'perfiles' arriba, service role key para leer a la otra persona.
   const [otraRes, perfilRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada,ciudad,ocupacion,tipo_vinculo,hijos,estado_civil,no_negociables,negociables&id=eq.${encodeURIComponent(otraId)}`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } })
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada,ciudad,ocupacion,tipo_vinculo,hijos,estado_civil,no_negociables,negociables&id=eq.${encodeURIComponent(otraId)}`, { headers: headersService }),
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers: headersService })
   ]);
   const otras = otraRes.ok ? await otraRes.json() : [];
   const otra = otras[0];
@@ -303,13 +310,18 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
       console.error('Error creando la cita o su mensaje de apertura:', e);
       await registrarErrorSilencioso({ contexto: 'api/matches: crear cita/mensaje apertura', error: e, meta: { matchId } });
     }
+    // Escritura cruzada -- se marca la etapa de LAS DOS personas del match,
+    // no solo la de quien esta aceptando. Service role key, ningun token
+    // propio alcanza para la fila de la otra persona.
+    const serviceKeyEtapa = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const headersServiceEtapa = { ...headers, apikey: serviceKeyEtapa, Authorization: `Bearer ${serviceKeyEtapa}` };
     await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_a)}`, {
-        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        method: 'PATCH', headers: { ...headersServiceEtapa, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ etapa_actual: 'cita' })
       }),
       fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(match.usuario_b)}`, {
-        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        method: 'PATCH', headers: { ...headersServiceEtapa, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ etapa_actual: 'cita' })
       })
     ]).catch(() => {});

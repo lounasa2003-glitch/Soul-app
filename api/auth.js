@@ -115,9 +115,11 @@ export default async function handler(req, res) {
         }
       }
 
+      // 'usuarios' ya tiene politica RLS real -- token propio, la persona
+      // sigue siendo dueña legitima de su fila hasta este mismo momento.
       await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
         method: 'PATCH',
-        headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        headers: { ...headersPropios, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ eliminacion_solicitada_en: new Date().toISOString() })
       });
 
@@ -154,9 +156,16 @@ export default async function handler(req, res) {
     // "Revisá tu email" sin sesion valida todavia en algunos casos, y
     // confirmarMail llega desde el link del mail, que puede abrirse en un
     // dispositivo distinto al que se registro.
+    // 'usuarios' ya tiene politica RLS real de "solo el dueño" (auth.uid() =
+    // auth_id), y estas dos acciones no tienen ningun token de usuario para
+    // forwardear (ver el comentario arriba sobre por que no requieren
+    // sesion). Service role key, mismo criterio que
+    // lib/recordatorioIntake.js/recordatorioMatches.js para los barridos sin
+    // sesion de nadie -- una politica anon permisiva hubiera expuesto toda
+    // la tabla, no solo este caso puntual.
     if (accion === 'reenviarConfirmacion') {
-      const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
-      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,mail_confirmado&email=eq.${encodeURIComponent(email)}`, { headers: headersSb });
+      const headersService = { apikey: supabaseKey, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` };
+      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,mail_confirmado&email=eq.${encodeURIComponent(email)}`, { headers: headersService });
       const rows = rowRes.ok ? await rowRes.json() : [];
       const fila = rows[0];
       // Misma respuesta exista o no la cuenta, o ya este confirmada -- este
@@ -165,7 +174,7 @@ export default async function handler(req, res) {
         const token = crypto.randomBytes(24).toString('hex');
         await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
           method: 'PATCH',
-          headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          headers: { ...headersService, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
           body: JSON.stringify({ token_confirmacion: token })
         });
         await notificarConfirmarMail({ nombre: fila.nombre, email: fila.email, token });
@@ -176,8 +185,8 @@ export default async function handler(req, res) {
     if (accion === 'confirmarMail') {
       const { token } = req.body;
       if (!token) return res.status(400).json({ error: 'Falta token' });
-      const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
-      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&token_confirmacion=eq.${encodeURIComponent(token)}`, { headers: headersSb });
+      const headersService = { apikey: supabaseKey, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` };
+      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&token_confirmacion=eq.${encodeURIComponent(token)}`, { headers: headersService });
       const rows = rowRes.ok ? await rowRes.json() : [];
       const fila = rows[0];
       if (!fila) {
@@ -185,7 +194,7 @@ export default async function handler(req, res) {
       }
       await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
         method: 'PATCH',
-        headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        headers: { ...headersService, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ mail_confirmado: true, token_confirmacion: null })
       });
       return res.status(200).json({ ok: true });

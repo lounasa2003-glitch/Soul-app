@@ -86,7 +86,8 @@ export default async function handler(req, res) {
       // Las cuentas de prueba fijas (Vista Previa del panel admin) usan a
       // proposito el dominio @soul-app.test -- nunca deben terminar
       // matcheadas con una persona real por casualidad de compatibilidad.
-      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=like.*@soul-app.test`, { headers })
+      // Filtro sobre TODAS las cuentas, no solo la propia -- service role.
+      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=like.*@soul-app.test`, { headers: headersServiceRole })
     ]);
     let otrosPerfiles = otrosRes.ok ? await otrosRes.json() : [];
     const idsCuentasPrueba = new Set((cuentasPruebaRes.ok ? await cuentasPruebaRes.json() : []).map((u) => u.id));
@@ -128,9 +129,11 @@ export default async function handler(req, res) {
     let generoPorId = {};
     if (idsCandidatos.length > 0) {
       const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max,hijos,preferencia_hijos,no_negociables,negociables';
+      // La segunda lectura es sobre TODOS los candidatos (no solo yo) --
+      // service role para las dos, mismo criterio que arriba con 'perfiles'.
       const [miUsuarioRes, otrosUsuariosRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=eq.${encodeURIComponent(usuarioId)}`, { headers }),
-        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers })
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=eq.${encodeURIComponent(usuarioId)}`, { headers: headersServiceRole }),
+        fetch(`${supabaseUrl}/rest/v1/usuarios?select=${SELECT_FILTRO}&id=in.(${idsCandidatos.map(encodeURIComponent).join(',')})`, { headers: headersServiceRole })
       ]);
       const miUsuarioRows = miUsuarioRes.ok ? await miUsuarioRes.json() : [];
       miGeneroInfo = miUsuarioRows[0] || null;
