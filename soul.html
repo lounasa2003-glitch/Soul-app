@@ -430,6 +430,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <input type="file" id="inCaraPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,'upCaraPerfil',true)">
           </div>
           <p class="photo-slot-lbl">Tu cara</p>
+          <label style="display:flex;align-items:flex-start;gap:.4rem;margin-top:.5rem;cursor:pointer;text-align:left">
+            <input type="checkbox" id="mpFotoAprobada" style="margin-top:.2rem;flex-shrink:0">
+            <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.8rem;color:#9a8e96;line-height:1.4">Autorizo mostrarla a mi match</span>
+          </label>
         </div>
         <div class="photo-slot">
           <div class="photo-up" id="upCuerpoPerfil" onclick="document.getElementById('inCuerpoPerfil').click()">
@@ -439,10 +443,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
           <p class="photo-slot-lbl">Tu cuerpo</p>
         </div>
       </div>
-      <label style="display:flex;align-items:flex-start;gap:.6rem;margin:1rem 0 1.2rem;cursor:pointer;text-align:left">
-        <input type="checkbox" id="mpFotoAprobada" style="margin-top:.2rem">
-        <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.95rem;color:#9a8e96;line-height:1.5">Autorizo que mi foto de cara se muestre a la persona con la que tenga un match, como parte de su presentación</span>
-      </label>
 
       <p class="step-sub">Nombre</p>
       <input class="step-in" type="text" id="mpNombre">
@@ -805,6 +805,10 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
               <input type="file" id="inCara" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCara',true)">
             </div>
             <p class="photo-slot-lbl">Tu cara</p>
+            <label style="display:flex;align-items:flex-start;gap:.4rem;margin-top:.5rem;cursor:pointer;text-align:left">
+              <input type="checkbox" id="chkFotoAprobada" onchange="window.fotoAprobada=this.checked" style="margin-top:.2rem;flex-shrink:0">
+              <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.82rem;color:#9a8e96;line-height:1.4">Autorizo mostrarla a mi match</span>
+            </label>
           </div>
           <div class="photo-slot">
             <div class="photo-up" id="upCuerpo" onclick="document.getElementById('inCuerpo').click()">
@@ -814,11 +818,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <p class="photo-slot-lbl">Tu cuerpo</p>
           </div>
         </div>
-        <label style="display:flex;align-items:flex-start;gap:.6rem;margin:1.2rem 0;cursor:pointer;text-align:left">
-          <input type="checkbox" id="chkFotoAprobada" onchange="window.fotoAprobada=this.checked" style="margin-top:.2rem">
-          <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#9a8e96;line-height:1.5">Autorizo que mi foto de cara se muestre a la persona con la que tenga un match, como parte de su presentación</span>
-        </label>
-        <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%">Continuar →</button>
+        <button class="btn-gold" id="btn6" disabled onclick="nextStep(6)" style="width:100%;margin-top:1.2rem">Continuar →</button>
       </div>
       <div class="step" id="st7">
         <p class="step-lbl">Paso 8 de 8</p>
@@ -921,7 +921,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <img id="presentacionFoto" style="width:100%;height:100%;object-fit:cover;display:none">
     </div>
     <p id="presentacionNombre" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.5rem;color:#c9a84c;margin-bottom:.3rem">—</p>
-    <p id="presentacionBio" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.3rem;color:#d8cdd2;line-height:1.6;margin-bottom:1.8rem">Conociendo un poco más...</p>
+    <p id="presentacionBio" style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.3rem;color:#d8cdd2;line-height:1.6;margin-bottom:1.2rem">Conociendo un poco más...</p>
+    <div id="presentacionDatos" style="font-family:Georgia,serif;font-size:.85rem;color:#9a8e96;line-height:1.9;margin-bottom:1.8rem"></div>
     <div id="matchDecisionBtns" style="display:flex;margin-top:1rem;gap:.6rem;justify-content:center;flex-wrap:wrap">
       <button class="btn-gold" onclick="decidirEnMatch(true)">Quiero conocer a esta persona →</button>
       <button class="btn-secundario" onclick="decidirEnMatch(false)" style="padding:.9rem 1.2rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.88rem;cursor:pointer">Prefiero esperar otro match</button>
@@ -4249,6 +4250,13 @@ async function cargarPresentacionMatch(matchId){
     var data=await res.json();
     document.getElementById('presentacionNombre').textContent=data.nombre?(data.nombre+(data.edad?', '+data.edad:'')):'Alguien especial';
     document.getElementById('presentacionBio').textContent=data.bio||'Soul todavía está conociendo a esta persona.';
+    var lineasDatos=[];
+    if(data.ciudad||data.ocupacion)lineasDatos.push([data.ciudad,data.ocupacion].filter(Boolean).join(' · '));
+    if(data.tipoVinculo)lineasDatos.push('Busca '+data.tipoVinculo);
+    if(data.hijos||data.estadoCivil)lineasDatos.push([data.hijos,data.estadoCivil].filter(Boolean).join(' · '));
+    if(data.noNegociables)lineasDatos.push('No negocia: '+data.noNegociables);
+    if(data.negociables)lineasDatos.push('Sí podría negociar: '+data.negociables);
+    document.getElementById('presentacionDatos').innerHTML=lineasDatos.map(function(l){return '<p>'+esc(l)+'</p>'}).join('');
     if(data.foto){
       var img=document.getElementById('presentacionFoto');
       img.src=data.foto;
@@ -4270,6 +4278,7 @@ function initMatch(){
     document.getElementById('presentacionFoto').style.display='none';
     document.getElementById('presentacionNombre').textContent='—';
     document.getElementById('presentacionBio').textContent='Conociendo un poco más...';
+    document.getElementById('presentacionDatos').innerHTML='';
     presentacionLista=cargarPresentacionMatch(window.matchData.id);
   }
   var c=document.getElementById('matchCanvas');
