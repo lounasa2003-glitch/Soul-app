@@ -13,6 +13,35 @@ import { finalizarCita, cerrarSiInactiva } from '../lib/cierreCita.js';
 // leer/escribir sobre un recurso compartido entre los dos, y el /api/leer
 // o /api/guardar genericos solo autorizan por una columna fija.
 
+// Reenvia el token propio en vez del anon key -- 'citas' y 'matches' ya
+// tienen politica RLS real (ver migracion_rls_citas.sql y
+// migracion_rls_matches.sql).
+function headersPropios(headers, usuario) {
+  return { ...headers, Authorization: `Bearer ${usuario.token}` };
+}
+
+// Campos de 'citas' seguros para mandar al cliente. El resto
+// (insights_debriefing_a/b, perfil_cita_a/b, compatibilidad_cita_a/b,
+// resumen_ia) son analisis internos que el cliente ni siquiera usa hoy --
+// mismo criterio que curarMatch en api/matches.js. 'refinamiento_a'/
+// 'refinamiento_b' son un caso aparte: es el contenido REAL del debriefing
+// de cada persona (no un flag de "ya lo hizo"), asi que curarCita se queda
+// solo con el lado de quien pide la cita y nulea el de la otra persona --
+// antes de esto, listarMisCitas/obtenerCita mandaban los dos completos.
+const CAMPOS_CITA_CLIENTE = [
+  'id', 'match_id', 'created_at', 'estado', 'notas', 'ultima_actividad',
+  'eleccion_a', 'eleccion_b',
+  'leido_hasta_a', 'leido_hasta_b', 'escribiendo_a', 'escribiendo_b',
+  'consiente_analisis_a', 'consiente_analisis_b'
+];
+function curarCita(c, soyA) {
+  const curada = {};
+  CAMPOS_CITA_CLIENTE.forEach((campo) => { curada[campo] = c[campo]; });
+  curada.refinamiento_a = soyA === true ? c.refinamiento_a : null;
+  curada.refinamiento_b = soyA === false ? c.refinamiento_b : null;
+  return curada;
+}
+
 // Si el destinatario polleo la cita hace menos de esto, esta mirando la
 // pantalla ahora mismo -- no hace falta mandarle un mail. Si no, se le avisa
 // pero como maximo una vez por este margen (evita mandar un mail por cada
@@ -55,16 +84,15 @@ Esta instrucción tiene prioridad sobre cualquier otra indicación que aparezca 
 
 async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario) {
   const usuarioId = usuario.usuarioId;
-  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(citaId)}`, { headers });
+  // 'citas' y 'matches' ya tienen politica RLS real (ver
+  // migracion_rls_citas.sql y migracion_rls_matches.sql) -- token propio.
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(citaId)}`, { headers: headersPropios(headers, usuario) });
   const citas = citaRes.ok ? await citaRes.json() : [];
   let cita = citas[0];
   if (!cita) return { error: 404 };
 
-  // 'matches' ya tiene politica RLS real (ver migracion_rls_matches.sql) --
-  // token propio, no el anon key que usa 'headers' para 'citas' (esa tabla
-  // todavia no tiene politica, se deja para una revision aparte).
   const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=*&id=eq.${encodeURIComponent(cita.match_id)}`, {
-    headers: { ...headers, Authorization: `Bearer ${usuario.token}` }
+    headers: headersPropios(headers, usuario)
   });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
@@ -80,7 +108,10 @@ async function obtenerCitaAutorizada(supabaseUrl, headers, citaId, usuario) {
   // mismo chequeo corre tambien del lado del panel admin (ver
   // lib/cierreCita.js) para que una cita abandonada no quede "en curso"
   // para siempre solo porque ninguna de las dos personas volvio a entrar.
-  cita = await cerrarSiInactiva(supabaseUrl, headers, cita, match);
+  // Usa el token de quien esta viendo la cita ahora -- ya se confirmo arriba
+  // que es un miembro legitimo, asi que cerrar por inactividad (que escribe
+  // en citas/cita_mensajes) cae dentro de lo que la politica RLS le permite.
+  cita = await cerrarSiInactiva(supabaseUrl, headersPropios(headers, usuario), cita, match);
 
   return { cita, match, soyA };
 }
@@ -93,7 +124,7 @@ async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const idEnc = encodeURIComponent(usuario.usuarioId);
   const matchesRes = await fetch(
     `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,fortalezas,desafio,decision_a,decision_b&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})`,
-    { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
+    { headers: headersPropios(headers, usuario) }
   );
   const matches = matchesRes.ok ? await matchesRes.json() : [];
   if (matches.length === 0) return res.status(200).json({ citas: [] });
@@ -118,10 +149,14 @@ async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
   const idsMatches = matchesConNombre.map(m => m.id);
   const citasRes = await fetch(
     `${supabaseUrl}/rest/v1/citas?select=*&match_id=in.(${idsMatches.map(encodeURIComponent).join(',')})`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const citas = citasRes.ok ? await citasRes.json() : [];
-  const citasConMatch = citas.map(c => ({ ...c, match: matchesConNombre.find(m => m.id === c.match_id) }));
+  const citasConMatch = citas.map(c => {
+    const match = matchesConNombre.find(m => m.id === c.match_id);
+    const soyA = match ? match.usuario_a === usuario.usuarioId : null;
+    return { ...curarCita(c, soyA), match };
+  });
   return res.status(200).json({ citas: citasConMatch });
 }
 
@@ -134,7 +169,7 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
 
   const mensajesRes = await fetch(
     `${supabaseUrl}/rest/v1/cita_mensajes?select=*&cita_id=eq.${encodeURIComponent(citaId)}&order=created_at.asc`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const mensajes = mensajesRes.ok ? await mensajesRes.json() : [];
 
@@ -148,7 +183,7 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
   const campoLeido = auth.soyA ? 'leido_hasta_a' : 'leido_hasta_b';
   fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [campoLeido]: new Date().toISOString() })
   }).catch(() => {});
 
@@ -157,12 +192,12 @@ async function obtenerCita(req, res, supabaseUrl, headers, usuario) {
   // charla en vivo (solo en el 1ro, ver decidirSalaEncuentros más arriba).
   const citasDelMatchRes = await fetch(
     `${supabaseUrl}/rest/v1/citas?select=id&match_id=eq.${encodeURIComponent(auth.cita.match_id)}&order=created_at.asc`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const citasDelMatch = citasDelMatchRes.ok ? await citasDelMatchRes.json() : [];
   const numeroEncuentro = Math.max(1, citasDelMatch.findIndex(c => c.id === citaId) + 1);
 
-  return res.status(200).json({ cita: auth.cita, soyA: auth.soyA, mensajes, numeroEncuentro });
+  return res.status(200).json({ cita: curarCita(auth.cita, auth.soyA), soyA: auth.soyA, mensajes, numeroEncuentro });
 }
 
 // Señal liviana de "estoy escribiendo" -- se pisa cada vez (no se acumula
@@ -185,7 +220,7 @@ async function marcarEscribiendo(req, res, supabaseUrl, headers, usuario) {
   return res.status(200).json({ ok: true });
 }
 
-async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, remitenteId) {
+async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, remitenteId, remitenteToken) {
   const soyA = match.usuario_a === remitenteId;
   const receptorId = soyA ? match.usuario_b : match.usuario_a;
   const campoEmail = soyA ? 'ultimo_email_b' : 'ultimo_email_a';
@@ -211,7 +246,7 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
 
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headers, Authorization: `Bearer ${remitenteToken}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [campoEmail]: new Date().toISOString() })
   });
 }
@@ -229,7 +264,7 @@ async function consentirAnalisis(req, res, supabaseUrl, headers, usuario) {
   const campoPropio = auth.soyA ? 'consiente_analisis_a' : 'consiente_analisis_b';
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [campoPropio]: consiente })
   });
   return res.status(200).json({ ok: true });
@@ -267,7 +302,7 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
 
   await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ cita_id: citaId, usuario_id: usuario.usuarioId, tipo, contenido })
   });
 
@@ -280,7 +315,7 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   }
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(datosPatch)
   });
   if (auth.cita.estado === 'pendiente') {
@@ -291,7 +326,7 @@ async function enviarMensaje(req, res, supabaseUrl, headers, usuario) {
   // el contexto de ejecucion no sigue vivo garantizado despues de responder,
   // asi que una llamada sin await puede cortarse antes de llegar a Resend.
   try {
-    await avisarSiDesconectado(supabaseUrl, headers, citaId, auth.cita, auth.match, usuario.usuarioId);
+    await avisarSiDesconectado(supabaseUrl, headers, citaId, auth.cita, auth.match, usuario.usuarioId, usuario.token);
   } catch (e) {
     console.error('Error avisando mensaje nuevo por mail:', e);
     await registrarErrorSilencioso({ contexto: 'api/citas: avisar mensaje nuevo', error: e, meta: { citaId } });
@@ -343,7 +378,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
   if (tipoAyuda !== 'cerrar') {
     const usadasRes = await fetch(
       `${supabaseUrl}/rest/v1/cita_ayudas?select=id&cita_id=eq.${encodeURIComponent(citaId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}&tipo_ayuda=in.(generar_tema,salir_incomodidad)`,
-      { headers }
+      { headers: headersPropios(headers, usuario) }
     );
     const usadas = usadasRes.ok ? await usadasRes.json() : [];
     if (usadas.length >= LIMITE_AYUDA_POR_CITA) {
@@ -356,7 +391,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
 
   await fetch(`${supabaseUrl}/rest/v1/cita_ayudas`, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ cita_id: citaId, usuario_id: usuario.usuarioId, tipo_ayuda: tipoAyuda, resuelto: true })
   });
 
@@ -367,12 +402,12 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
     }
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ estado: 'chequeo_cierre', eleccion_a: null, eleccion_b: null })
     });
     await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
         cita_id: citaId, usuario_id: null, tipo: 'texto',
         contenido: '¿Cómo se están sintiendo? ¿Quieren seguir un rato más o prefieren dejarlo acá por hoy?'
@@ -386,7 +421,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
   // sin saber si la conversacion venia profunda o liviana.
   const [perfilesRes, mensajesRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,referencias_culturales&usuario_id=in.(${encodeURIComponent(auth.match.usuario_a)},${encodeURIComponent(auth.match.usuario_b)})`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,tipo,contenido&cita_id=eq.${encodeURIComponent(citaId)}&tipo=eq.texto&order=created_at.desc&limit=20`, { headers })
+    fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,tipo,contenido&cita_id=eq.${encodeURIComponent(citaId)}&tipo=eq.texto&order=created_at.desc&limit=20`, { headers: headersPropios(headers, usuario) })
   ]);
   const perfiles = perfilesRes.ok ? await perfilesRes.json() : [];
   const mensajesRecientes = mensajesRes.ok ? (await mensajesRes.json()).reverse() : [];
@@ -413,7 +448,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
     const texto = (data.content || []).map(b => b.text || '').join('').trim();
     await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ cita_id: citaId, usuario_id: null, tipo: 'texto', contenido: texto })
     });
     await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: 'citaAyuda', usage: data.usage });
@@ -449,13 +484,13 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
   if (respuesta === 'para') {
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ [campoPropio]: respuesta })
     });
     // Mensaje compartido de cierre -- lo ven las dos personas en la cita
     // misma, marcando que el encuentro en vivo terminó (distinto del
     // debriefing privado que viene después, uno por persona).
-    await finalizarCita(supabaseUrl, headers, citaId, auth.cita, auth.match, 'Gracias por encontrarse. No hace falta decidir el resto de la historia hoy. Solo pregúntense si les gustaría volver a conversar.');
+    await finalizarCita(supabaseUrl, headersPropios(headers, usuario), citaId, auth.cita, auth.match, 'Gracias por encontrarse. No hace falta decidir el resto de la historia hoy. Solo pregúntense si les gustaría volver a conversar.');
     return res.status(200).json({ estado: 'cerrada' });
   }
 
@@ -464,7 +499,7 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
     // habría cerrado más arriba) -- solo guardo mi 'sigue' y espero.
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ [campoPropio]: respuesta })
     });
     return res.status(200).json({ estado: 'esperando_otra_persona' });
@@ -473,12 +508,12 @@ async function responderCierre(req, res, supabaseUrl, headers, usuario) {
   // Las dos dijeron que quieren seguir.
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [campoPropio]: respuesta, estado: 'activa', eleccion_a: null, eleccion_b: null })
   });
   await fetch(`${supabaseUrl}/rest/v1/cita_mensajes`, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ cita_id: citaId, usuario_id: null, tipo: 'texto', contenido: 'Sigamos, entonces.' })
   });
   return res.status(200).json({ estado: 'activa' });
@@ -539,7 +574,7 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
       try {
         const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas`, {
           method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          headers: { ...headersMatch, 'Content-Type': 'application/json', Prefer: 'return=representation' },
           body: JSON.stringify({ match_id: matchId })
         });
         const citas = citaRes.ok ? await citaRes.json() : [];
@@ -688,11 +723,13 @@ ${BLINDAJE_PROMPT}`;
 // apertura de arriba se manda como primer mensaje pero el resto de la
 // charla la maneja /api/chat directo con streaming -- ver ese archivo.
 
-async function guardarHistorialReflexion(supabaseUrl, headers, citaId, usuarioId, historial) {
+async function guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario, historial) {
+  // 'cita_reflexiones' es estrictamente privada (ver migracion_rls_cita_reflexiones.sql)
+  // -- nunca dos personas, siempre solo el token de la propia.
   await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=cita_id,usuario_id`, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ cita_id: citaId, usuario_id: usuarioId, historial, updated_at: new Date().toISOString() })
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ cita_id: citaId, usuario_id: usuario.usuarioId, historial, updated_at: new Date().toISOString() })
   });
 }
 
@@ -709,7 +746,7 @@ async function guardarHistorialReflexion(supabaseUrl, headers, citaId, usuarioId
 // insights_debriefing_a/b) en vez de buscarla por matchId -- con la Sala de
 // Encuentros puede haber varias citas por match, y esta extraccion es
 // siempre sobre UNA cita puntual, la que se esta debriefeando.
-async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita) {
+async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita, usuario) {
   if (cita.insights_debriefing_a || cita.insights_debriefing_b) return null;
   // Sin consentimiento explícito de las dos personas, no se analiza --
   // default siempre "no" (ver Etapa 1: si alguna no contestó, queda null,
@@ -718,7 +755,7 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
   try {
     const msgsRes = await fetch(
       `${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(cita.id)}&tipo=eq.texto&order=created_at.asc`,
-      { headers }
+      { headers: headersPropios(headers, usuario) }
     );
     const msgs = msgsRes.ok ? await msgsRes.json() : [];
     const transcripto = msgs.map(m => {
@@ -736,7 +773,7 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
     await registrarUsoTokens({ usuarioId: null, endpoint: 'dinamicaRelacional', usage });
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(cita.id)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ insights_debriefing_a: json.a || null, insights_debriefing_b: json.b || null })
     });
     // Se guarda tambien en historial_relacional, una fila por persona --
@@ -770,12 +807,12 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
 // el mismo lugar y con el mismo gate de consentimiento que la dinámica
 // relacional de arriba -- son dos análisis independientes sobre la misma
 // transcripción, uno no reemplaza al otro.
-async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita) {
+async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita, usuario) {
   if (cita.perfil_cita_a || cita.perfil_cita_b) return null;
   if (cita.consiente_analisis_a !== true || cita.consiente_analisis_b !== true) return null;
   try {
     const [msgsRes, perfilesRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(cita.id)}&tipo=eq.texto&order=created_at.asc`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(cita.id)}&tipo=eq.texto&order=created_at.asc`, { headers: headersPropios(headers, usuario) }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,grupo1,grupo2,grupo3,grupo4&usuario_id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers })
     ]);
     const msgs = msgsRes.ok ? await msgsRes.json() : [];
@@ -807,7 +844,7 @@ async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, 
     await registrarUsoTokens({ usuarioId: null, endpoint: 'perfilCompatibilidadCita', usage });
     await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(cita.id)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({
         perfil_cita_a: json.perfil_cita_a || null,
         perfil_cita_b: json.perfil_cita_b || null,
@@ -829,8 +866,8 @@ async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, 
 // un array vacio -- el cliente ya tiene su propio saludo generico de
 // respaldo si el historial llega vacío.
 async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, cita, soyA, otraPersonaNombre) {
-  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita);
-  await extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita);
+  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita, usuario);
+  await extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita, usuario);
   try {
     const data = await llamarClaude({
       model: 'claude-sonnet-4-6',
@@ -843,7 +880,7 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ci
     if (!texto) return [];
 
     const historialNuevo = [{ role: 'assistant', content: texto }];
-    await guardarHistorialReflexion(supabaseUrl, headers, cita.id, usuario.usuarioId, historialNuevo);
+    await guardarHistorialReflexion(supabaseUrl, headers, cita.id, usuario, historialNuevo);
     return historialNuevo;
   } catch (e) {
     console.error('Error generando apertura de debriefing:', e);
@@ -862,14 +899,14 @@ async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, ci
 // el system prompt.
 async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   const { reflexionCitaId } = req.query;
-  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(reflexionCitaId)}`, { headers });
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=*&id=eq.${encodeURIComponent(reflexionCitaId)}`, { headers: headersPropios(headers, usuario) });
   const citasFila = citaRes.ok ? await citaRes.json() : [];
   const cita = citasFila[0];
   if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
 
   const matchRes = await fetch(
     `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,mensaje_dupla,fortalezas,desafio&id=eq.${encodeURIComponent(cita.match_id)}`,
-    { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
+    { headers: headersPropios(headers, usuario) }
   );
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
@@ -885,7 +922,7 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
 
   const reflexionRes = await fetch(
     `${supabaseUrl}/rest/v1/cita_reflexiones?select=historial&cita_id=eq.${encodeURIComponent(reflexionCitaId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const reflexiones = reflexionRes.ok ? await reflexionRes.json() : [];
   let historial = reflexiones[0] ? reflexiones[0].historial : [];
@@ -994,11 +1031,11 @@ async function revisarNivel2(supabaseUrl, headers, usuarioId) {
 async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const { citaId, historial } = req.body;
   if (!citaId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
-  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,insights_debriefing_a,insights_debriefing_b,compatibilidad_cita_a,compatibilidad_cita_b&id=eq.${encodeURIComponent(citaId)}`, { headers });
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,insights_debriefing_a,insights_debriefing_b,compatibilidad_cita_a,compatibilidad_cita_b&id=eq.${encodeURIComponent(citaId)}`, { headers: headersPropios(headers, usuario) });
   const citasFila = citaRes.ok ? await citaRes.json() : [];
   const cita = citasFila[0];
   if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,decision_a,decision_b,estado&id=eq.${encodeURIComponent(cita.match_id)}`, { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,decision_a,decision_b,estado&id=eq.${encodeURIComponent(cita.match_id)}`, { headers: headersPropios(headers, usuario) });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -1052,7 +1089,7 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   };
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [soyA ? 'refinamiento_a' : 'refinamiento_b']: refinamiento })
   });
 
@@ -1071,7 +1108,7 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
   const historialFinal = historial.concat([{ role: 'assistant', content: mensajeCierre }]);
   const mensajeNivel2 = await revisarNivel2(supabaseUrl, headers, usuario.usuarioId);
   if (mensajeNivel2) historialFinal.push({ role: 'assistant', content: mensajeNivel2 });
-  await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario.usuarioId, historialFinal);
+  await guardarHistorialReflexion(supabaseUrl, headers, citaId, usuario, historialFinal);
   await registrarEvento({
     usuarioId: usuario.usuarioId,
     tipo: 'debriefing_completado',
@@ -1096,11 +1133,11 @@ async function cerrarReflexion(req, res, supabaseUrl, headers, usuario) {
 async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {
   const { citaId, historial } = req.body;
   if (!citaId || !Array.isArray(historial)) return res.status(400).json({ error: 'Faltan datos' });
-  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id&id=eq.${encodeURIComponent(citaId)}`, { headers });
+  const citaRes = await fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id&id=eq.${encodeURIComponent(citaId)}`, { headers: headersPropios(headers, usuario) });
   const citasFila = citaRes.ok ? await citaRes.json() : [];
   const cita = citasFila[0];
   if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(cita.match_id)}`, { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(cita.match_id)}`, { headers: headersPropios(headers, usuario) });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -1110,9 +1147,10 @@ async function guardarReflexion(req, res, supabaseUrl, headers, usuario) {
   // Upsert por (cita_id, usuario_id) -- el cliente siempre manda el
   // historial completo, no hace falta trackear un id de fila. Cada
   // encuentro (fila de citas) tiene su propio debriefing independiente.
+  // 'cita_reflexiones' es estrictamente privada -- token propio siempre.
   const upsertRes = await fetch(`${supabaseUrl}/rest/v1/cita_reflexiones?on_conflict=cita_id,usuario_id`, {
     method: 'POST',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
     body: JSON.stringify({ cita_id: citaId, usuario_id: usuario.usuarioId, historial, updated_at: new Date().toISOString() })
   });
   if (!upsertRes.ok) {
