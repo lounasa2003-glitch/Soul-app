@@ -491,21 +491,28 @@ function construirSeccionPersonas(def,lista){
     tablaWrap.className='personas-tabla-wrap';
     var tabla=document.createElement('table');
     tabla.className='personas-tabla';
-    tabla.innerHTML='<thead><tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th><th>Última entrada</th><th></th></tr></thead>';
+    tabla.innerHTML='<thead><tr><th>Nombre</th><th>Email</th><th>Ciudad</th><th>Etapa</th><th>Última entrada</th><th>Plan</th><th></th></tr></thead>';
     var tbody=document.createElement('tbody');
     lista.forEach(function(p){
       var tr=document.createElement('tr');
       tr.className='persona-row';
       tr.onclick=function(){ abrirHojaDeVida(p.id); };
       var badgeIncompleto=p.basicosIncompletos?' <span title="Le faltan datos básicos (fecha de nacimiento, género o preferencia) pese a haber avanzado" style="color:#d98a9e;font-weight:700;cursor:help">⚠</span>':'';
+      var badgeBorrado=p.cuenta_eliminada?' <span title="Cuenta ya purgada" style="color:#7a6e78;font-style:italic">(eliminada)</span>':(p.eliminacion_solicitada_en?' <span title="Pidió borrar su cuenta, se purga a los 30 días de la solicitud" style="color:#d98a9e;font-style:italic">(borrado pedido)</span>':'');
       var esArchivada=def.clave==='archivadas';
-      tr.innerHTML='<td data-label="Nombre">'+esc(p.nombre||'(sin nombre)')+badgeIncompleto+'</td>'
+      var esPro=p.plan==='pro';
+      tr.innerHTML='<td data-label="Nombre">'+esc(p.nombre||'(sin nombre)')+badgeIncompleto+badgeBorrado+'</td>'
         +'<td data-label="Email">'+esc(p.email||'')+'</td>'
         +'<td data-label="Ciudad">'+esc(p.ciudad||'—')+'</td>'
         +'<td data-label="Etapa"><span class="etapa-chip">'+esc(etapaLegible(p.etapa_actual))+'</span></td>'
         +'<td data-label="Última entrada">'+esc(formatearUltimaEntrada(p))+'</td>'
-        +'<td data-label=""><button class="btn-secundario" style="padding:.3rem .6rem;font-size:.72rem">'+(esArchivada?'Desarchivar':'Archivar')+'</button></td>';
-      tr.querySelector('button').onclick=function(ev){
+        +'<td data-label="Plan"><span style="color:'+(esPro?'#c9a84c':'#7a6e78')+';font-weight:600">'+(esPro?'Pro':'Free')+'</span></td>'
+        +'<td data-label=""><button class="btn-secundario btn-plan" style="padding:.3rem .6rem;font-size:.72rem;margin-right:.3rem">'+(esPro?'Pasar a Free':'Pasar a Pro')+'</button><button class="btn-secundario" style="padding:.3rem .6rem;font-size:.72rem">'+(esArchivada?'Desarchivar':'Archivar')+'</button></td>';
+      tr.querySelector('.btn-plan').onclick=function(ev){
+        ev.stopPropagation();
+        cambiarPlanPersona(p.id,esPro?'free':'pro');
+      };
+      tr.querySelectorAll('button')[1].onclick=function(ev){
         ev.stopPropagation();
         archivarPersona(p.id,!esArchivada);
       };
@@ -525,6 +532,19 @@ async function archivarPersona(id,archivar){
     if(!res.ok)return;
     var p=personasCache.find(function(x){return x.id===id;});
     if(p)p.archivada=archivar;
+    aplicarFiltrosPersonas();
+  }catch(e){}
+}
+
+// Interruptor manual de plan mientras no haya pago conectado (ver
+// LIMITE_ANALISIS_FREE/PRO en api/analisisExterno.js y el gate de modulos en
+// api/chat.js) -- cuando exista StoreKit/IAP esto se deja de usar a mano.
+async function cambiarPlanPersona(id,plan){
+  try{
+    var res=await llamarAdmin('/api/admin/personas?id='+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:plan})});
+    if(!res.ok)return;
+    var p=personasCache.find(function(x){return x.id===id;});
+    if(p)p.plan=plan;
     aplicarFiltrosPersonas();
   }catch(e){}
 }

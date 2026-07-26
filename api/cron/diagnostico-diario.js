@@ -1,4 +1,6 @@
 import { notificarDiagnosticoDiario } from '../../lib/email.js';
+import { finalizarCita } from '../../lib/cierreCita.js';
+import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 
 // Corre una vez por dia (ver vercel.json) y junta en un solo lugar lo que
 // hoy solo se ve revisando a mano Resend/Supabase por separado -- tanto los
@@ -23,6 +25,121 @@ const USD_POR_MILLON_CACHE_READ = USD_POR_MILLON_INPUT * 0.1;
 
 function haceHoras(horas) {
   return new Date(Date.now() - horas * 3600 * 1000).toISOString();
+}
+
+// Plazo prometido en legal.html ("tus datos se borran dentro de los 30 días
+// posteriores a la solicitud") -- solicitarBorrado en api/auth.js ya corta
+// el acceso al toque (ver eliminacion_solicitada_en en lib/authUtil.js);
+// esto es lo que hace el borrado real, corrido desde ESTE cron (no uno
+// nuevo) porque el plan Hobby de Vercel ya esta al limite de funciones.
+const DIAS_GRACIA_BORRADO = 30;
+
+// Las tablas puramente personales (nadie mas las necesita) se borran
+// directo. Las compartidas con otra persona real (cita_mensajes, matches,
+// citas) NO se tocan aca -- borrarlas completas destruiria el registro de
+// la OTRA persona de un vinculo real que ella no pidio borrar. En cambio se
+// anonimiza la fila de 'usuarios' en el lugar (mismo id, para no romper los
+// FK de matches/citas que sigan referenciandola) y se le saca todo dato
+// personal. uso_tokens/eventos_piloto tampoco se tocan: son metricas
+// agregadas (conteos, no contenido), no dato personal identificable.
+const TABLAS_PERSONALES_A_BORRAR = ['perfiles', 'conversaciones', 'historial_relacional', 'intentos_fuga_prompt'];
+
+async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
+  // Defensivo: si por lo que sea quedo una cita abierta (no deberia, ya se
+  // cierran en el momento de solicitarBorrado), no se la deja huerfana.
+  const matchesRes = await fetch(
+    `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuarioId)},usuario_b.eq.${encodeURIComponent(usuarioId)})`,
+    { headers }
+  );
+  const matches = matchesRes.ok ? await matchesRes.json() : [];
+  if (matches.length) {
+    const idsMatches = matches.map((m) => encodeURIComponent(m.id)).join(',');
+    const citasRes = await fetch(
+      `${supabaseUrl}/rest/v1/citas?select=*&match_id=in.(${idsMatches})&estado=in.(pendiente,activa,chequeo_cierre)`,
+      { headers }
+    );
+    const citasAbiertas = citasRes.ok ? await citasRes.json() : [];
+    for (const cita of citasAbiertas) {
+      const match = matches.find((m) => m.id === cita.match_id);
+      if (!match) continue;
+      await finalizarCita(supabaseUrl, headers, cita.id, cita, match, 'Este encuentro cerró porque una de las dos personas dejó Soul.').catch(() => {});
+    }
+  }
+
+  for (const tabla of TABLAS_PERSONALES_A_BORRAR) {
+    await fetch(`${supabaseUrl}/rest/v1/${tabla}?usuario_id=eq.${encodeURIComponent(usuarioId)}`, { method: 'DELETE', headers })
+      .catch((e) => registrarErrorSilencioso({ contexto: `cron/diagnostico-diario: purgar ${tabla}`, error: e, meta: { usuarioId } }));
+  }
+
+  // Borrar la identidad real de Supabase Auth (email, password) requiere la
+  // service role key, que hoy NO esta configurada en este proyecto (solo
+  // existe SUPABASE_ANON_KEY) -- sin ella se anonimiza igual la fila de
+  // 'usuarios', pero el login con ese email tecnicamente seguiria existiendo
+  // en Supabase Auth hasta que se agregue esa env var. Se busca por email
+  // (no se asume que usuarios.id == auth user id, ver soul_seguridad_rls).
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let authBorrado = false;
+  if (serviceKey) {
+    try {
+      const filaRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=email&id=eq.${encodeURIComponent(usuarioId)}`, { headers });
+      const fila = (filaRes.ok ? await filaRes.json() : [])[0];
+      if (fila && fila.email) {
+        const buscarRes = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(fila.email)}`, {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
+        });
+        const buscarData = buscarRes.ok ? await buscarRes.json() : null;
+        const authUser = buscarData && Array.isArray(buscarData.users) ? buscarData.users[0] : null;
+        if (authUser) {
+          const delRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(authUser.id)}`, {
+            method: 'DELETE',
+            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
+          });
+          authBorrado = delRes.ok;
+        }
+      }
+    } catch (e) {
+      await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: borrar usuario de Supabase Auth', error: e, meta: { usuarioId } });
+    }
+  }
+
+  // Tombstone: se anonimiza en vez de borrar la fila para no romper los FK
+  // de matches/citas que la otra persona real todavia necesita.
+  await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuarioId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({
+      cuenta_eliminada: true,
+      nombre: null, email: `borrada-${usuarioId}@soul-app.eliminado`,
+      fecha_nacimiento: null, hora_nacimiento: null, ciudad: null, distancia_max: null,
+      genero: null, preferencia_genero: null, tipo_vinculo: null, hijos: null, preferencia_hijos: null,
+      estado_civil: null, ocupacion: null, no_negociables: null, negociables: null,
+      foto_cara: null, foto_cuerpo: null, foto_aprobada: false,
+      mail_confirmado: false, token_confirmacion: null
+    })
+  });
+
+  return authBorrado;
+}
+
+async function purgarCuentasVencidas(supabaseUrl, supabaseKey) {
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  const limite = haceHoras(DIAS_GRACIA_BORRADO * 24);
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/usuarios?select=id&cuenta_eliminada=eq.false&eliminacion_solicitada_en=lte.${encodeURIComponent(limite)}`,
+    { headers }
+  );
+  const pendientes = res.ok ? await res.json() : [];
+  let purgadas = 0, authBorrados = 0;
+  for (const u of pendientes) {
+    try {
+      const authOk = await purgarUsuario(supabaseUrl, supabaseKey, headers, u.id);
+      purgadas += 1;
+      if (authOk) authBorrados += 1;
+    } catch (e) {
+      await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e, meta: { usuarioId: u.id } });
+    }
+  }
+  return { candidatas: pendientes.length, purgadas, authBorrados, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY };
 }
 
 // Este HTML se guarda en diagnosticos_diarios.texto_resumen y despues se
@@ -94,6 +211,15 @@ export default async function handler(req, res) {
   try {
     const desde = haceHoras(VENTANA_HORAS);
 
+    // Va antes que el resto del diagnostico (que es solo lectura) porque
+    // esto SI escribe/borra -- si algo de la lectura de mas abajo fallara,
+    // preferible que el borrado de cuentas vencidas ya haya corrido.
+    const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+      .catch(async (e) => {
+        await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e });
+        return { candidatas: 0, purgadas: 0, authBorrados: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
+      });
+
     const [errores, reportes, fugas, tokens, resend, sinConfirmar, reportesTecnicos] = await Promise.all([
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
@@ -130,6 +256,7 @@ export default async function handler(req, res) {
       resend,
       cuentasSinConfirmar: { total: sinConfirmar.length, filas: sinConfirmar },
       reportesTecnicos: { total: reportesTecnicos.length, porContexto: reportesTecnicosPorContexto, filas: reportesTecnicos },
+      borradoDeCuentas: purgado,
       tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
@@ -160,6 +287,13 @@ export default async function handler(req, res) {
     lineas.push(`<h3>Cuentas trabadas sin confirmar mail (+${UMBRAL_SIN_CONFIRMAR_HORAS}hs): ${sinConfirmar.length}</h3>`);
     if (sinConfirmar.length) {
       lineas.push('<ul>' + sinConfirmar.map(u => `<li>${esc(u.nombre || '(sin nombre)')} — ${esc(u.email)}</li>`).join('') + '</ul>');
+    }
+
+    lineas.push(`<h3>Borrado de cuentas (30 días de gracia): ${purgado.purgadas} de ${purgado.candidatas} vencidas</h3>`);
+    if (!purgado.serviceKeyConfigurada && purgado.candidatas > 0) {
+      lineas.push('<p>⚠ Falta SUPABASE_SERVICE_ROLE_KEY -- los datos de la app se borraron pero el usuario sigue existiendo en Supabase Auth (todavía podría loguearse con ese email/contraseña).</p>');
+    } else if (purgado.purgadas > 0) {
+      lineas.push(`<p>Auth borrado de verdad en ${purgado.authBorrados} de ${purgado.purgadas}.</p>`);
     }
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);

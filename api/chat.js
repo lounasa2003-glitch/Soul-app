@@ -15,6 +15,14 @@ const MODELO_RAPIDO = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS_TOPE = 1500;
 const LIMITE_CHAT = 30;
 const VENTANA_CHAT_SEGUNDOS = 300;
+// Tope diario aparte del anti-rafaga de arriba -- ese frena mandar mensajes
+// muy rapido, este frena una conversacion anormalmente larga sostenida
+// durante horas. 80/dia no lo toca una conversacion reflexiva real (el uso
+// del piloto nunca se acerco a eso), pero corta un loop de abuso o un bug de
+// reintento. Aplica a free Y pro por igual -- es seguridad tecnica, no un
+// limite de producto, asi que no depende del plan.
+const LIMITE_CHAT_DIARIO = 80;
+const VENTANA_CHAT_DIARIO_SEGUNDOS = 86400;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -47,6 +55,14 @@ export default async function handler(req, res) {
         segundosParaReset: limiteInfo.segundosParaReset
       });
     }
+    const limiteDiarioInfo = await chequearLimite(usuario.email, 'chat-diario', LIMITE_CHAT_DIARIO, VENTANA_CHAT_DIARIO_SEGUNDOS);
+    if (!limiteDiarioInfo.permitido) {
+      return res.status(429).json({
+        error: 'limite_diario_alcanzado',
+        mensaje: 'Llegaste al límite de mensajes por hoy. Volvé mañana.',
+        segundosParaReset: limiteDiarioInfo.segundosParaReset
+      });
+    }
     // Se manda como header (no como parte del body) porque el chat principal
     // usa streaming -- el body en ese caso es texto plano progresivo, no JSON,
     // asi que no hay forma de sumarle un campo ahi. El header lo pueden leer
@@ -63,6 +79,16 @@ export default async function handler(req, res) {
     if (contexto === 'modulo') {
       if (!usuario.usuarioId) {
         return res.status(403).json({ error: 'Todavía no existe tu perfil' });
+      }
+      // Los modulos de profundizacion son la extension paga -- el chat
+      // principal (onboarding + charla libre) sigue completo y sin tope de
+      // plan arriba, que es lo que no se puede tocar sin traicionar la
+      // mision de Soul. Esto es lo unico que hoy queda atras de Pro.
+      if (usuario.plan !== 'pro') {
+        return res.status(403).json({
+          error: 'requiere_pro',
+          mensaje: 'Este momento de profundización es parte de Soul Pro.'
+        });
       }
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseKey = process.env.SUPABASE_ANON_KEY;

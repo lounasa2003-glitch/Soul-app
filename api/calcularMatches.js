@@ -9,6 +9,13 @@ import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCo
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
+// Free recalcula como mucho 1 vez cada 72hs -- el perfil no cambia tan
+// rapido como para justificar mas, y calcularMatches compara contra todos
+// los demas perfiles activos asi que escala con el tamaño de la base, no
+// solo con esta persona. Pro mantiene el limite anti-abuso de siempre
+// (5/hora) sin tope de producto adicional.
+const LIMITE_MATCHES_FREE = 1;
+const VENTANA_MATCHES_FREE_SEGUNDOS = 259200;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -41,6 +48,16 @@ export default async function handler(req, res) {
         error: 'limite_alcanzado',
         mensaje: 'Ya calculaste tus matches varias veces en poco tiempo. Probá de nuevo más tarde.'
       });
+    }
+    if (usuario.plan !== 'pro') {
+      const limiteFreeInfo = await chequearLimite(usuario.email, 'calcularMatches-free', LIMITE_MATCHES_FREE, VENTANA_MATCHES_FREE_SEGUNDOS);
+      if (!limiteFreeInfo.permitido) {
+        return res.status(429).json({
+          error: 'limite_free_alcanzado',
+          mensaje: 'En el plan gratuito podés recalcular matches una vez cada 3 días. Soul Pro lo permite con más frecuencia.',
+          segundosParaReset: limiteFreeInfo.segundosParaReset
+        });
+      }
     }
 
     const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };

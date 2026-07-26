@@ -26,15 +26,26 @@ export default async function handler(req, res) {
 
   // Archivar/desarchivar una persona -- no borra nada, solo la saca de la
   // vista principal del panel (ver "archivada" en la query de listado).
-  // Reversible en cualquier momento desde la sección "Archivadas".
+  // Reversible en cualquier momento desde la sección "Archivadas". El mismo
+  // PATCH tambien cambia 'plan' (free/pro) -- no hay pago conectado todavia
+  // (StoreKit/IAP pendiente para iOS), asi que esto es el interruptor manual
+  // que usa Lu mientras tanto para dar Pro a alguien a mano.
   if (req.method === 'PATCH') {
     if (!id) return res.status(400).json({ error: 'Falta id' });
-    const { archivada } = req.body || {};
-    if (typeof archivada !== 'boolean') return res.status(400).json({ error: 'Falta archivada (boolean)' });
+    const { archivada, plan } = req.body || {};
+    if (typeof archivada !== 'boolean' && plan === undefined) {
+      return res.status(400).json({ error: 'Falta archivada (boolean) o plan' });
+    }
+    if (plan !== undefined && plan !== 'free' && plan !== 'pro') {
+      return res.status(400).json({ error: "plan invalido, tiene que ser 'free' o 'pro'" });
+    }
+    const cambios = {};
+    if (typeof archivada === 'boolean') cambios.archivada = archivada;
+    if (plan !== undefined) cambios.plan = plan;
     const patchRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ archivada })
+      body: JSON.stringify(cambios)
     });
     if (!patchRes.ok) {
       return res.status(500).json({ error: 'No se pudo actualizar' });
@@ -49,7 +60,7 @@ export default async function handler(req, res) {
       // personas), y el volumen de un piloto no justifica nada mas
       // elaborado. Se calcula al pedirlo, no en vivo/cacheado.
       const [tokensRes, eventosRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,modulo_fase,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=tipo,usuario_id`, { headers })
       ]);
       const tokensFilas = tokensRes.ok ? await tokensRes.json() : [];
@@ -69,7 +80,36 @@ export default async function handler(req, res) {
         + (f.outputTokens / 1e6) * PRECIO_OUTPUT_POR_MILLON
         + (f.cacheCreationTokens / 1e6) * PRECIO_CACHE_CREATION_POR_MILLON
         + (f.cacheReadTokens / 1e6) * PRECIO_CACHE_READ_POR_MILLON;
+      // Agrupa cada endpoint tecnico en una etapa del recorrido de la
+      // persona -- 'chat' sola mezcla onboarding y modulos posteriores, asi
+      // que se distingue por modulo_fase (null = onboarding/chat general).
+      // 'operativo_admin' son llamados que dispara la administradora (
+      // ranking, comparacion manual, cierre forzado), no algo que una
+      // persona nueva dispare por su cuenta -- no escala 1:1 con el caudal
+      // de usuarios, por eso queda separado y sin costo-por-persona.
+      function etapaDe(endpoint, moduloFase) {
+        if (endpoint === 'calcularMatches') return 'calculo_matches';
+        if (endpoint === 'chat') return moduloFase ? 'modulos_perfil' : 'onboarding_y_chat';
+        if (endpoint === 'analisisExterno') return 'extractor_perfil_externo';
+        if (endpoint === 'citaAyuda') return 'encuentro_ayuda';
+        if (['debriefingApertura', 'cierreDebriefing', 'dinamicaRelacional', 'perfilCompatibilidadCita', 'nivel2'].includes(endpoint)) return 'debriefing';
+        if (['adminComparar', 'adminRanking', 'adminForzarCierrePerfil'].includes(endpoint)) return 'operativo_admin';
+        return 'otro';
+      }
+      // Etapa del embudo (ver ORDEN_EMBUDO) que sirve de denominador para el
+      // costo-por-persona de cada etapa de costo -- no es 1:1 porque las
+      // etapas de costo son mas finas que los eventos del embudo.
+      const DENOMINADOR_EMBUDO = {
+        onboarding_y_chat: 'registro',
+        modulos_perfil: 'onboarding_completado',
+        calculo_matches: 'calculo_matches',
+        extractor_perfil_externo: 'registro',
+        encuentro_ayuda: 'encuentro_agendado',
+        debriefing: 'debriefing_completado'
+      };
+
       const porEndpoint = {};
+      const porEtapa = {};
       let totalInput = 0, totalOutput = 0, totalCacheCreation = 0, totalCacheRead = 0;
       tokensFilas.forEach((f) => {
         const ep = f.endpoint || '(sin nombre)';
@@ -79,6 +119,15 @@ export default async function handler(req, res) {
         porEndpoint[ep].cacheCreationTokens += f.cache_creation_tokens || 0;
         porEndpoint[ep].cacheReadTokens += f.cache_read_tokens || 0;
         porEndpoint[ep].llamadas += 1;
+
+        const etapa = etapaDe(f.endpoint, f.modulo_fase);
+        if (!porEtapa[etapa]) porEtapa[etapa] = { etapa, inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0, llamadas: 0 };
+        porEtapa[etapa].inputTokens += f.input_tokens || 0;
+        porEtapa[etapa].outputTokens += f.output_tokens || 0;
+        porEtapa[etapa].cacheCreationTokens += f.cache_creation_tokens || 0;
+        porEtapa[etapa].cacheReadTokens += f.cache_read_tokens || 0;
+        porEtapa[etapa].llamadas += 1;
+
         totalInput += f.input_tokens || 0;
         totalOutput += f.output_tokens || 0;
         totalCacheCreation += f.cache_creation_tokens || 0;
@@ -99,8 +148,21 @@ export default async function handler(req, res) {
       const ORDEN_EMBUDO = ['registro', 'onboarding_completado', 'calculo_matches', 'primera_conversacion', 'encuentro_agendado', 'encuentro_cerrado', 'debriefing_completado', 'eleccion_post_encuentro'];
       const embudo = ORDEN_EMBUDO.map((tipo) => ({ tipo, personas: usuariosPorTipo[tipo] ? usuariosPorTipo[tipo].size : 0 }));
 
+      // costoPorPersonaUsd usa como denominador la etapa del embudo que le
+      // corresponde a cada etapa de costo (ver DENOMINADOR_EMBUDO) -- null
+      // si esa etapa del embudo todavia no tiene ninguna persona (piloto
+      // chico), para no mostrar una division por cero como si fuera 0.
+      const tokensPorEtapa = Object.values(porEtapa)
+        .map((f) => {
+          const tipoEmbudo = DENOMINADOR_EMBUDO[f.etapa];
+          const personas = tipoEmbudo ? (usuariosPorTipo[tipoEmbudo] ? usuariosPorTipo[tipoEmbudo].size : 0) : 0;
+          const costoEstimadoUsd = costoDe(f);
+          return { ...f, costoEstimadoUsd, personas: tipoEmbudo ? personas : null, costoPorPersonaUsd: personas > 0 ? costoEstimadoUsd / personas : null };
+        })
+        .sort((a, b) => b.costoEstimadoUsd - a.costoEstimadoUsd);
+
       return res.status(200).json({
-        tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint },
+        tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint, porEtapa: tokensPorEtapa },
         embudo
       });
     }
@@ -160,7 +222,7 @@ export default async function handler(req, res) {
       // ── Listado de personas ──
       const [usuariosRes, eventosRes] = await Promise.all([
         fetch(
-          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual,fecha_nacimiento,genero,preferencia_genero,created_at,ultima_actividad,archivada`,
+          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ciudad,etapa_actual,fecha_nacimiento,genero,preferencia_genero,created_at,ultima_actividad,archivada,plan,cuenta_eliminada,eliminacion_solicitada_en`,
           { headers }
         ),
         // Cuenta de eventos por persona -- sirve como proxy de "movimiento

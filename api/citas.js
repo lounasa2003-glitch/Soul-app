@@ -18,6 +18,13 @@ import { finalizarCita, cerrarSiInactiva } from '../lib/cierreCita.js';
 // pero como maximo una vez por este margen (evita mandar un mail por cada
 // mensaje de una tanda mientras esta desconectado).
 const ACTIVO_MS = 2 * 60 * 1000;
+// Tope de ayuda privada real (generar_tema/salir_incomodidad, las dos que
+// llaman a Claude) por persona por cita -- 'cerrar' no cuenta porque no
+// genera ningun llamado al modelo. Cubre cualquier uso real de un encuentro
+// (nadie pide ayuda mas de un par de veces en una charla real) y frena
+// spammear el boton. No depende del plan: es seguridad, no un limite de
+// producto -- una sola cita real ya acota el volumen total.
+const LIMITE_AYUDA_POR_CITA = 5;
 const COOLDOWN_EMAIL_MS = 20 * 60 * 1000;
 
 // A diferencia de /api/chat, este endpoint no tenia ningun limite -- tanto
@@ -325,6 +332,20 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
   if (auth.error) return res.status(auth.error).json({ error: 'No autorizado' });
   if (auth.cita.estado === 'cerrada') {
     return res.status(409).json({ error: 'cita_cerrada', mensaje: 'Este encuentro ya cerró.' });
+  }
+
+  if (tipoAyuda !== 'cerrar') {
+    const usadasRes = await fetch(
+      `${supabaseUrl}/rest/v1/cita_ayudas?select=id&cita_id=eq.${encodeURIComponent(citaId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}&tipo_ayuda=in.(generar_tema,salir_incomodidad)`,
+      { headers }
+    );
+    const usadas = usadasRes.ok ? await usadasRes.json() : [];
+    if (usadas.length >= LIMITE_AYUDA_POR_CITA) {
+      return res.status(429).json({
+        error: 'limite_alcanzado',
+        mensaje: 'Ya usaste varias veces la ayuda de Soul en este encuentro.'
+      });
+    }
   }
 
   await fetch(`${supabaseUrl}/rest/v1/cita_ayudas`, {

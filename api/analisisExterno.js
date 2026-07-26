@@ -3,7 +3,14 @@ import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 
-const LIMITE_ANALISIS = 2;
+// Free: 2 usos de por vida (el limite que ya tenia el piloto antes de que
+// existiera Pro, se mantiene igual). Pro: 10 -- generoso pero no ilimitado,
+// protege margen ante el caso raro de uso desproporcionado incluso pagando.
+// Ambos son limites de por vida (no mensuales) sobre analisis_usados, que ya
+// existia -- un reset mensual real necesitaria una columna de fecha aparte,
+// se deja para mas adelante si hace falta.
+const LIMITE_ANALISIS_FREE = 2;
+const LIMITE_ANALISIS_PRO = 10;
 
 export const EXTRACT_PROMPT = `Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}
 
@@ -33,10 +40,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
 
-    if ((usuario.analisisUsados || 0) >= LIMITE_ANALISIS) {
+    const limiteAnalisis = usuario.plan === 'pro' ? LIMITE_ANALISIS_PRO : LIMITE_ANALISIS_FREE;
+    if ((usuario.analisisUsados || 0) >= limiteAnalisis) {
       return res.status(403).json({
         error: 'limite_alcanzado',
-        mensaje: 'Ya usaste los 2 análisis disponibles por ahora.'
+        mensaje: `Ya usaste los ${limiteAnalisis} análisis disponibles por ahora.${usuario.plan === 'pro' ? '' : ' Soul Pro incluye más.'}`
       });
     }
 

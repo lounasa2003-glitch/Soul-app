@@ -519,6 +519,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
       <button class="btn-gold" id="miPerfilGuardarBtn" onclick="guardarMiPerfil()" style="width:100%;margin-top:.5rem">Guardar cambios →</button>
       <button class="btn-back" onclick="volverAMenuPrincipal()">← Volver</button>
+      <p onclick="solicitarBorrarCuenta()" style="text-align:center;margin-top:1.8rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.75rem;cursor:pointer;opacity:.7">Eliminar mi cuenta</p>
     </div>
   </div>
 </div>
@@ -3046,6 +3047,22 @@ async function guardarMiPerfil(){
 // resetear a mano cada variable global una por una.
 function cerrarSesion(){
   location.reload();
+}
+
+// Pide confirmacion explicita (mismo patron que eliminarMatch) porque es
+// irreversible -- avisa el plazo de 30 dias que ya promete legal.html para
+// que no sea sorpresa despues. El acceso se corta al toque del lado del
+// servidor (ver eliminacion_solicitada_en); el reload solo limpia el estado
+// local, que igual nunca sobrevive a un refresh en esta app.
+async function solicitarBorrarCuenta(){
+  if(!confirm('¿Eliminar tu cuenta de Soul? Vas a perder el acceso ahora mismo. Tus datos se borran dentro de los próximos 30 días, como indican los Términos. Esto no se puede deshacer.'))return;
+  try{
+    await fetchConSesion(function(){
+      return fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'solicitarBorrado'})});
+    });
+  }catch(e){}
+  alert('Tu cuenta va a eliminarse dentro de los próximos 30 días. Gracias por haber sido parte de Soul.');
+  cerrarSesion();
 }
 
 // ── Reflexión privada sobre una cita puntual (chat aparte del principal) ──

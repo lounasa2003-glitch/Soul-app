@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { notificarConfirmarMail } from '../lib/email.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
+import { verificarUsuario } from '../lib/authUtil.js';
+import { finalizarCita } from '../lib/cierreCita.js';
 
 const REDIRECT_URL = 'https://soulapp.love/soul.html';
 
@@ -69,6 +71,53 @@ export default async function handler(req, res) {
           segundosParaReset: limiteInfo.segundosParaReset
         });
       }
+    }
+
+    // Borrado de cuenta pedido desde adentro de la app (Mi perfil ->
+    // Eliminar mi cuenta, ver soul.html). El acceso se corta AHORA MISMO
+    // (verificarUsuario en lib/authUtil.js trata eliminacion_solicitada_en
+    // como sesion invalida) -- el purgado real de datos (perfiles,
+    // conversaciones, historial, y el usuario en Supabase Auth) pasa recien
+    // a los 30 dias, corrido por el cron de api/cron/diagnostico-diario.js,
+    // igual que promete legal.html. Antes de cortar el acceso, se cierran
+    // con calidez los encuentros que sigan abiertos -- no tiene sentido
+    // dejar a alguien esperando una respuesta que nunca va a llegar.
+    if (accion === 'solicitarBorrado') {
+      const usuario = await verificarUsuario(req);
+      if (!usuario || !usuario.usuarioId) {
+        return res.status(401).json({ error: 'Sesión inválida o expirada' });
+      }
+      const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+
+      const matchesRes = await fetch(
+        `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuario.usuarioId)},usuario_b.eq.${encodeURIComponent(usuario.usuarioId)})`,
+        { headers: headersSb }
+      );
+      const matches = matchesRes.ok ? await matchesRes.json() : [];
+      if (matches.length) {
+        const idsMatches = matches.map((m) => encodeURIComponent(m.id)).join(',');
+        const citasRes = await fetch(
+          `${supabaseUrl}/rest/v1/citas?select=*&match_id=in.(${idsMatches})&estado=in.(pendiente,activa,chequeo_cierre)`,
+          { headers: headersSb }
+        );
+        const citasAbiertas = citasRes.ok ? await citasRes.json() : [];
+        for (const cita of citasAbiertas) {
+          const match = matches.find((m) => m.id === cita.match_id);
+          if (!match) continue;
+          await finalizarCita(
+            supabaseUrl, headersSb, cita.id, cita, match,
+            'Esta persona decidió dejar Soul. No hace falta decidir el resto de la historia hoy -- lo que vivieron hasta acá sigue siendo real.'
+          ).catch((e) => registrarErrorSilencioso({ contexto: 'api/auth: cerrar cita al borrar cuenta', error: e, meta: { citaId: cita.id } }));
+        }
+      }
+
+      await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+        method: 'PATCH',
+        headers: { ...headersSb, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ eliminacion_solicitada_en: new Date().toISOString() })
+      });
+
+      return res.status(200).json({ ok: true, mensaje: 'Tu cuenta va a eliminarse dentro de los próximos 30 días.' });
     }
 
     // El link de recuperación llega con el token de sesión de la persona
