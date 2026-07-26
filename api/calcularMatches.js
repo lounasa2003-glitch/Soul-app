@@ -90,9 +90,11 @@ export default async function handler(req, res) {
     // (ej. el boton "Reintentar" tras un error en un paso posterior) podia
     // volver a correr calcularMatches() y crear una fila nueva con la misma
     // persona, gastando Claude de nuevo y ensuciando el listado de matches.
+    // 'matches' ya tiene politica RLS real (ver migracion_rls_matches.sql) --
+    // token propio, no el anon key.
     const yaMatcheadosRes = await fetch(
       `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuarioId)},usuario_b.eq.${encodeURIComponent(usuarioId)})`,
-      { headers }
+      { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
     );
     const yaMatcheados = yaMatcheadosRes.ok ? await yaMatcheadosRes.json() : [];
     const idsYaMatcheados = new Set(
@@ -179,7 +181,7 @@ export default async function handler(req, res) {
       // asi que la persona real nunca lo ve como si fuera un match.
       const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+        headers: { ...headers, Authorization: `Bearer ${usuario.token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
         body: JSON.stringify({
           usuario_a: usuarioId,
           usuario_b: otro.usuario_id,

@@ -44,14 +44,16 @@ export default async function handler(req, res) {
     const { campo, operador, valor } = parsearFiltro(filtroFinal);
     const url = `${supabaseUrl}/rest/v1/${tabla}?select=*&${campo}=${operador}.${encodeURIComponent(valor)}`;
 
-    // 'conversaciones' ya tiene politica RLS real (ver
-    // migracion_rls_conversaciones.sql) -- reenvia el token propio de la
-    // persona para que auth.uid() resuelva de verdad, en vez del anon key
-    // (que Postgres ve como rol 'anon', sin ningun usuario detras). El resto
-    // de las tablas sigue con el anon key hasta que tengan su propia
-    // politica -- la autorizacion para esas la sigue haciendo esta funcion
-    // (filtroDeLecturaValido de arriba), no la base.
-    const bearer = tabla === 'conversaciones' ? usuario.token : supabaseKey;
+    // 'conversaciones' y 'matches' ya tienen politica RLS real (ver
+    // migracion_rls_conversaciones.sql y migracion_rls_matches.sql) --
+    // reenvia el token propio de la persona para que auth.uid() resuelva de
+    // verdad, en vez del anon key (que Postgres ve como rol 'anon', sin
+    // ningun usuario detras). El resto de las tablas sigue con el anon key
+    // hasta que tengan su propia politica -- la autorizacion para esas la
+    // sigue haciendo esta funcion (filtroDeLecturaValido de arriba), no la
+    // base.
+    const TABLAS_CON_RLS = ['conversaciones', 'matches'];
+    const bearer = TABLAS_CON_RLS.includes(tabla) ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       headers: {
         'apikey': supabaseKey,

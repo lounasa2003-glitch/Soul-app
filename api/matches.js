@@ -15,6 +15,35 @@ import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 // para su validación extra: consulta propia en vez de forzar el caso en el
 // validador compartido.
 
+// Construye el header de Authorization con el token propio de la persona en
+// vez del anon key -- solo para llamados a la tabla 'matches' (ver
+// migracion_rls_matches.sql), donde la politica RLS de "sos parte de este
+// match" hace que auth.uid() resuelva de verdad. El resto de las tablas que
+// toca este archivo (usuarios ajenos, perfiles, citas, reportes) siguen con
+// el anon key -- reenviar el token ahi no protege nada porque son lecturas
+// cruzadas entre personas, no autorizadas por RLS de una sola tabla propia.
+function headersPropios(headers, usuario) {
+  return { ...headers, Authorization: `Bearer ${usuario.token}` };
+}
+
+// Unicos campos que el cliente necesita de una fila de 'matches' -- el resto
+// (nota_admin, analisis_por_variable, insights_debriefing_a/b,
+// checkin_emocional_a/b, debriefing_usuario_a/b, par_clave, activado_por,
+// eliminado_por, recordatorios) son internos y no deben viajar al navegador
+// de ninguna de las dos personas. Antes de esto, el spread de la fila
+// completa mandaba insights_debriefing_b (la reflexion privada de la OTRA
+// persona) a la persona A, por ejemplo -- una fuga real, no hipotetica.
+const CAMPOS_MATCH_CLIENTE = [
+  'id', 'created_at', 'usuario_a', 'usuario_b', 'estado',
+  'compatibilidad_hoy', 'potencial_construccion', 'fortalezas', 'desafio', 'mensaje_dupla',
+  'fecha_respuesta', 'eleccion_usuario_a', 'eleccion_usuario_b', 'decision_a', 'decision_b'
+];
+function curarMatch(m) {
+  const curado = {};
+  CAMPOS_MATCH_CLIENTE.forEach((campo) => { curado[campo] = m[campo]; });
+  return curado;
+}
+
 // Resuelve nombre (o email si nunca guardaron "nombre") de la otra persona
 // de cada match -- mismo fallback ya usado en api/admin/personas.js y en
 // listarMisCitas de api/citas.js. Hace falta para las etiquetas de la
@@ -28,7 +57,7 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
   // persona real nunca debe ver como si fueran un match sugerido.
   const response = await fetch(
     `${supabaseUrl}/rest/v1/matches?select=*&or=(usuario_a.eq.${idEnc},usuario_b.eq.${idEnc})&estado=neq.descartado`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const matches = response.ok ? await response.json() : [];
   if (matches.length === 0) return res.status(200).json({ matches: [] });
@@ -50,7 +79,7 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
     .filter(m => m.eliminado_por !== usuario.usuarioId)
     .map(m => {
       const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
-      return { ...m, otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
+      return { ...curarMatch(m), otra_persona_id: otraId, otra_persona_nombre: nombrePorId[otraId] || null };
     });
 
   return res.status(200).json({ matches: matchesConNombre });
@@ -79,7 +108,7 @@ async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
   const { matchId, motivo } = req.body;
   if (!matchId) return res.status(400).json({ error: 'Falta matchId' });
   if (motivo && !MOTIVOS_REPORTE.has(motivo)) return res.status(400).json({ error: 'Motivo no válido' });
-  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,eliminado_por&id=eq.${encodeURIComponent(matchId)}`, { headers });
+  const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,eliminado_por&id=eq.${encodeURIComponent(matchId)}`, { headers: headersPropios(headers, usuario) });
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
   if (!match) return res.status(404).json({ error: 'Match no encontrado' });
@@ -89,7 +118,7 @@ async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
   if (!match.eliminado_por) {
     await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(matchId)}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ eliminado_por: usuario.usuarioId })
     });
   }
@@ -127,7 +156,7 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   const { presentacionMatchId } = req.query;
   const matchRes = await fetch(
     `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&id=eq.${encodeURIComponent(presentacionMatchId)}`,
-    { headers }
+    { headers: headersPropios(headers, usuario) }
   );
   const matches = matchRes.ok ? await matchRes.json() : [];
   const match = matches[0];
@@ -138,7 +167,7 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
 
   const [otraRes, perfilRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada&id=eq.${encodeURIComponent(otraId)}`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada,ciudad,ocupacion,tipo_vinculo,hijos,estado_civil,no_negociables,negociables&id=eq.${encodeURIComponent(otraId)}`, { headers }),
     fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers })
   ]);
   const otras = otraRes.ok ? await otraRes.json() : [];
@@ -170,7 +199,18 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
     // muestre en la presentación de un match -- sin esa aprobación, la foto
     // existe (para el perfil interno) pero no viaja a la otra persona.
     foto: otra.foto_aprobada ? (otra.foto_cara || null) : null,
-    bio
+    bio,
+    // Campos de Capa A (datos concretos del intake) -- a diferencia de la
+    // bio, esto no pasa por Claude, se manda tal cual lo cargó la persona.
+    // Sigue sin incluir el perfil psicológico (grupo1-4): eso mantiene su
+    // momento más adelante en el flujo.
+    ciudad: otra.ciudad || null,
+    ocupacion: otra.ocupacion || null,
+    tipoVinculo: otra.tipo_vinculo || null,
+    hijos: otra.hijos || null,
+    estadoCivil: otra.estado_civil || null,
+    noNegociables: otra.no_negociables || null,
+    negociables: otra.negociables || null
   });
 }
 
@@ -187,7 +227,7 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
   }
   const idEnc = encodeURIComponent(matchId);
 
-  const filaRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=*&id=eq.${idEnc}`, { headers });
+  const filaRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=*&id=eq.${idEnc}`, { headers: headersPropios(headers, usuario) });
   const filas = filaRes.ok ? await filaRes.json() : [];
   const match = filas[0];
   if (!match) {
@@ -217,7 +257,7 @@ async function elegir(req, res, supabaseUrl, headers, usuario) {
 
   const patchRes = await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${idEnc}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify(datosPatch)
   });
   if (!patchRes.ok) {
@@ -279,7 +319,7 @@ async function cerrar(req, res, supabaseUrl, headers, usuario) {
   }
   const idEnc = encodeURIComponent(matchId);
 
-  const filaRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,estado&id=eq.${idEnc}`, { headers });
+  const filaRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b,estado&id=eq.${idEnc}`, { headers: headersPropios(headers, usuario) });
   const filas = filaRes.ok ? await filaRes.json() : [];
   const match = filas[0];
   if (!match) {
@@ -292,7 +332,7 @@ async function cerrar(req, res, supabaseUrl, headers, usuario) {
   if (match.estado === 'no_avanza') {
     await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${idEnc}`, {
       method: 'PATCH',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ estado: 'cerrado' })
     });
   }
