@@ -126,7 +126,7 @@ async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
     const otraPersonaId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
     await fetch(`${supabaseUrl}/rest/v1/reportes`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify({ match_id: matchId, usuario_reporta: usuario.usuarioId, usuario_reportado: otraPersonaId, motivo })
     });
   }

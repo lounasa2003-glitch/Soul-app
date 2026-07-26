@@ -128,7 +128,7 @@ export default async function handler(req, res) {
       : (ultimoMensaje && Array.isArray(ultimoMensaje.content) ? ultimoMensaje.content.map((b) => b.text || '').join(' ') : '');
 
     if (detectarIntentoDeFuga(textoUltimoMensaje)) {
-      await registrarIntentoFuga(usuario.usuarioId, textoUltimoMensaje, contexto || 'chat');
+      await registrarIntentoFuga(usuario, textoUltimoMensaje, contexto || 'chat');
       if (req.body.stream) {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
         res.write(RESPUESTA_INTENTO_FUGA);

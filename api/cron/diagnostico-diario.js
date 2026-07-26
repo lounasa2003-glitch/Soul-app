@@ -159,7 +159,11 @@ function esc(valor) {
 
 async function leerSupabase(tabla, params) {
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  // Este cron no tiene sesion de ninguna persona (corre solo, con
+  // CRON_SECRET) -- varias de estas tablas ya tienen politica RLS real, asi
+  // que el anon key devolveria 0 filas ahi. Service role bypasea RLS
+  // siempre, y no afecta a las tablas que todavia no tienen politica.
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
   const res = await fetch(`${supabaseUrl}/rest/v1/${tabla}?${params}`, {
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
   });
