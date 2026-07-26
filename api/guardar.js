@@ -99,7 +99,7 @@ export default async function handler(req, res) {
     let esUpsert = false;
     if (!filtro) {
       // INSERT: el dueño de la fila lo decide el servidor, no el cliente.
-      if (tabla === 'usuarios') datosFinales = { ...datos, email: usuario.email };
+      if (tabla === 'usuarios') datosFinales = { ...datos, email: usuario.email, auth_id: usuario.authId };
       else if (tabla === 'matches') datosFinales = { ...datos, usuario_a: usuario.usuarioId };
       else datosFinales = { ...datos, usuario_id: usuario.usuarioId };
       esUpsert = Object.prototype.hasOwnProperty.call(UPSERT_CONFLICT_COLUMN, tabla);
