@@ -223,7 +223,7 @@ async function marcarEscribiendo(req, res, supabaseUrl, headers, usuario) {
   const campoPropio = auth.soyA ? 'escribiendo_a' : 'escribiendo_b';
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
     method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    headers: { ...headersPropios(headers, usuario), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
     body: JSON.stringify({ [campoPropio]: new Date().toISOString() })
   });
   return res.status(200).json({ ok: true });

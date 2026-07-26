@@ -88,24 +88,28 @@ export default async function handler(req, res) {
         return res.status(401).json({ error: 'Sesión inválida o expirada' });
       }
       const headersSb = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+      // 'matches' y 'citas' ya tienen politica RLS real -- token propio de
+      // quien esta pidiendo el borrado (sigue siendo miembro legitimo hasta
+      // este mismo momento).
+      const headersPropios = { ...headersSb, Authorization: `Bearer ${usuario.token}` };
 
       const matchesRes = await fetch(
         `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuario.usuarioId)},usuario_b.eq.${encodeURIComponent(usuario.usuarioId)})`,
-        { headers: headersSb }
+        { headers: headersPropios }
       );
       const matches = matchesRes.ok ? await matchesRes.json() : [];
       if (matches.length) {
         const idsMatches = matches.map((m) => encodeURIComponent(m.id)).join(',');
         const citasRes = await fetch(
           `${supabaseUrl}/rest/v1/citas?select=*&match_id=in.(${idsMatches})&estado=in.(pendiente,activa,chequeo_cierre)`,
-          { headers: headersSb }
+          { headers: headersPropios }
         );
         const citasAbiertas = citasRes.ok ? await citasRes.json() : [];
         for (const cita of citasAbiertas) {
           const match = matches.find((m) => m.id === cita.match_id);
           if (!match) continue;
           await finalizarCita(
-            supabaseUrl, headersSb, cita.id, cita, match,
+            supabaseUrl, headersPropios, cita.id, cita, match,
             'Esta persona decidió dejar Soul. No hace falta decidir el resto de la historia hoy -- lo que vivieron hasta acá sigue siendo real.'
           ).catch((e) => registrarErrorSilencioso({ contexto: 'api/auth: cerrar cita al borrar cuenta', error: e, meta: { citaId: cita.id } }));
         }

@@ -218,7 +218,9 @@ export default async function handler(req, res) {
     // Va antes que el resto del diagnostico (que es solo lectura) porque
     // esto SI escribe/borra -- si algo de la lectura de mas abajo fallara,
     // preferible que el borrado de cuentas vencidas ya haya corrido.
-    const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+    // Service role key: matches/citas ya tienen politica RLS real, y este
+    // cron no tiene sesion de nadie para usar un token propio.
+    const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
       .catch(async (e) => {
         await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e });
         return { candidatas: 0, purgadas: 0, authBorrados: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
