@@ -134,12 +134,16 @@ export default async function handler(req, res) {
     }
     if (esUpsert) url += `?on_conflict=${UPSERT_CONFLICT_COLUMN[tabla]}`;
 
+    // Mismo criterio que en api/leer.js: 'conversaciones' ya tiene politica
+    // RLS real, asi que necesita el token propio de la persona para que
+    // auth.uid() resuelva. El resto sigue con el anon key.
+    const bearer = tabla === 'conversaciones' ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       method: filtro ? 'PATCH' : 'POST',
       headers: {
         'Content-Type': 'application/json',
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
+        'Authorization': `Bearer ${bearer}`,
         'Prefer': esUpsert ? 'resolution=merge-duplicates,return=representation' : 'return=representation'
       },
       body: JSON.stringify(datosFinales)

@@ -17,10 +17,17 @@ export default async function handler(req, res) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey || !serviceKey) {
     return res.status(500).json({ error: 'Supabase no configurado' });
   }
-  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  // El panel admin necesita ver TODO, no solo lo propio de una persona --
+  // eso nunca va a entrar en una politica RLS de "cada quien ve lo suyo".
+  // Con 'conversaciones' ya con politica real (ver
+  // migracion_rls_conversaciones.sql), el anon key pasa a ver 0 filas ahi
+  // (auth.uid() nulo no matchea nada); la service role key bypasea RLS por
+  // diseño de Supabase, sea cual sea la tabla, este o no activa una politica.
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
 
   const { id, modo } = req.query;
 

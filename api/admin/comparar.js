@@ -19,10 +19,14 @@ export default async function handler(req, res) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey || !serviceKey) {
     return res.status(500).json({ error: 'Supabase no configurado' });
   }
-  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  // Mismo motivo que en admin/personas.js y admin/matches.js -- consistencia
+  // con el resto del panel admin, para cuando otras tablas sumen su propia
+  // politica RLS mas adelante.
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
 
   try {
     const [resA, resB, usuariosRes] = await Promise.all([

@@ -637,10 +637,14 @@ export default async function handler(req, res) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey || !serviceKey) {
     return res.status(500).json({ error: 'Supabase no configurado' });
   }
-  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  // Mismo motivo que en api/admin/personas.js: el admin necesita ver todo,
+  // no solo lo propio de una persona -- con 'conversaciones' ya con politica
+  // RLS real, el anon key ve 0 filas ahi. Service role bypasea RLS siempre.
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
 
   const { accion } = req.body;
 
