@@ -137,7 +137,7 @@ export default async function handler(req, res) {
     // Mismo criterio que en api/leer.js: 'conversaciones' y 'matches' ya
     // tienen politica RLS real, asi que necesitan el token propio de la
     // persona para que auth.uid() resuelva. El resto sigue con el anon key.
-    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos'];
+    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles'];
     const bearer = TABLAS_CON_RLS.includes(tabla) ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       method: filtro ? 'PATCH' : 'POST',

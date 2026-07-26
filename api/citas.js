@@ -20,6 +20,15 @@ function headersPropios(headers, usuario) {
   return { ...headers, Authorization: `Bearer ${usuario.token}` };
 }
 
+// 'perfiles' tiene politica de "solo el dueño" -- leer el perfil de las DOS
+// personas de un match (referencias culturales, grupo1-4 para el analisis
+// de compatibilidad) necesita bypassear esa politica con la service role
+// key, ninguna de las dos personas puede verla via su propio token.
+function headersServicePerfiles(headers) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return { ...headers, apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+}
+
 // Campos de 'citas' seguros para mandar al cliente. El resto
 // (insights_debriefing_a/b, perfil_cita_a/b, compatibilidad_cita_a/b,
 // resumen_ia) son analisis internos que el cliente ni siquiera usa hoy --
@@ -420,7 +429,7 @@ async function pedirAyuda(req, res, supabaseUrl, headers, usuario) {
   // necesita ver la charla real -- sin esto Soul elegia un tema a ciegas,
   // sin saber si la conversacion venia profunda o liviana.
   const [perfilesRes, mensajesRes] = await Promise.all([
-    fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,referencias_culturales&usuario_id=in.(${encodeURIComponent(auth.match.usuario_a)},${encodeURIComponent(auth.match.usuario_b)})`, { headers }),
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,referencias_culturales&usuario_id=in.(${encodeURIComponent(auth.match.usuario_a)},${encodeURIComponent(auth.match.usuario_b)})`, { headers: headersServicePerfiles(headers) }),
     fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,tipo,contenido&cita_id=eq.${encodeURIComponent(citaId)}&tipo=eq.texto&order=created_at.desc&limit=20`, { headers: headersPropios(headers, usuario) })
   ]);
   const perfiles = perfilesRes.ok ? await perfilesRes.json() : [];
@@ -813,7 +822,7 @@ async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, 
   try {
     const [msgsRes, perfilesRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=usuario_id,contenido&cita_id=eq.${encodeURIComponent(cita.id)}&tipo=eq.texto&order=created_at.asc`, { headers: headersPropios(headers, usuario) }),
-      fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,grupo1,grupo2,grupo3,grupo4&usuario_id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/perfiles?select=usuario_id,grupo1,grupo2,grupo3,grupo4&usuario_id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers: headersServicePerfiles(headers) })
     ]);
     const msgs = msgsRes.ok ? await msgsRes.json() : [];
     const transcripto = msgs.map(m => {

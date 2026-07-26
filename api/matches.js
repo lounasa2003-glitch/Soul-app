@@ -166,9 +166,13 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   }
   const otraId = match.usuario_a === usuario.usuarioId ? match.usuario_b : match.usuario_a;
 
+  // 'perfiles' ya tiene politica RLS de "solo el dueño" -- leer el perfil de
+  // la OTRA persona para armar su bio necesita la service role key, el
+  // token de quien pide la presentacion solo veria su propia fila.
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const [otraRes, perfilRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada,ciudad,ocupacion,tipo_vinculo,hijos,estado_civil,no_negociables,negociables&id=eq.${encodeURIComponent(otraId)}`, { headers }),
-    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers })
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } })
   ]);
   const otras = otraRes.ok ? await otraRes.json() : [];
   const otra = otras[0];

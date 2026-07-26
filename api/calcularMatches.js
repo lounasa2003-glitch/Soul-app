@@ -24,8 +24,14 @@ export default async function handler(req, res) {
 
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  // 'perfiles' ya tiene politica RLS real de "solo el dueño" (ver
+  // migracion_rls_perfiles.sql) -- comparar contra todas las demas personas
+  // es inherente al matching, asi que esa lectura cruzada necesita
+  // bypassear la politica con la service role key, no con el token de esta
+  // persona (que solo veria su propia fila).
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
+  if (!supabaseUrl || !supabaseKey || !serviceKey) {
     return res.status(500).json({ error: 'Supabase no configurado' });
   }
 
@@ -64,7 +70,7 @@ export default async function handler(req, res) {
 
     const misPerRes = await fetch(
       `${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(usuarioId)}`,
-      { headers }
+      { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
     );
     const misPer = misPerRes.ok ? await misPerRes.json() : [];
     if (!misPer || misPer.length === 0) {
@@ -72,8 +78,11 @@ export default async function handler(req, res) {
     }
     const miPerfil = misPer[0];
 
+    // Comparar contra TODOS los demas perfiles es el corazon del matching --
+    // service role key, no el token propio.
+    const headersServiceRole = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
     const [otrosRes, cuentasPruebaRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}`, { headers }),
+      fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}`, { headers: headersServiceRole }),
       // Las cuentas de prueba fijas (Vista Previa del panel admin) usan a
       // proposito el dominio @soul-app.test -- nunca deben terminar
       // matcheadas con una persona real por casualidad de compatibilidad.

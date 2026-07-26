@@ -53,7 +53,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'sin_conversacion', mensaje: 'Pegá la conversación primero.' });
     }
 
-    const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+    // 'perfiles' ya tiene politica RLS de "solo el dueño" -- las dos cosas
+    // que toca este archivo (leer el propio perfil, sumar analisis_usados)
+    // son siempre sobre la propia fila, token propio en todo el archivo.
+    const headers = { apikey: supabaseKey, Authorization: `Bearer ${usuario.token}` };
 
     const misPerRes = await fetch(
       `${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,

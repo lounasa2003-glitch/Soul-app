@@ -92,9 +92,12 @@ export default async function handler(req, res) {
       }
       const supabaseUrl = process.env.SUPABASE_URL;
       const supabaseKey = process.env.SUPABASE_ANON_KEY;
+      // 'perfiles' ya tiene politica RLS de "solo el dueño" -- esta es la
+      // propia fila de quien esta pidiendo el modulo, token propio.
+      const headersPerfilPropio = { apikey: supabaseKey, Authorization: `Bearer ${usuario.token}` };
       const perfilRes = await fetch(
         `${supabaseUrl}/rest/v1/perfiles?select=modulo_fase&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,
-        { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } }
+        { headers: headersPerfilPropio }
       );
       const perfilRows = perfilRes.ok ? await perfilRes.json() : [];
       const faseActual = perfilRows[0] ? perfilRows[0].modulo_fase : null;
@@ -110,7 +113,7 @@ export default async function handler(req, res) {
         // vez de bloquear a alguien que ya estaba en medio de un modulo real.
         await fetch(`${supabaseUrl}/rest/v1/perfiles?usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
           method: 'PATCH',
-          headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+          headers: { ...headersPerfilPropio, 'Content-Type': 'application/json' },
           body: JSON.stringify({ modulo_fase: moduloFase })
         });
       }
