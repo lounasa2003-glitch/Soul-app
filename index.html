@@ -13,6 +13,12 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Soul — Antes de ayudarte a conocer a alguien">
 <meta name="twitter:description" content="Antes de ayudarte a conocer a alguien, Soul se toma el tiempo de conocerte a vos.">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#07050a">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Soul">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -330,6 +336,14 @@ if (scrollHint) {
   window.addEventListener('scroll', () => {
     scrollHint.style.opacity = window.scrollY > 40 ? '0' : '';
   }, { passive: true });
+}
+
+// Registro del service worker -- solo habilita "instalar en pantalla de
+// inicio" (PWA) desde la landing, no cambia nada del funcionamiento normal.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 </script>
 </body>
