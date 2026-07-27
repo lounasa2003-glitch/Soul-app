@@ -1554,10 +1554,17 @@ function saltearEspejo(){
   iniciarModuloReal();
 }
 
+// Mismo interruptor temporal que TODOS_PRO_TEMPORAL en lib/authUtil.js --
+// tiene que estar sincronizado con ese, sino esta pantalla frena a alguien
+// que el servidor ya iba a dejar pasar igual. Apagar los dos juntos (false)
+// el dia que el pago este listo.
+var TODOS_PRO_TEMPORAL=true;
+
 // "Capacidad de volver a elegir" es obligatoria para todos sin excepcion
 // (ver iniciarModuloObligatorio) -- el resto de los modulos de
 // profundizacion son la extension paga.
 function moduloRequierePro(){
+  if(TODOS_PRO_TEMPORAL)return false;
   return moduloData.fase!=='obligatorio' && window.usuarioPlan!=='pro';
 }
 
