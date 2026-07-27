@@ -529,11 +529,19 @@ function construirSeccionPersonas(def,lista){
 async function archivarPersona(id,archivar){
   try{
     var res=await llamarAdmin('/api/admin/personas?id='+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivada:archivar})});
-    if(!res.ok)return;
+    if(!res.ok){
+      // Antes esto fallaba en silencio (por ej. el bloqueo por IP de
+      // verificarAdmin.js tras intentos fallidos previos) y la pantalla
+      // quedaba igual sin avisar que el cambio no se guardo.
+      mostrarToast(res.status===401?'No autorizado -- puede que la contraseña de admin este bloqueada temporalmente':'No se pudo guardar el cambio');
+      return;
+    }
     var p=personasCache.find(function(x){return x.id===id;});
     if(p)p.archivada=archivar;
     aplicarFiltrosPersonas();
-  }catch(e){}
+  }catch(e){
+    mostrarToast('Error de conexión, el cambio no se guardó');
+  }
 }
 
 // Interruptor manual de plan mientras no haya pago conectado (ver
@@ -542,11 +550,20 @@ async function archivarPersona(id,archivar){
 async function cambiarPlanPersona(id,plan){
   try{
     var res=await llamarAdmin('/api/admin/personas?id='+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:plan})});
-    if(!res.ok)return;
+    if(!res.ok){
+      // Antes esto fallaba en silencio (por ej. el bloqueo por IP de
+      // verificarAdmin.js tras intentos fallidos previos) y el boton parecia
+      // haber funcionado aunque el plan nunca se hubiera guardado en la base.
+      mostrarToast(res.status===401?'No autorizado -- puede que la contraseña de admin este bloqueada temporalmente':'No se pudo guardar el cambio de plan');
+      return;
+    }
     var p=personasCache.find(function(x){return x.id===id;});
     if(p)p.plan=plan;
     aplicarFiltrosPersonas();
-  }catch(e){}
+    mostrarToast('Plan actualizado a '+(plan==='pro'?'Pro':'Free')+' ✓');
+  }catch(e){
+    mostrarToast('Error de conexión, el plan no se guardó');
+  }
 }
 
 function aplicarFiltrosPersonas(){
