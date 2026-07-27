@@ -2953,7 +2953,10 @@ function loadPhotoPerfil(inp,upId,isCara){
   var file=inp.files[0];if(!file)return;
   var url=URL.createObjectURL(file);
   var up=document.getElementById(upId);
-  up.innerHTML='<img src="'+url+'" alt="foto">';
+  // Recrear el <input> (con el mismo id/onchange que ya tenia) despues de la
+  // vista previa -- sin esto, el recuadro queda sin forma de volver a
+  // tocarse para elegir otra foto una vez que ya se cargo una.
+  up.innerHTML='<img src="'+url+'" alt="foto"><input type="file" id="'+inp.id+'" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\''+upId+'\','+isCara+')">';
   var img=new Image();
   img.onload=function(){
     var MAX=800;
@@ -3002,8 +3005,12 @@ async function mostrarMiPerfil(){
     preseleccionarChipsMultiPerfil('vinc',u.tipo_vinculo);
     perfilChipSels={dist:u.distancia_max||null,gen:u.genero||null,pref:u.preferencia_genero||null,hijos:u.hijos||null,civil:u.estado_civil||null,vinc:u.tipo_vinculo||null};
 
-    if(u.foto_cara)document.getElementById('upCaraPerfil').innerHTML='<img src="'+u.foto_cara+'" alt="foto">';
-    if(u.foto_cuerpo)document.getElementById('upCuerpoPerfil').innerHTML='<img src="'+u.foto_cuerpo+'" alt="foto">';
+    // El innerHTML de upCaraPerfil/upCuerpoPerfil solo tenia la <img> --
+    // borraba el <input type=file> que el onclick del recuadro (en el HTML)
+    // intenta abrir, dejando el recuadro sin forma de volver a tocarlo una
+    // vez que ya habia una foto guardada.
+    if(u.foto_cara)document.getElementById('upCaraPerfil').innerHTML='<img src="'+u.foto_cara+'" alt="foto"><input type="file" id="inCaraPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\'upCaraPerfil\',true)">';
+    if(u.foto_cuerpo)document.getElementById('upCuerpoPerfil').innerHTML='<img src="'+u.foto_cuerpo+'" alt="foto"><input type="file" id="inCuerpoPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\'upCuerpoPerfil\',false)">';
 
     cargando.style.display='none';
     document.getElementById('miPerfilForm').style.display='block';
@@ -3612,7 +3619,10 @@ function loadPhoto(inp,upId,isCara){
   var file=inp.files[0];if(!file)return;
   var url=URL.createObjectURL(file);
   var up=document.getElementById(upId);
-  up.innerHTML='<img src="'+url+'" alt="foto">';
+  // Mismo motivo que en loadPhotoPerfil: recrear el <input> despues de la
+  // vista previa para que el recuadro se pueda seguir tocando y cambiar de
+  // foto antes de terminar el onboarding.
+  up.innerHTML='<img src="'+url+'" alt="foto"><input type="file" id="'+inp.id+'" accept="image/*" style="display:none" onchange="loadPhoto(this,\''+upId+'\','+isCara+')">';
 
   // Redimensiona a max 800px por lado y comprime a JPEG antes de guardar en base64
   // (una foto de celular sin comprimir puede pesar varios MB).
