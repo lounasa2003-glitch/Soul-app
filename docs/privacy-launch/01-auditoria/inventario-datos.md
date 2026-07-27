@@ -1,0 +1,71 @@
+# Inventario de datos — Soul
+
+> Agente 1 (Auditor técnico de datos). Basado en lectura directa del código de `Soul-app` y `soul-app-native` el 2026-07-27. No se modificó ningún archivo. Cada fila cita archivo y línea. Donde no hay evidencia directa en el repo, se marca **PENDIENTE DE CONFIRMAR** en la columna que corresponda — nunca se completa por inferencia.
+>
+> Columna "Se comparte": describe con quién sale ese dato en concreto (otra persona usuaria del match, proveedor externo, panel admin). El detalle de cada proveedor está en `proveedores.md`.
+>
+> Columna "Sensible": marca "Sí" solo cuando el propio código/texto legal lo trata como tal, o cuando el dato permite inferir directamente una categoría especial (salud, orientación, creencias) sin que el código lo reconozca así — en ese caso se aclara la discrepancia.
+
+## Datos de identidad y cuenta
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Email + contraseña | Aportado por el usuario (registro) | Autenticación | Supabase Auth (`auth.users`) + `usuarios.email` | No a otras personas usuarias. Sí a Supabase (procesador) y a Resend (destino de envío de mails) | No | `usuarios.email` se reemplaza por `borrada-{id}@soul-app.eliminado` a los 30 días de solicitado el borrado; el usuario de Supabase Auth solo se borra si `SUPABASE_SERVICE_ROLE_KEY` está configurada (**PENDIENTE DE CONFIRMAR** en producción — ver `hallazgos-tecnicos.md`) | `api/auth.js:205-210`, `api/guardar.js:102`, `api/cron/diagnostico-diario.js:74-121` |
+| Nombre | Aportado por el usuario | Identificación en UI, personalización de emails | `usuarios.nombre` | Sí: nombre (o email si no hay nombre) de cada persona se manda a la otra parte de un match/cita | No | Puesto en `null` a los 30 días | `api/guardar.js:102`, `api/matches.js:65-77`, `api/citas.js:142-159` |
+
+## Datos de perfil / intake (Etapa 1, tabla `usuarios`)
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Fecha y hora de nacimiento | Aportado por el usuario | Calcular edad (mostrada al match), dato de perfil | `usuarios.fecha_nacimiento` / `hora_nacimiento` | Se comparte la **edad calculada**, no la fecha cruda, en la presentación de match | No reconocido como tal en `legal.html`, aunque permite verificar edad | Puestos en `null` a los 30 días | `api/guardar.js:47,91`, `soul.html:721`, `api/matches.js:142-152,208` |
+| Ciudad, distancia máxima preferida | Aportado por el usuario | Filtro de compatibilidad por cercanía | `usuarios.ciudad` / `distancia_max` | Ciudad se manda a la otra persona en la presentación de match | No | Puestos en `null` a los 30 días | `api/guardar.js:47`, `lib/matchCompatible.js:66-89`, `api/matches.js:218` |
+| Género y preferencia de género | Aportado por el usuario | Filtro de compatibilidad mutua | `usuarios.genero` / `preferencia_genero` | No se envía el campo crudo a la otra persona; el filtro sí determina quién aparece como candidato | Preferencia de género puede revelar orientación — `legal.html` sección 2 solo menciona "orientación" en términos generales, sin nombrar este campo puntual | Puestos en `null` a los 30 días | `api/guardar.js:47`, `lib/matchCompatible.js:15-33` |
+| Tipo de vínculo buscado (array, ej. "Romántico", "Compañía") | Aportado por el usuario | Filtro de compatibilidad, mostrado al match | `usuarios.tipo_vinculo` | Sí, se envía completo a la otra persona en la presentación de match | Relacionado con "vida íntima"/tipo de vínculo — zona gris frente a `legal.html` sección 2 | Puesto en `null` a los 30 días | `api/guardar.js:47`, `api/matches.js:220`, `lib/matchCompatible.js:58-64` |
+| Hijos (propio) y preferencia sobre hijos de la otra persona | Aportado por el usuario | Filtro de compatibilidad, mostrado al match | `usuarios.hijos` / `preferencia_hijos` | "Hijos" se envía a la otra persona en la presentación | No | Puestos en `null` a los 30 días | `api/guardar.js:47`, `api/matches.js:221`, `lib/matchCompatible.js:91-113` |
+| Estado civil | Aportado por el usuario | Perfil, mostrado al match | `usuarios.estado_civil` | Sí, se envía a la otra persona en la presentación | No | Puesto en `null` a los 30 días | `api/guardar.js:47`, `api/matches.js:222` |
+| Ocupación | Aportado por el usuario | Perfil, mostrado al match | `usuarios.ocupacion` | Sí, se envía a la otra persona en la presentación | No | Puesta en `null` a los 30 días | `api/guardar.js:47`, `api/matches.js:219` |
+| "No negociables" / "negociables" (texto libre) | Aportado por el usuario | Señal de mayor peso en el cálculo de compatibilidad (`COMPARE_PROMPT`) | `usuarios.no_negociables` / `negociables` | Texto completo enviado a Anthropic en cada comparación; texto completo enviado a la otra persona en la presentación de match | Potencialmente sí — es texto libre sin restricción de contenido (puede mencionar salud, religión, política) sin que `legal.html` lo anticipe | Puestos en `null` a los 30 días | `api/guardar.js:47`, `lib/comparePrompt.js:8`, `api/matches.js:223-224` |
+| Fotos (cara y cuerpo) | Aportado por el usuario, recodificadas a JPEG base64 en el navegador (`canvas.toDataURL`) | Perfil; mostrada al match solo si aprobada | `usuarios.foto_cara` / `foto_cuerpo`, **base64 embebido en la fila** (no Supabase Storage / sin bucket) | `foto_cara` se envía a la otra persona en la presentación **solo si** `foto_aprobada = true` | Dato biométrico-adyacente (imagen de rostro); no tratado explícitamente como sensible en `legal.html` | Puestas en `null`, `foto_aprobada = false` a los 30 días | `api/guardar.js:32-36,111-115`, `soul.html:3013`, `api/matches.js:181,209-212` |
+
+## Perfil psicológico/vincular generado por IA (tabla `perfiles`)
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Perfil estructurado grupo1-4 (valores, estilo de comunicación, tipo de vínculo, modo de conflicto, apertura, etc.) | **Inferencia de IA** a partir de la conversación con Soul | Motor de matching; mostrado en panel admin | `perfiles.grupo1/2/3/4` | Nunca a la otra persona (`legal.html` sección 5: "No: perfil psicológico"); sí a Anthropic en cada comparación; visible para la administradora | Sí | Fila completa borrada (`DELETE`) a los 30 días | `api/analisisExterno.js:15-17` (`EXTRACT_PROMPT`), `api/admin/matches.js:593-610`, `api/cron/diagnostico-diario.js:45,69-71` |
+| Módulo esencial / recomendado y señales detectadas | Inferencia de IA (herramienta admin `forzarCierrePerfil`) | Asignar módulo de profundización | `perfiles.modulo_esencial/recomendado/senales_modulo` | Visible para la administradora; el módulo asignado sí es visible para la persona (no las "señales" en texto) | Sí (describe patrones de conducta relacional) | Borrado junto con `perfiles` a los 30 días | `api/admin/matches.js:536-628` |
+
+## Contenido conversacional
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Historial completo de conversación con Soul | Aportado por el usuario + respuestas de la IA | Construir el perfil | `conversaciones` | No a otros usuarios; sí a Anthropic (se reenvía el historial en cada turno); visible en Hoja de Vida del panel admin | Sí (puede contener cualquier tema) | Borrada (`DELETE`) a los 30 días | `api/chat.js`, `api/admin/personas.js:282`, `api/cron/diagnostico-diario.js:45` |
+| Mensajes de la Sala de Encuentros | Las dos personas del match + Soul (interviene) | Chat compartido del encuentro | `cita_mensajes` | Entre las dos personas del match; leído por la administradora una vez **cerrada** la cita; enviado a Anthropic para resumen/análisis | Sí (puede contener cualquier tema) | **No se borra** al eliminar una cuenta (tabla compartida con la otra persona) — permanece indefinidamente | `api/citas.js:317-321`, `api/admin/personas.js:188-226`, `api/cron/diagnostico-diario.js:37-45` |
+| Debriefing/reflexión privada post-cita | Usuario + IA | Autopercepción posterior al encuentro | `cita_reflexiones` | Estrictamente privada — ni siquiera la otra persona del match puede verla (política RLS explícita) | Sí | No aparece en `TABLAS_PERSONALES_A_BORRAR` del cron → **PENDIENTE DE CONFIRMAR** si se borra al eliminar cuenta | `api/citas.js:742-750`, `migracion_rls_cita_reflexiones.sql:3-14` |
+| Pedidos de ayuda en la cita (registro de uso) | Usuario | Límite de uso, trazabilidad | `cita_ayudas` | Estrictamente propia (RLS) | Baja | No aparece en `TABLAS_PERSONALES_A_BORRAR` → **PENDIENTE DE CONFIRMAR** | `api/citas.js:392-410`, `migracion_rls_cita_ayudas.sql` |
+| Conversación externa pegada por el usuario ("análisis externo") | Usuario, puede incluir contenido de un tercero **no usuario de Soul** | Comparar contra el perfil propio | **No se persiste** — solo se usa en memoria durante el request | Enviada a Anthropic (dos llamados) | Puede incluir datos personales (posiblemente sensibles) de un tercero ajeno a la plataforma, sin su consentimiento | N/A — no se guarda | `api/analisisExterno.js:51-108` |
+| Resumen objetivo de la cita (uso exclusivo admin) | Inferencia de IA sobre la transcripción real | Que la administradora entienda la cita sin leer todo el chat | `citas.resumen_ia` | Nunca visible para las personas usuarias | Sí | No aparece en `TABLAS_PERSONALES_A_BORRAR` (tabla `citas` es compartida, no se toca) → permanece indefinidamente | `lib/cierreCita.js:16,49-53` |
+
+## Metadatos de uso y seguridad
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Última actividad, etapa del funnel, plan, análisis usados | Sistema | Control de acceso y producto | `usuarios.*` | No | No | Se resetea/anonimiza según el cron de borrado | `lib/authUtil.js:69-78,120-126` |
+| Intentos de fuga/inyección de prompt (mensaje textual completo) | Mensaje del usuario que matchea un patrón de jailbreak | Seguridad/monitoreo | `intentos_fuga_prompt` (hasta 2000 caracteres del mensaje) | Visible para la administradora | Sí (contiene texto literal del usuario) | Borrado (`DELETE`) a los 30 días | `lib/seguridadPrompt.js:54-75`, `api/cron/diagnostico-diario.js:45` |
+| Reportes entre usuarios (motivo categórico) | Usuario | Moderación | `reportes` | Visible para la administradora; la política RLS solo deja ver a quien reportó sus propios reportes (no al reportado) | No (categórico, sin texto libre) | No aparece en `TABLAS_PERSONALES_A_BORRAR` → **PENDIENTE DE CONFIRMAR** | `api/matches.js:96-101,129-136`, `migracion_rls_reportes.sql` |
+| Reportes técnicos (contexto + email opcional) | Usuario (a veces sin sesión) | Soporte | `reportes_tecnicos` | Visible para la administradora. Ver hallazgo técnico sobre la política RLS de esta tabla en `hallazgos-tecnicos.md` | Puede incluir email | No aparece en `TABLAS_PERSONALES_A_BORRAR` → **PENDIENTE DE CONFIRMAR** | `api/auth.js:47-60`, `migracion_rls_reportes_tecnicos.sql` |
+| feedback_piloto | Usuario | Feedback del piloto | `feedback_piloto` | Visible para la administradora | Depende del contenido (texto libre no auditado en su totalidad) | No aparece en `TABLAS_PERSONALES_A_BORRAR` → **PENDIENTE DE CONFIRMAR** | `api/admin/personas.js:289`, `lib/authUtil.js:22` |
+| Uso de tokens de IA por endpoint (`uso_tokens`) | Sistema | Costo/observabilidad | `uso_tokens` | No | El propio código lo declara "métrica agregada, no dato personal identificable" | **Nunca se borra** (excluida a propósito de la purga) | `lib/logUso.js`, `api/cron/diagnostico-diario.js:37-45` |
+| Eventos de embudo (`eventos_piloto`) | Sistema | Métricas de producto | `eventos_piloto` | No | Mismo criterio que `uso_tokens` — el código las trata como no identificables pese a referenciar `usuario_id` | **Nunca se borra** | `lib/logEvento.js`, `api/cron/diagnostico-diario.js:37-45` |
+| Errores técnicos silenciosos | Sistema (excepciones) | Diagnóstico | `errores_silenciosos` | Enviado por email a `ADMIN_EMAIL` en el resumen diario | Se redactan valores de variables de entorno conocidas antes de guardar; puede incluir metadata con IDs de usuario | No aparece en `TABLAS_PERSONALES_A_BORRAR` → **PENDIENTE DE CONFIRMAR** | `lib/logErrorSilencioso.js`, `api/cron/diagnostico-diario.js:229-236` |
+| Intentos fallidos de contraseña de admin / rate limiting (`rate_limits`) | Sistema | Anti fuerza-bruta | `rate_limits` (keyed por email o IP) | No | No | **PENDIENTE DE CONFIRMAR** | `lib/rateLimit.js`, `lib/verificarAdmin.js` |
+| Diagnóstico diario agregado (incluye nombres/emails de cuentas trabadas) | Sistema | Reporte operativo interno | `diagnosticos_diarios` | Enviado por email a `ADMIN_EMAIL` | Contiene nombre/email de personas reales dentro del HTML | **PENDIENTE DE CONFIRMAR** | `api/cron/diagnostico-diario.js:293-296,312-316` |
+
+## Sesión / credenciales en el cliente
+
+| Dato | Fuente | Finalidad | Dónde se guarda | Se comparte | Sensible | Retención conocida | Evidencia |
+|---|---|---|---|---|---|---|---|
+| Token de sesión (access_token/refresh_token de Supabase Auth) | Supabase Auth | Autenticar cada request | Solo en variables JS en memoria del navegador — **nunca** en `localStorage`/`sessionStorage`/cookies | Se reenvía como header `Authorization` a `/api/*` y, en las tablas con RLS, hasta Supabase | No aplica | Se pierde al recargar la página (no persiste) | `soul.html:2215-2225` |
+
+## Nota sobre `.env.local` (variables de entorno locales)
+
+`.env.local` contiene, **solo en este checkout local**, valores reales de `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `EMAIL_FROM`, `RESEND_API_KEY`, `SUPABASE_ANON_KEY`, `SUPABASE_URL`, `VERCEL_OIDC_TOKEN`. Por la regla 7 de este encargo no se copian esos valores acá. El archivo está listado en `.gitignore` (`.env*`), por lo que no queda comprometido en el historial de git. **No está presente** `SUPABASE_SERVICE_ROLE_KEY` en este archivo local — ver `hallazgos-tecnicos.md` sobre la consecuencia de esto en el borrado de cuentas. Si esa variable (u otras adicionales) está configurada solo en el entorno de producción de Vercel, es **PENDIENTE DE CONFIRMAR** — no accesible desde este repo.

@@ -638,33 +638,45 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     </div>
     <div id="con-c2" style="display:none">
       <p class="con-title" style="text-align:center;margin-bottom:.8rem">Términos y condiciones</p>
-      <p style="font-family:'Inter',sans-serif;font-size:.92rem;color:#7a6e78;text-align:center;margin-bottom:.7rem">Leé el documento completo antes de aceptar.</p>
+      <p style="font-family:'Inter',sans-serif;font-size:.92rem;color:#7a6e78;text-align:center;margin-bottom:.7rem">Esto es un resumen. Podés leer el documento completo de <a href="legal.html" target="_blank" rel="noopener" style="color:#c9a84c">Privacidad y Términos</a> antes de aceptar.</p>
       <div class="legal-box" id="legalBox" onscroll="chkScroll()">
         <h3>1. Qué analiza Soul</h3>
-        <p>Soul analiza el contenido de tus respuestas, la forma en que te expresás y los patrones conversacionales que emergen durante la interacción para construir un perfil vincular.</p>
+        <p>Soul funciona con inteligencia artificial (IA): analiza el contenido de tus respuestas, la forma en que te expresás y los patrones conversacionales que emergen durante la interacción, para construir un perfil vincular.</p>
         <div class="legal-hl"><p><strong>Soul genera inferencias, no diagnósticos.</strong> Sus análisis son probabilísticos y pueden ser incompletos o equivocados. Siempre podés cuestionar sus conclusiones.</p></div>
         <hr>
-        <h3>2. Funciones indispensables</h3>
+        <h3>2. Datos sensibles</h3>
+        <div class="legal-hl"><p>Parte de lo que compartís con Soul puede revelar información sobre tu orientación o tu vida íntima. La ley considera esto un dato sensible, con más protección que el resto de tu información. Soul lo trata con ese cuidado extra: nunca se muestra a un match ni a nadie fuera de la administración de la plataforma.</p></div>
+        <hr>
+        <h3>3. Funciones indispensables</h3>
         <p>Sin estas funciones Soul no puede operar. Al aceptar, autorizás:</p>
         <ul><li>Que Soul analice tu conversación para construir un perfil vincular.</li><li>Que use inferencias para el proceso de matching.</li><li>Que guarde tu perfil mientras uses la plataforma.</li><li>El tratamiento de datos personales necesarios, de acuerdo con nuestra Política de Privacidad.</li></ul>
         <hr>
-        <h3>3. Funciones opcionales</h3>
+        <h3>4. Funciones opcionales</h3>
         <ul><li>Contribuir con datos anonimizados al entrenamiento del sistema.</li><li>Recibir comunicaciones fuera de la plataforma.</li></ul>
         <hr>
-        <h3>4. Qué ve un match de vos</h3>
+        <h3>5. Qué ve un match de vos</h3>
         <ul><li><strong>Sí:</strong> compatibilidad actual y potencial, dos fortalezas, un desafío posible.</li><li><strong>No:</strong> perfil psicológico, módulos, puntajes individuales.</li></ul>
         <hr>
-        <h3>5. Durante el piloto</h3>
+        <h3>6. Durante el piloto</h3>
         <p>Soul está en una etapa piloto cerrada, con un grupo reducido de personas. Mientras dure esta etapa, la persona administradora del proyecto puede revisar conversaciones -- incluida la de la cita/encuentro con tu match, una vez que ya cerró -- exclusivamente para control de calidad y seguridad. Nadie más que la administradora tiene este acceso.</p>
         <hr>
-        <h3>6. Tus datos</h3>
+        <h3>7. Tus datos</h3>
+        <p><strong>Responsable del tratamiento:</strong> Lourdes Satragno, Ciudad Autónoma de Buenos Aires, Argentina. Contacto: <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</p>
+        <p><strong>Transferencias internacionales:</strong> los proveedores que usa Soul (base de datos e IA) pueden procesar datos fuera de Argentina, incluido Estados Unidos.</p>
         <p>Tus datos se borran dentro de los 30 días posteriores a eliminar tu cuenta. Soul puede modificar sus modelos de análisis para mejorar el servicio.</p>
         <hr>
-        <h3>7. Limitaciones</h3>
+        <h3>8. Limitaciones</h3>
         <p>Soul no realiza diagnósticos psicológicos ni reemplaza a un profesional de salud mental. No garantiza compatibilidad ni éxito en ningún vínculo. <strong>No recomendamos basar decisiones importantes exclusivamente en las inferencias de Soul.</strong></p>
         <hr>
-        <h3>8. Tus derechos</h3>
-        <ul><li>Podés pedir la eliminación de tu perfil y datos en cualquier momento.</li><li>Podés cuestionar o solicitar revisión de cualquier inferencia.</li><li>Podés pedir explicación de cualquier compatibilidad que recibas.</li></ul>
+        <h3>9. Tus derechos</h3>
+        <ul>
+          <li>Podés pedir la eliminación de tu perfil y datos en cualquier momento.</li>
+          <li>Podés cuestionar o solicitar revisión de cualquier inferencia.</li>
+          <li>Podés pedir explicación de cualquier compatibilidad que recibas.</li>
+          <li>Podés revocar cualquier consentimiento opcional en cualquier momento.</li>
+          <li>Podés pedir una copia de tus datos en un formato reutilizable, escribiendo a <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</li>
+          <li>Podés hacer un reclamo ante la Agencia de Acceso a la Información Pública (AAIP) si considerás que no se respetaron tus derechos.</li>
+        </ul>
         <div class="legal-end">— Fin del documento —</div>
       </div>
       <p class="scroll-notice" id="scrollNotice">↓ Scrolleá hasta el final para aceptar</p>
@@ -684,7 +696,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <p>✦ Tenés derecho a eliminar tu perfil en cualquier momento.</p>
         <p>✦ Tenés derecho a pedir explicación de cualquier compatibilidad.</p>
       </div>
-      <button class="btn-full" id="btnAceptar" disabled onclick="ir(3)">Entiendo cómo funciona Soul y elijo comenzar →</button>
+      <div class="auth-err" id="consentimientoErr"></div>
+      <button class="btn-full" id="btnAceptar" disabled onclick="aceptarConsentimiento()">Entiendo cómo funciona Soul y elijo comenzar →</button>
       <button class="btn-back" onclick="document.getElementById('con-c2').style.display='none';document.getElementById('con-c1').style.display='block'">← Volver</button>
     </div>
   </div>
@@ -3634,6 +3647,40 @@ function toggleChk(){
   document.getElementById('btnAceptar').disabled=!mainOk;
 }
 
+// Identifica QUÉ texto (resumen embebido acá) y QUÉ política de privacidad
+// completa (legal.html) aceptó la persona -- si alguno de los dos documentos
+// cambia de contenido más adelante, hay que actualizar el número acá para
+// poder distinguir quién aceptó cada versión.
+var CONSENTIMIENTO_VERSION='2026-07-27';
+var POLITICA_PRIVACIDAD_VERSION='2026-07-27';
+
+// Guarda la aceptación en el momento exacto en que la persona toca "Acepto"
+// -- no espera a que termine el resto del onboarding (Etapa 1), que puede
+// abandonarse a mitad de camino y dejar la aceptación sin ningún registro.
+async function aceptarConsentimiento(){
+  if(!mainOk)return;
+  var btn=document.getElementById('btnAceptar');
+  var errEl=document.getElementById('consentimientoErr');
+  btn.disabled=true;
+  btn.textContent='Guardando...';
+  errEl.style.display='none';
+  try{
+    await guardarTabla('usuarios',{
+      consentimiento_aceptado:true,
+      consentimiento_fecha:new Date().toISOString(),
+      consentimiento_version:CONSENTIMIENTO_VERSION,
+      politica_privacidad_version:POLITICA_PRIVACIDAD_VERSION
+    });
+    ir(3);
+  }catch(e){
+    console.error('Error guardando consentimiento:',e);
+    btn.disabled=false;
+    btn.textContent='Entiendo cómo funciona Soul y elijo comenzar →';
+    errEl.textContent='No pudimos guardar tu aceptación. Probá de nuevo.';
+    errEl.style.display='block';
+  }
+}
+
 // ── CONSTELACIÓN ──
 var chipSels={};var caraOk=false,cuerpoOk=false;var stepActual=0;
 function selChip(el,g){document.querySelectorAll('#'+g+'Chips .chip').forEach(function(c){c.classList.remove('sel')});el.classList.add('sel');chipSels[g]=el.textContent;chkStep(stepActual)}
@@ -4288,6 +4335,11 @@ async function continuarTrasValidacion(){
   }catch(e){}
   var pctActual=calcularPorcentajePerfil(uActual,perfil);
   setTimeout(function(){
+    // calcularMatches() corre en paralelo (linea de arriba) y puede haber
+    // detectado mail sin confirmar antes de que este timeout dispare -- en
+    // ese caso no hay que pisar la pantalla de ConfirmarEmail con la de
+    // Eleccion de Sesion.
+    if(window.matchBloqueadoPorEmail){ requiereConfirmarEmail(); return; }
     mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
   },300);
 }
@@ -4303,6 +4355,7 @@ function addBotonReintentarMatch(){
 async function calcularMatches(){
   if(!usuarioId)return;
   window.matchEncontrado=false;
+  window.matchBloqueadoPorEmail=false;
   try{
     var res=await fetchConSesion(function(){
       return fetch('/api/calcularMatches',{
@@ -4311,6 +4364,19 @@ async function calcularMatches(){
       });
     });
     var data=await res.json();
+    if(!res.ok){
+      // Antes esto se ignoraba en silencio: si el mail todavia no esta
+      // confirmado, el servidor devuelve 403 email_no_confirmado y la
+      // persona quedaba trabada en la pantalla de Elección de Sesión sin
+      // ningun aviso ni forma de reenviar el mail. La bandera la chequea
+      // tambien el setTimeout de continuarTrasValidacion, por si ese
+      // callback llega a disparar despues de este catch.
+      if(data&&data.error==='email_no_confirmado'){
+        window.matchBloqueadoPorEmail=true;
+        requiereConfirmarEmail();
+      }
+      return;
+    }
     if(data&&data.matchEncontrado){
       window.matchEncontrado=true;
       window.matchData=data.matchData;
