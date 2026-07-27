@@ -2,6 +2,7 @@ import { verificarUsuario } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
+import { calcularEdad } from '../lib/edad.js';
 
 // Fusiona lo que antes eran misMatches.js, elegirMatch.js y cerrarMatch.js
 // en un solo archivo -- el plan Hobby de Vercel permite como maximo 12
@@ -138,18 +139,6 @@ async function eliminarMatch(req, res, supabaseUrl, headers, usuario) {
 }
 
 const PRESENTACION_PERFIL_PROMPT = `Sos Soul. Vas a presentar a una persona a alguien que está por decidir si quiere conocerla -- todavía no se conocieron. Escribí una bio breve y cálida (2-3 frases), en tercera persona, a partir del perfil real que te paso. Nunca menciones puntajes, módulos, diagnósticos ni jerga técnica -- es una primera impresión humana, no un informe. Si algo del perfil no da para una frase natural, omitilo en vez de forzarlo. Respondé solo con el texto de la bio, sin comillas ni markdown.`;
-
-function calcularEdad(fechaNacimiento) {
-  if (!fechaNacimiento) return null;
-  const nacimiento = new Date(fechaNacimiento);
-  if (isNaN(nacimiento.getTime())) return null;
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - nacimiento.getFullYear();
-  const noCumplioAun = hoy.getMonth() < nacimiento.getMonth() ||
-    (hoy.getMonth() === nacimiento.getMonth() && hoy.getDate() < nacimiento.getDate());
-  if (noCumplioAun) edad--;
-  return edad;
-}
 
 // Introduccion humana de la otra persona (nombre, edad, bio breve, foto)
 // antes de decidir si avanzar con el match -- info parcial e introductoria

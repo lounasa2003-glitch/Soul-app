@@ -2045,7 +2045,7 @@ async function guardarUsuarioYContinuar(){
       // reintentar (el problema no es de conexion) -- se corta al toque y
       // se le dice exactamente que falta, en vez de dejarla reintentando
       // "revisá tu conexión" sin salida cuando el problema real es otro.
-      if(e.data&&e.data.error==='datos_incompletos'){
+      if(e.data&&(e.data.error==='datos_incompletos'||e.data.error==='edad_minima')){
         btn.disabled=false;
         btn.textContent='Hablar con Soul →';
         errEl.textContent=e.data.mensaje||'Faltan datos básicos antes de poder continuar. Revisá que hayas completado todos los pasos.';
@@ -2172,6 +2172,16 @@ var userEmail=null;
 // eso el resultado siempre termina en "iniciá sesión para seguir", nunca
 // intenta retomar nada de memoria.
 window.addEventListener('DOMContentLoaded',async function(){
+  // Tope de "hace 18 años" en el selector de fecha -- solo UX (el chequeo
+  // real que no se puede evitar esta en el servidor, ver EDAD_MINIMA en
+  // api/guardar.js), pero evita que alguien menor llegue a mandar el
+  // formulario entero para recien ahi enterarse que no puede seguir.
+  var maxFechaNacimiento=new Date();
+  maxFechaNacimiento.setFullYear(maxFechaNacimiento.getFullYear()-18);
+  var maxFechaStr=maxFechaNacimiento.toISOString().slice(0,10);
+  var fnacEl=document.getElementById('fnac');if(fnacEl)fnacEl.max=maxFechaStr;
+  var mpFnacEl=document.getElementById('mpFnac');if(mpFnacEl)mpFnacEl.max=maxFechaStr;
+
   var paramsQuery=new URLSearchParams(location.search);
   var tokenConfirmar=paramsQuery.get('confirmarMail');
   if(tokenConfirmar){

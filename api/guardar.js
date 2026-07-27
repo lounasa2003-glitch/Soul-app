@@ -3,6 +3,7 @@ import { verificarUsuario, TABLAS_PERMITIDAS, filtroDeEscrituraValido, parsearFi
 import { registrarEvento } from '../lib/logEvento.js';
 import { notificarConfirmarMail } from '../lib/email.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
+import { calcularEdad, EDAD_MINIMA } from '../lib/edad.js';
 
 // Tablas con relacion 1:1 con el usuario -- el insert se resuelve como upsert
 // atomico para no depender de un check-then-act del lado del cliente, que
@@ -118,8 +119,18 @@ export default async function handler(req, res) {
       // manda todos estos campos juntos en un solo pedido en ese momento,
       // asi que datosFinales ya trae todo lo necesario para verificar sin
       // tener que leer el estado previo de la fila.
-      if (datosFinales.etapa_actual === 'chat' && !basicosCompletos(datosFinales)) {
-        return res.status(400).json({ error: 'datos_incompletos', mensaje: 'Faltan datos básicos antes de poder empezar a hablar con Soul.' });
+      if (datosFinales.etapa_actual === 'chat') {
+        // Requisito de las tiendas para una app de vinculos/citas -- el
+        // selector de fecha del cliente ya limita el rango, pero eso es solo
+        // UX (se puede mandar cualquier fecha directo al endpoint), asi que
+        // la edad real se valida aca, del lado del servidor.
+        const edad = calcularEdad(datosFinales.fecha_nacimiento);
+        if (edad !== null && edad < EDAD_MINIMA) {
+          return res.status(403).json({ error: 'edad_minima', mensaje: `Soul es para mayores de ${EDAD_MINIMA} años.` });
+        }
+        if (!basicosCompletos(datosFinales)) {
+          return res.status(400).json({ error: 'datos_incompletos', mensaje: 'Faltan datos básicos antes de poder empezar a hablar con Soul.' });
+        }
       }
     }
 
