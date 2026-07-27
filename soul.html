@@ -1550,7 +1550,29 @@ function saltearEspejo(){
   var b=document.getElementById('espejoBtns');if(b)b.remove();
   addModuloMsg('user','Prefiero que no, por ahora.');
   moduloHistory.push({role:'user',content:'Prefiero que no, por ahora.'});
+  if(moduloRequierePro()){mostrarPaywallModulo();return;}
   iniciarModuloReal();
+}
+
+// "Capacidad de volver a elegir" es obligatoria para todos sin excepcion
+// (ver iniciarModuloObligatorio) -- el resto de los modulos de
+// profundizacion son la extension paga.
+function moduloRequierePro(){
+  return moduloData.fase!=='obligatorio' && window.usuarioPlan!=='pro';
+}
+
+// Antes, una persona en Free llegaba hasta aca, mandaba su reaccion al
+// espejo (o directamente saltarlo) y recien ahi el servidor la rechazaba
+// con un 403 -- se veia como "algo se desconectó", un bug. Ahora se corta
+// ACA, del lado del cliente, con un cartel honesto en vez de un error, y
+// la charla de modulo queda inactiva (sin romper nada si nunca pasa a
+// Pro) en lugar de intentar y fallar.
+function mostrarPaywallModulo(){
+  var t=document.getElementById('moduloTyping');if(t)t.remove();
+  addModuloMsg('soul','Este momento de profundización es parte de Soul Pro. Si en algún momento querés seguir explorando esto conmigo, va a estar acá esperándote.');
+  var btn=document.getElementById('moduloBtn');if(btn)btn.disabled=true;
+  var inp=document.getElementById('moduloIn');
+  if(inp){inp.disabled=true;inp.placeholder='Este momento está pausado';}
 }
 
 function iniciarModuloReal(){
@@ -1722,6 +1744,10 @@ async function enviarAlModulo(txt){
 async function sendModuloMsg(){
   var typing=document.getElementById('moduloTyping');
 
+  // Esto es lo que atrapa a alguien en Free que le contesta al espejo (en
+  // vez de saltearlo) -- ver moduloRequierePro/mostrarPaywallModulo.
+  if(moduloRequierePro()){mostrarPaywallModulo();return;}
+
   // El presupuesto se cuenta sobre el ultimo turno del usuario, sea cual sea
   // el camino que llamo a esto (input libre, "Seguimos", pedir pausa).
   var ultimoTurno=moduloHistory[moduloHistory.length-1];
@@ -1891,6 +1917,15 @@ async function llamarChat(datos){
     var e=new Error(mensajeLimiteAlcanzado(err.segundosParaReset));
     e.rateLimited=true;
     throw e;
+  }
+  if(!res.ok){
+    // Antes seguia de largo con la respuesta de error (sin 'content') y
+    // reventaba mas adelante al intentar leer data.content.map -- quedaba
+    // igual de invisible que un timeout real. Ahora se corta aca mismo.
+    var errData=await res.json().catch(function(){return{};});
+    var eErr=new Error(errData.mensaje||errData.error||'error_chat');
+    eErr.data=errData;
+    throw eErr;
   }
   window.limiteChatRestante=parseInt(res.headers.get('X-Limite-Restante'),10);
   return res.json();
@@ -2396,6 +2431,7 @@ async function hacerAuth(){
       // usando el placeholder "[Nombre]" literal en vez del nombre real).
       // guardarUsuarioYContinuar() upsertea sobre esta misma fila al
       // terminar la capa 1 (ver on_conflict=email en api/guardar.js).
+      window.usuarioPlan='free';
       try{
         var dataReg=await guardarTabla('usuarios',{nombre:nombre});
         if(dataReg&&dataReg[0]&&dataReg[0].id)usuarioId=dataReg[0].id;
@@ -2421,6 +2457,7 @@ async function cargarProgreso(email){
       var u=usuarios[0];
       usuarioId=u.id;
       window.userNombre=u.nombre;
+      window.usuarioPlan=u.plan||'free';
 
       // Si dejó los datos básicos a medias (se registró, empezó la Etapa 1
       // y no la terminó), vuelve derecho ahí en vez de pasar a "¿Qué querés

@@ -84,7 +84,11 @@ export default async function handler(req, res) {
       // principal (onboarding + charla libre) sigue completo y sin tope de
       // plan arriba, que es lo que no se puede tocar sin traicionar la
       // mision de Soul. Esto es lo unico que hoy queda atras de Pro.
-      if (usuario.plan !== 'pro') {
+      // "obligatorio" (Capacidad de volver a elegir) es la excepcion: es
+      // requisito para TODOS antes de un encuentro, sin importar el plan
+      // (ver iniciarModuloObligatorio en soul.html) -- bloquearlo dejaba a
+      // alguien en Free sin poder avanzar nunca a la Sala de Encuentros.
+      if (moduloFase !== 'obligatorio' && usuario.plan !== 'pro') {
         return res.status(403).json({
           error: 'requiere_pro',
           mensaje: 'Este momento de profundización es parte de Soul Pro.'
