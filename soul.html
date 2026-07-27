@@ -1523,7 +1523,12 @@ async function mostrarEspejo(){
     // con buildModuloPrompt en cuanto la persona responde algo.
   }catch(e){
     var t2=document.getElementById('moduloTyping');if(t2)t2.remove();
-    addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
+    // Mismo motivo que en sendModuloMsg: sin este push queda un turno 'user'
+    // sin respuesta en moduloHistory y todo lo que se mande despues rompe la
+    // alternancia que exige Claude.
+    var fallbackEspejo='Algo se desconectó. ¿Podés repetir lo que decías?';
+    addModuloMsg('soul',fallbackEspejo);
+    moduloHistory.push({role:'assistant',content:fallbackEspejo});
     agregarBotonReportar('moduloArea','modulos');
   }finally{
     espejoEnCurso=false;
@@ -1755,7 +1760,13 @@ async function sendModuloMsg(){
     guardarModuloHistorial().catch(function(){});
   }catch(e){
     if(typing)typing.remove();
-    addModuloMsg('soul','Algo se desconectó. ¿Podés repetir lo que decías?');
+    // Sin este push, moduloHistory queda con dos turnos 'user' seguidos y
+    // Claude rechaza (400, roles deben alternar) TODOS los mensajes
+    // siguientes -- quedaba en este mismo error para siempre sin importar
+    // que respondiera la persona.
+    var fallbackModulo='Algo se desconectó. ¿Podés repetir lo que decías?';
+    addModuloMsg('soul',fallbackModulo);
+    moduloHistory.push({role:'assistant',content:fallbackModulo});
     agregarBotonReportar('moduloArea','modulos');
   }finally{
     document.getElementById('moduloBtn').disabled=false;
@@ -3265,7 +3276,13 @@ async function enviarReflexion(){
     guardarReflexionHistorial();
   }catch(e){
     var t5=document.getElementById('reflexionTyping');if(t5)t5.remove();
-    addReflexionMsg('soul',e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?');
+    // Sin este push, reflexionHistory queda con dos turnos 'user' seguidos y
+    // Claude rechaza (400, roles deben alternar) todos los mensajes
+    // siguientes de esta reflexion -- quedaba en el mismo error para siempre
+    // sin importar que respondiera la persona.
+    var fallbackReflexion=e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?';
+    addReflexionMsg('soul',fallbackReflexion);
+    reflexionHistory.push({role:'assistant',content:fallbackReflexion});
     if(!e.rateLimited)agregarBotonReportar('reflexionArea','reflexion_chat');
   }finally{
     document.getElementById('reflexionSendBtn').disabled=false;
@@ -3969,7 +3986,13 @@ async function enviarAlChat(txt){
     }
   }catch(e){
     hideTyping();
-    addMsg('soul',e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?');
+    // Sin este push, chatHistory queda con dos turnos 'user' seguidos y
+    // Claude rechaza (400, roles deben alternar) todos los mensajes
+    // siguientes -- quedaba en el mismo error para siempre sin importar que
+    // respondiera la persona.
+    var fallbackChat=e.rateLimited?e.message:'Algo se desconectó. ¿Podés repetir lo que decías?';
+    addMsg('soul',fallbackChat);
+    chatHistory.push({role:'assistant',content:fallbackChat});
     if(!e.rateLimited)agregarBotonReportar('chatArea','chat_principal');
   }
 }
