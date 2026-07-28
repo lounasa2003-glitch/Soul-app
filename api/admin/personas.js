@@ -37,6 +37,33 @@ export default async function handler(req, res) {
   // PATCH tambien cambia 'plan' (free/pro) -- no hay pago conectado todavia
   // (StoreKit/IAP pendiente para iOS), asi que esto es el interruptor manual
   // que usa Lu mientras tanto para dar Pro a alguien a mano.
+  if (req.method === 'PATCH' && modo === 'solicitudRevision') {
+    // ── Cambiar estado y/o dejar respuesta en un pedido de revisión de
+    // perfil (Decisión 5). Nunca toca 'perfiles' -- la corrección real, si
+    // corresponde, la hace la administradora a mano en la Hoja de Vida. ──
+    const { solicitudId, estado, respuesta_admin } = req.body || {};
+    if (!solicitudId) return res.status(400).json({ error: 'Falta solicitudId' });
+    const ESTADOS_VALIDOS = ['pendiente', 'en_revision', 'resuelto'];
+    if (estado !== undefined && !ESTADOS_VALIDOS.includes(estado)) {
+      return res.status(400).json({ error: 'estado invalido' });
+    }
+    const cambios = {};
+    if (typeof estado === 'string') cambios.estado = estado;
+    if (typeof respuesta_admin === 'string') {
+      cambios.respuesta_admin = respuesta_admin || null;
+      if (respuesta_admin.trim()) cambios.respondido_en = new Date().toISOString();
+    }
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/solicitudes_revision_perfil?id=eq.${encodeURIComponent(solicitudId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify(cambios)
+    });
+    if (!patchRes.ok) {
+      return res.status(500).json({ error: 'No se pudo actualizar' });
+    }
+    return res.status(200).json({ ok: true });
+  }
+
   if (req.method === 'PATCH') {
     if (!id) return res.status(400).json({ error: 'Falta id' });
     const { archivada, plan } = req.body || {};
@@ -183,6 +210,43 @@ export default async function handler(req, res) {
       );
       const diagnosticos = diagRes.ok ? await diagRes.json() : [];
       return res.status(200).json({ diagnosticos });
+    }
+
+    if (modo === 'listaEsperaTesters') {
+      // ── Interesados en probar la app via Play Store (ver
+      // reclutamiento-testers.html + accion 'registrarInteresado' en
+      // api/auth.js) -- la tabla no tiene politica de SELECT para
+      // anon/authenticated a proposito, asi que solo la service role key
+      // (esta misma) puede leerla. ──
+      const listaRes = await fetch(
+        `${supabaseUrl}/rest/v1/lista_espera_testers?select=*&order=creado_en.desc`,
+        { headers }
+      );
+      const lista = listaRes.ok ? await listaRes.json() : [];
+      return res.status(200).json({ lista });
+    }
+
+    if (modo === 'solicitudesRevision') {
+      // ── Pedidos de revisión manual de perfil (Decisión 5) -- la persona
+      // usuaria los manda desde "Mi perfil" (soul.html), acá se listan
+      // todos para que la administradora los revise y responda. Nunca
+      // reconstruye nada solo/a: la corrección real del perfil (si
+      // corresponde) se hace a mano en la Hoja de Vida, esto solo lleva el
+      // registro del pedido/respuesta. ──
+      const srRes = await fetch(
+        `${supabaseUrl}/rest/v1/solicitudes_revision_perfil?select=id,usuario_id,texto_cuestionado,explicacion,estado,respuesta_admin,respondido_en,created_at&order=created_at.desc&limit=100`,
+        { headers }
+      );
+      const solicitudes = srRes.ok ? await srRes.json() : [];
+      const idsUsuarios = [...new Set(solicitudes.map((s) => s.usuario_id))];
+      let nombrePorId = {};
+      if (idsUsuarios.length > 0) {
+        const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${idsUsuarios.map(encodeURIComponent).join(',')})`, { headers });
+        const usuarios = uRes.ok ? await uRes.json() : [];
+        usuarios.forEach((u) => { nombrePorId[u.id] = u.nombre || u.email || null; });
+      }
+      const solicitudesConNombre = solicitudes.map((s) => ({ ...s, nombre_usuario: nombrePorId[s.usuario_id] || null }));
+      return res.status(200).json({ solicitudes: solicitudesConNombre });
     }
 
     if (modo === 'citaMensajes') {
