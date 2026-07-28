@@ -87,9 +87,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({ email: String(email).trim().toLowerCase().slice(0, 200) })
       });
       if (!insertRes.ok) {
-        const detalle = await insertRes.text();
-        console.error('registrarInteresado fallo:', insertRes.status, detalle);
-        await registrarErrorSilencioso({ contexto: 'api/auth: registrarInteresado', error: new Error(detalle) });
+        await registrarErrorSilencioso({ contexto: 'api/auth: registrarInteresado', error: new Error(await insertRes.text()) });
         return res.status(500).json({ error: 'No se pudo guardar' });
       }
       return res.status(200).json({ ok: true });
