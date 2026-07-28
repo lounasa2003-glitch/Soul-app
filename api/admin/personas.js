@@ -200,7 +200,7 @@ export default async function handler(req, res) {
       if (!citaId) return res.status(400).json({ error: 'Falta citaId' });
       const citaIdEnc = encodeURIComponent(citaId);
       const [citaRes, msgsRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,ultima_actividad&id=eq.${citaIdEnc}`, { headers }),
+        fetch(`${supabaseUrl}/rest/v1/citas?select=id,match_id,estado,created_at,ultima_actividad,consiente_analisis_a,consiente_analisis_b&id=eq.${citaIdEnc}`, { headers }),
         fetch(`${supabaseUrl}/rest/v1/cita_mensajes?select=*&cita_id=eq.${citaIdEnc}&order=created_at.asc`, { headers })
       ]);
       let citaFila = citaRes.ok ? (await citaRes.json())[0] : null;

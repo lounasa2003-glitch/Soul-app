@@ -868,7 +868,9 @@ function renderHojaDeVida(data){
       var numero=citasDelMatch.length-idxInv;
       html+='<div style="margin-top:.8rem;padding-top:.6rem;border-top:1px dashed #2a1f28">';
       html+='<p class="campo-grupo-titulo">Encuentro '+numero+' -- '+esc(CITA_ESTADO_LEGIBLE_ADMIN[cita.estado]||cita.estado)+'</p>';
-      if(cita.resumen_ia){
+      if(cita.resumen_ia&&cita.resumen_ia.estado==='no_generado'){
+        html+=campoHtml('Qué pasó (IA)','No generado -- '+(cita.resumen_ia.motivo||'falta de consentimiento'));
+      }else if(cita.resumen_ia){
         var r=cita.resumen_ia;
         html+=campoHtml('Qué pasó (IA)',r.resumen);
         html+=campoHtml('Tono general',r.tono_general);
