@@ -287,7 +287,7 @@ async function cambiarEstado(req, res, supabaseUrl, headers, accion) {
     // responde, asi que una llamada sin await puede no llegar a mandarse.
     // Si Resend falla igual se responde 200 -- el match ya quedo activo.
     try {
-      const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
+      const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
       const usuarios = nRes.ok ? await nRes.json() : [];
       await notificarNuevoMatch(usuarios);
     } catch (e) {

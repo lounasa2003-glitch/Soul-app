@@ -519,6 +519,13 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="step-sub">Lo que podrías negociar</p>
       <textarea class="step-ta" id="mpNeg"></textarea>
 
+      <div style="margin-top:1.2rem;padding-top:1rem;border-top:1px solid #2a1f28">
+        <label style="display:flex;align-items:flex-start;gap:.5rem;cursor:pointer;text-align:left">
+          <input type="checkbox" id="mpComsProducto" style="margin-top:.2rem;flex-shrink:0">
+          <span style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;color:#9a8e96;line-height:1.4">Quiero recibir avisos de Soul fuera de la app (nuevos matches, recordatorios). No afecta los mails esenciales de tu cuenta (confirmación, recuperación de acceso).</span>
+        </label>
+      </div>
+
       <div class="auth-err" id="miPerfilErr"></div>
       <p class="auth-loading" id="miPerfilGuardando" style="display:none">Guardando...</p>
       <p class="auth-loading" id="miPerfilExito" style="display:none;color:#4ecb71">✓ Guardado.</p>
@@ -684,9 +691,9 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <div class="cbox"><span class="cbox-icon">✓</span></div>
         <div class="cbox-text"><strong>Acepto los términos y condiciones</strong><span>Incluye las funciones indispensables necesarias para usar Soul.</span></div>
       </div>
-      <div class="check-row" id="chkOpt" onclick="this.classList.toggle('on')">
+      <div class="check-row" id="chkOpt" onclick="toggleChkOpt()">
         <div class="cbox"><span class="cbox-icon">✓</span></div>
-        <div class="cbox-text"><strong>Acepto contribuir con datos anonimizados (opcional)</strong><span>Podés cambiar esto desde tu perfil.</span></div>
+        <div class="cbox-text"><strong>Quiero recibir avisos de Soul fuera de la app (opcional)</strong><span>Nuevos matches, recordatorios. Podés cambiar esto cuando quieras desde tu perfil.</span></div>
       </div>
       <div class="carta-box">
         <p class="carta-title">✦ Carta de Derechos de Soul</p>
@@ -3062,6 +3069,7 @@ async function mostrarMiPerfil(){
     document.getElementById('mpNoNeg').value=u.no_negociables||'';
     document.getElementById('mpNeg').value=u.negociables||'';
     document.getElementById('mpFotoAprobada').checked=!!u.foto_aprobada;
+    document.getElementById('mpComsProducto').checked=!!u.comunicaciones_producto_aceptadas;
 
     preseleccionarChipPerfil('dist',u.distancia_max);
     preseleccionarChipPerfil('gen',u.genero);
@@ -3111,7 +3119,9 @@ async function guardarMiPerfil(){
     ocupacion: document.getElementById('mpOcup').value.trim()||null,
     no_negociables: document.getElementById('mpNoNeg').value.trim()||null,
     negociables: document.getElementById('mpNeg').value.trim()||null,
-    foto_aprobada: document.getElementById('mpFotoAprobada').checked
+    foto_aprobada: document.getElementById('mpFotoAprobada').checked,
+    comunicaciones_producto_aceptadas: document.getElementById('mpComsProducto').checked,
+    comunicaciones_producto_fecha: new Date().toISOString()
   };
   // Solo se manda la foto si se eligio una nueva -- si no, un PATCH parcial
   // deja la que ya estaba guardada intacta (no se manda null por defecto).
@@ -3628,7 +3638,7 @@ async function enviarFeedbackPiloto(){
 }
 
 // ── CONSENTIMIENTO ──
-var scrollOk=false,mainOk=false;
+var scrollOk=false,mainOk=false,optOk=false;
 function chkScroll(){
   if(scrollOk)return;
   var b=document.getElementById('legalBox');
@@ -3645,6 +3655,13 @@ function toggleChk(){
   mainOk=!mainOk;
   document.getElementById('chkMain').classList.toggle('on',mainOk);
   document.getElementById('btnAceptar').disabled=!mainOk;
+}
+// A diferencia de chkMain, este checkbox es opcional y no depende de
+// scrollOk -- se puede tildar/destildar en cualquier momento, y arranca
+// desmarcado (optOk=false) en cada carga de la pantalla de consentimiento.
+function toggleChkOpt(){
+  optOk=!optOk;
+  document.getElementById('chkOpt').classList.toggle('on',optOk);
 }
 
 // Identifica QUÉ texto (resumen embebido acá) y QUÉ política de privacidad
@@ -3669,7 +3686,9 @@ async function aceptarConsentimiento(){
       consentimiento_aceptado:true,
       consentimiento_fecha:new Date().toISOString(),
       consentimiento_version:CONSENTIMIENTO_VERSION,
-      politica_privacidad_version:POLITICA_PRIVACIDAD_VERSION
+      politica_privacidad_version:POLITICA_PRIVACIDAD_VERSION,
+      comunicaciones_producto_aceptadas:optOk,
+      comunicaciones_producto_fecha:new Date().toISOString()
     });
     ir(3);
   }catch(e){

@@ -239,7 +239,7 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
 
   // Lectura cruzada (remitente Y receptor) -- service role, ninguno de los
   // dos tokens propios alcanza para ver la fila del otro.
-  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers: headersServicePerfiles(headers) });
+  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers: headersServicePerfiles(headers) });
   const usuarios = uRes.ok ? await uRes.json() : [];
   const receptor = usuarios.find(u => u.id === receptorId);
   const remitente = usuarios.find(u => u.id === remitenteId);
@@ -255,7 +255,7 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   }
 
   const remitenteNombre = remitente ? (remitente.nombre || remitente.email) : null;
-  const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email, remitenteNombre });
+  const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email, remitenteNombre, comunicaciones_producto_aceptadas: receptor.comunicaciones_producto_aceptadas });
   if (!enviado) return; // si Resend fallo, no marcar cooldown -- que reintente en el proximo mensaje
 
   await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(citaId)}`, {
@@ -626,7 +626,7 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
         const otroId = soyA ? match.usuario_b : match.usuario_a;
         // Lectura cruzada (mi nombre Y el de la otra persona) -- service role.
         const usuariosRes = await fetch(
-          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
+          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
           { headers: headersServicePerfiles(headers) }
         );
         const usuariosFilas = usuariosRes.ok ? await usuariosRes.json() : [];
@@ -636,7 +636,8 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
           await notificarSalaEncuentrosPendiente({
             nombre: otro.nombre,
             email: otro.email,
-            remitenteNombre: yo ? (yo.nombre || yo.email) : null
+            remitenteNombre: yo ? (yo.nombre || yo.email) : null,
+            comunicaciones_producto_aceptadas: otro.comunicaciones_producto_aceptadas
           });
         }
       } catch (e) {
