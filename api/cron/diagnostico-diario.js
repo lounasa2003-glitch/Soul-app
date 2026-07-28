@@ -42,7 +42,14 @@ const DIAS_GRACIA_BORRADO = 30;
 // FK de matches/citas que sigan referenciandola) y se le saca todo dato
 // personal. uso_tokens/eventos_piloto tampoco se tocan: son metricas
 // agregadas (conteos, no contenido), no dato personal identificable.
-const TABLAS_PERSONALES_A_BORRAR = ['perfiles', 'conversaciones', 'historial_relacional', 'intentos_fuga_prompt'];
+//
+// cita_reflexiones, cita_ayudas y solicitudes_revision_perfil se sumaron
+// via Decision 6 (propuesta-retencion.md) -- las tres son estrictamente
+// propias (nunca compartidas con la otra persona de un match/cita, a
+// diferencia de cita_mensajes/citas/matches), asi que no tienen el mismo
+// problema de "romper el registro de otra persona" y pueden borrarse igual
+// que perfiles/conversaciones.
+const TABLAS_PERSONALES_A_BORRAR = ['perfiles', 'conversaciones', 'historial_relacional', 'intentos_fuga_prompt', 'cita_reflexiones', 'cita_ayudas', 'solicitudes_revision_perfil'];
 
 async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
   // Defensivo: si por lo que sea quedo una cita abierta (no deberia, ya se
@@ -70,6 +77,17 @@ async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
     await fetch(`${supabaseUrl}/rest/v1/${tabla}?usuario_id=eq.${encodeURIComponent(usuarioId)}`, { method: 'DELETE', headers })
       .catch((e) => registrarErrorSilencioso({ contexto: `cron/diagnostico-diario: purgar ${tabla}`, error: e, meta: { usuarioId } }));
   }
+
+  // feedback_piloto (Decision 6): a diferencia de las tablas de arriba, acá
+  // NO se borra el contenido -- el feedback del piloto sigue teniendo valor
+  // de aprendizaje de producto aunque la persona ya no esté. Se anonimiza
+  // desvinculando el usuario_id (única columna identificadora directa de
+  // esta tabla) en vez de borrar la fila entera.
+  await fetch(`${supabaseUrl}/rest/v1/feedback_piloto?usuario_id=eq.${encodeURIComponent(usuarioId)}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+    body: JSON.stringify({ usuario_id: null })
+  }).catch((e) => registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: anonimizar feedback_piloto', error: e, meta: { usuarioId } }));
 
   // Borrar la identidad real de Supabase Auth (email, password) requiere la
   // service role key, que hoy NO esta configurada en este proyecto (solo
@@ -140,6 +158,39 @@ async function purgarCuentasVencidas(supabaseUrl, supabaseKey) {
     }
   }
   return { candidatas: pendientes.length, purgadas, authBorrados, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY };
+}
+
+// Purga por antiguedad (Decision 6, propuesta-retencion.md) -- a diferencia
+// de TABLAS_PERSONALES_A_BORRAR, esto NO depende de que nadie pida el
+// borrado de su cuenta: son tablas puramente operativas (soporte tecnico,
+// diagnostico interno), sin ningun vinculo compartido con otra persona, asi
+// que se purgan por su propia fecha una vez que superan el plazo aprobado.
+// 'creado_en' es el nombre de columna real en las tres tablas (verificado
+// en el codigo que ya las lee mas abajo en este mismo archivo).
+const RETENCION_DIAS = {
+  reportes_tecnicos: 180, // ~6 meses
+  errores_silenciosos: 90,
+  diagnosticos_diarios: 90
+};
+
+async function purgarPorAntiguedad(supabaseUrl, supabaseKey) {
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'return=representation' };
+  const resultado = {};
+  for (const [tabla, dias] of Object.entries(RETENCION_DIAS)) {
+    const limite = haceHoras(dias * 24);
+    try {
+      const res = await fetch(`${supabaseUrl}/rest/v1/${tabla}?creado_en=lt.${encodeURIComponent(limite)}`, {
+        method: 'DELETE',
+        headers
+      });
+      const borradas = res.ok ? (await res.json()).length : 0;
+      resultado[tabla] = { borradas, ok: res.ok };
+    } catch (e) {
+      resultado[tabla] = { borradas: 0, ok: false };
+      await registrarErrorSilencioso({ contexto: `cron/diagnostico-diario: purgarPorAntiguedad ${tabla}`, error: e });
+    }
+  }
+  return resultado;
 }
 
 // Este HTML se guarda en diagnosticos_diarios.texto_resumen y despues se
@@ -226,6 +277,15 @@ export default async function handler(req, res) {
         return { candidatas: 0, purgadas: 0, authBorrados: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
       });
 
+    // Purga por antiguedad (Decision 6) -- independiente de si alguien pidio
+    // borrar su cuenta o no, corre siempre, mismo motivo de orden que arriba
+    // (escritura antes que lectura).
+    const purgadoAntiguedad = await purgarPorAntiguedad(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
+      .catch(async (e) => {
+        await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarPorAntiguedad', error: e });
+        return {};
+      });
+
     const [errores, reportes, fugas, tokens, resend, sinConfirmar, reportesTecnicos] = await Promise.all([
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
@@ -263,6 +323,7 @@ export default async function handler(req, res) {
       cuentasSinConfirmar: { total: sinConfirmar.length, filas: sinConfirmar },
       reportesTecnicos: { total: reportesTecnicos.length, porContexto: reportesTecnicosPorContexto, filas: reportesTecnicos },
       borradoDeCuentas: purgado,
+      purgaPorAntiguedad: purgadoAntiguedad,
       tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
@@ -301,6 +362,11 @@ export default async function handler(req, res) {
     } else if (purgado.purgadas > 0) {
       lineas.push(`<p>Auth borrado de verdad en ${purgado.authBorrados} de ${purgado.purgadas}.</p>`);
     }
+
+    lineas.push(`<h3>Purga por antigüedad (Decisión 6)</h3>`);
+    lineas.push('<ul>' + Object.entries(purgadoAntiguedad).map(([tabla, r]) =>
+      `<li>${esc(tabla)}: ${r.ok ? r.borradas + ' borradas' : 'error al purgar'}</li>`
+    ).join('') + '</ul>');
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);
     lineas.push(`<p>Input: ${totalInput.toLocaleString()} | Output: ${totalOutput.toLocaleString()} | Cache creado: ${totalCacheCreation.toLocaleString()} | Cache leído: ${totalCacheRead.toLocaleString()} | Costo estimado: ~$${costoEstimado.toFixed(2)} USD (aproximado, no es el numero de facturacion real)</p>`);
