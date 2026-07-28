@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     // las tablas sigue con el anon key hasta que tengan su propia politica
     // -- la autorizacion para esas la sigue haciendo esta funcion
     // (filtroDeLecturaValido de arriba), no la base.
-    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles', 'usuarios'];
+    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles', 'usuarios', 'solicitudes_revision_perfil'];
     const bearer = TABLAS_CON_RLS.includes(tabla) ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       headers: {

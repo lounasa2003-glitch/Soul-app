@@ -532,6 +532,20 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
       <button class="btn-gold" id="miPerfilGuardarBtn" onclick="guardarMiPerfil()" style="width:100%;margin-top:.5rem">Guardar cambios →</button>
       <button class="btn-back" onclick="volverAMenuPrincipal()">← Volver</button>
+
+      <p onclick="toggleSolicitudRevision()" style="text-align:center;margin-top:1.8rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.8rem;cursor:pointer;text-decoration:underline">No estoy de acuerdo con una parte de mi perfil</p>
+      <div id="solicitudRevisionForm" style="display:none;margin-top:.8rem;padding:1rem;border:1px solid #2a1f28;border-radius:8px;text-align:left">
+        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;margin-bottom:.6rem">Pedir revisión de tu perfil</p>
+        <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;margin-bottom:.8rem;line-height:1.5">Soul genera inferencias, no diagnósticos, y pueden ser incompletas o equivocadas. Contanos qué parte de tu perfil no te representa y por qué -- la administradora lo revisa a mano, no se corrige automáticamente.</p>
+        <p class="step-sub">¿Qué parte de tu perfil querés cuestionar?</p>
+        <textarea class="step-ta" id="srTexto" placeholder="Ej: el modo de conflicto que aparece en mi perfil..." style="min-height:70px"></textarea>
+        <p class="step-sub">¿Por qué no te representa?</p>
+        <textarea class="step-ta" id="srExplicacion" placeholder="Contanos brevemente" style="min-height:70px"></textarea>
+        <div class="auth-err" id="srErr"></div>
+        <p class="auth-loading" id="srExito" style="display:none;color:#4ecb71">✓ Recibimos tu pedido. La administradora lo va a revisar.</p>
+        <button class="btn-gold" id="srBtn" onclick="enviarSolicitudRevision()" style="width:100%;margin-top:.5rem">Enviar pedido →</button>
+      </div>
+
       <p onclick="solicitarBorrarCuenta()" style="text-align:center;margin-top:1.8rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.75rem;cursor:pointer;opacity:.7">Eliminar mi cuenta</p>
     </div>
   </div>
@@ -3139,6 +3153,44 @@ async function guardarMiPerfil(){
     errEl.textContent='No pudimos guardar los cambios. Probá de nuevo.';
     errEl.style.display='block';
     btn.disabled=false;
+  }
+}
+
+// Pedido de revision manual de una parte del perfil (Decision 5) -- nunca
+// reconstruye nada solo/a: solo queda registrado para que la administradora
+// lo revise a mano (ver seccion "Solicitudes de revision de perfil" en
+// panel-admin.html).
+function toggleSolicitudRevision(){
+  var f=document.getElementById('solicitudRevisionForm');
+  f.style.display=(f.style.display==='none'||!f.style.display)?'block':'none';
+}
+
+async function enviarSolicitudRevision(){
+  var texto=document.getElementById('srTexto').value.trim();
+  var explicacion=document.getElementById('srExplicacion').value.trim();
+  var errEl=document.getElementById('srErr');
+  var exito=document.getElementById('srExito');
+  var btn=document.getElementById('srBtn');
+  errEl.style.display='none';
+  if(!texto||!explicacion){
+    errEl.textContent='Completá los dos campos antes de enviar.';
+    errEl.style.display='block';
+    return;
+  }
+  btn.disabled=true;
+  btn.textContent='Enviando...';
+  try{
+    await guardarTabla('solicitudes_revision_perfil',{texto_cuestionado:texto,explicacion:explicacion});
+    document.getElementById('srTexto').value='';
+    document.getElementById('srExplicacion').value='';
+    btn.style.display='none';
+    exito.style.display='block';
+  }catch(e){
+    console.error('Error enviando solicitud de revision:',e);
+    btn.disabled=false;
+    btn.textContent='Enviar pedido →';
+    errEl.textContent='No pudimos enviar tu pedido. Probá de nuevo.';
+    errEl.style.display='block';
   }
 }
 

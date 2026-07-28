@@ -152,7 +152,7 @@ export default async function handler(req, res) {
     // (auth_id ya viaja en datosFinales, ver mas arriba) como el PATCH de
     // etapa_actual/datos basicos son siempre sobre la fila propia. El resto
     // sigue con el anon key.
-    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles', 'usuarios'];
+    const TABLAS_CON_RLS = ['conversaciones', 'matches', 'feedback_piloto', 'reportes_tecnicos', 'perfiles', 'usuarios', 'solicitudes_revision_perfil'];
     const bearer = TABLAS_CON_RLS.includes(tabla) ? usuario.token : supabaseKey;
     const response = await fetch(url, {
       method: filtro ? 'PATCH' : 'POST',

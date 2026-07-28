@@ -145,6 +145,14 @@ a{color:inherit}
         <div id="diagnosticoLista" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem"></div>
         <div id="diagnosticoContenido"><p class="cargando">Tocá "Actualizar" para ver el último diagnóstico.</p></div>
       </div>
+      <div style="border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:1.2rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+          <p style="font-family:'Cormorant Garamond',serif;font-style:italic;color:#c9a84c;font-size:1rem">Solicitudes de revisión de perfil</p>
+          <button class="btn-secundario" onclick="cargarSolicitudesRevision()">Actualizar</button>
+        </div>
+        <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.8rem">Pedidos de personas que no están de acuerdo con una parte de su perfil ("Mi perfil" → "No estoy de acuerdo..."). La corrección del perfil real, si corresponde, se hace a mano desde la Hoja de Vida -- esto no reconstruye nada solo.</p>
+        <div id="solicitudesRevisionLista"><p class="cargando">Tocá "Actualizar" para ver los pedidos.</p></div>
+      </div>
       <p class="cargando" id="personasCargando">Cargando personas...</p>
       <div id="personasFiltros" class="oculto" style="margin-bottom:1rem">
         <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-bottom:.7rem">
@@ -230,6 +238,68 @@ async function sembrarPreview(escenario){
     div.innerHTML='<p style="font-size:.85rem;margin-bottom:.4rem"><strong>Email:</strong> '+esc(data.email)+' &nbsp; <strong>Contraseña:</strong> '+esc(data.password)+'</p><p style="font-size:.8rem;color:#d8cdd2">'+esc(data.instrucciones)+'</p>';
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al preparar el escenario.</p>';
+  }
+}
+
+// Solicitudes de revisión de perfil (Decisión 5) -- pedidos que la persona
+// manda desde "Mi perfil" en soul.html. La corrección real del perfil (si
+// corresponde) se hace a mano en la Hoja de Vida; esto solo lleva el
+// registro del pedido, el estado y la respuesta.
+var SR_ESTADO_LEGIBLE={pendiente:'Pendiente',en_revision:'En revisión',resuelto:'Resuelto'};
+
+async function cargarSolicitudesRevision(){
+  var div=document.getElementById('solicitudesRevisionLista');
+  div.innerHTML='<p class="cargando">Cargando...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=solicitudesRevision');
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">No se pudieron cargar los pedidos.</p>';
+      return;
+    }
+    if(!data.solicitudes||data.solicitudes.length===0){
+      div.innerHTML='<p class="cargando">No hay pedidos todavía.</p>';
+      return;
+    }
+    div.innerHTML='';
+    data.solicitudes.forEach(function(s){
+      var item=document.createElement('div');
+      item.style.cssText='border-top:1px dashed #2a1f28;padding:.8rem 0';
+      var fecha=new Date(s.created_at).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      var opciones=Object.keys(SR_ESTADO_LEGIBLE).map(function(k){
+        return '<option value="'+k+'"'+(k===s.estado?' selected':'')+'>'+SR_ESTADO_LEGIBLE[k]+'</option>';
+      }).join('');
+      item.innerHTML=
+        '<p style="font-size:.85rem;margin-bottom:.3rem"><strong>'+esc(s.nombre_usuario||'(sin nombre)')+'</strong> — '+esc(fecha)+'</p>'+
+        '<p style="font-size:.82rem;color:#d8cdd2;margin-bottom:.3rem"><strong>Cuestiona:</strong> '+esc(s.texto_cuestionado)+'</p>'+
+        '<p style="font-size:.82rem;color:#d8cdd2;margin-bottom:.6rem"><strong>Por qué:</strong> '+esc(s.explicacion)+'</p>'+
+        '<select class="personas-orden" id="srEstado_'+s.id+'" style="margin-bottom:.5rem">'+opciones+'</select>'+
+        '<textarea class="step-ta" id="srRespuesta_'+s.id+'" placeholder="Respuesta para la persona / constancia de la corrección (opcional)" style="min-height:60px;margin-bottom:.5rem">'+esc(s.respuesta_admin||'')+'</textarea>'+
+        (s.respondido_en?'<p style="font-size:.72rem;color:#7a6e78;margin-bottom:.5rem">Respondido el '+esc(new Date(s.respondido_en).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}))+'</p>':'')+
+        '<button class="btn-secundario" onclick="guardarSolicitudRevision(\''+s.id+'\')">Guardar</button>'+
+        '<span class="auth-loading" id="srGuardado_'+s.id+'" style="display:none;margin-left:.5rem;color:#4ecb71">✓ Guardado</span>';
+      div.appendChild(item);
+    });
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión.</p>';
+  }
+}
+
+async function guardarSolicitudRevision(id){
+  var estado=document.getElementById('srEstado_'+id).value;
+  var respuesta=document.getElementById('srRespuesta_'+id).value;
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=solicitudRevision',{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({solicitudId:id,estado:estado,respuesta_admin:respuesta})
+    });
+    if(!res.ok){alert('No se pudo guardar.');return;}
+    var ok=document.getElementById('srGuardado_'+id);
+    ok.style.display='inline';
+    setTimeout(function(){ok.style.display='none';},2500);
+  }catch(e){
+    alert('Error de conexión.');
   }
 }
 
