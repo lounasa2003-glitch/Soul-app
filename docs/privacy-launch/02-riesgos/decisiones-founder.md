@@ -40,7 +40,7 @@
   - C: El riesgo de un consentimiento incompleto se mantiene.
 - **¿Bloquea el lanzamiento?**: **Sí.**
 - **¿Requiere revisión legal?**: Sí, imprescindible.
-- **Decisión final**: PENDIENTE
+- **Decisión final**: Decisión final: Opción B implementada, migrada, desplegada y verificada en producción. El consentimiento resumido enlaza al documento completo, incluye los puntos esenciales y registra inmediatamente fecha y versiones aceptadas.
 
 ---
 
@@ -58,7 +58,8 @@
   - B: El resumen se sigue generando siempre, pero hay que explicarlo con cuidado para no contradecir lo que la persona entendió al aceptar o rechazar el análisis.
 - **¿Bloquea el lanzamiento?**: **Sí.**
 - **¿Requiere revisión legal?**: Recomendable si se elige la opción B.
-- **Decisión final**: PENDIENTE
+- **Decisión final**: Decisión final: Opción A. El resumen administrativo de la cita solo se generará cuando ambas personas hayan consentido el análisis. Si alguna no consiente, no se enviará la transcripción a la IA ni se generará el resumen. Los reportes de seguridad deberán funcionar por un canal separado y no depender de este análisis.
+- **Estado real de implementación**: Implementado, desplegado y verificado en producción (2026-07-28). `generarResumenCitaEnSegundoPlano` (`lib/cierreCita.js`) ahora chequea `consiente_analisis_a === true && consiente_analisis_b === true` en la propia `cita` antes de leer `cita_mensajes` o llamar a Anthropic. Si no se cumple, no se lee la transcripción, no hay llamada a la IA, y `resumen_ia` queda en `{estado:'no_generado', motivo:'Sin consentimiento de análisis de ambas personas'}` -- un valor explícito, no null ni un resumen vacío. `panel-admin.html` muestra ese estado con un mensaje claro en vez de listar los campos como "no explorado". De paso se corrigió el `select` de citas en el modo `citaMensajes` de `api/admin/personas.js`, que no traía `consiente_analisis_a/b` -- sin eso, el nuevo chequeo hubiera bloqueado el resumen por error en cualquier cierre disparado desde ese camino admin, aunque el consentimiento real fuera `true/true`. Probado en producción con las cuentas de Vista Previa (`preview@soul-app.test`/`preview-alex@soul-app.test`, excluidas del matching real): caso ambas-consienten generó el resumen real; caso una-no-consiente mostró el estado "No generado" sin llamar a la IA. No se tocaron reportes, denuncias ni bloqueos.
 
 ---
 
