@@ -60,6 +60,29 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // Anotarse para probar la app (landing de reclutamiento de testers,
+    // ver reclutamiento-testers.html) -- publico, sin sesion. La tabla
+    // 'lista_espera_testers' es aparte de 'usuarios' a proposito: esto es
+    // solo interes, no una cuenta real. on_conflict+ignore-duplicates trata
+    // un mail repetido como exito silencioso -- no hace falta que la
+    // persona sepa si ya estaba anotada o no.
+    if (accion === 'registrarInteresado') {
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ error: 'email_invalido' });
+      }
+      const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || 'ip_desconocida';
+      const limiteInfo = await chequearLimite(ip, 'registrarInteresado', 10, 3600);
+      if (!limiteInfo.permitido) {
+        return res.status(429).json({ error: 'limite_alcanzado' });
+      }
+      await fetch(`${supabaseUrl}/rest/v1/lista_espera_testers?on_conflict=email`, {
+        method: 'POST',
+        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal,resolution=ignore-duplicates' },
+        body: JSON.stringify({ email: String(email).trim().toLowerCase().slice(0, 200) })
+      });
+      return res.status(200).json({ ok: true });
+    }
+
     const limiteConfig = LIMITES_AUTH[accion];
     if (limiteConfig) {
       if (!email) return res.status(400).json({ error: 'Falta email' });
