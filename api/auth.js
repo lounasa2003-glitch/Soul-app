@@ -63,23 +63,33 @@ export default async function handler(req, res) {
     // Anotarse para probar la app (landing de reclutamiento de testers,
     // ver reclutamiento-testers.html) -- publico, sin sesion. La tabla
     // 'lista_espera_testers' es aparte de 'usuarios' a proposito: esto es
-    // solo interes, no una cuenta real. on_conflict+ignore-duplicates trata
-    // un mail repetido como exito silencioso -- no hace falta que la
-    // persona sepa si ya estaba anotada o no.
+    // solo interes, no una cuenta real, y no tiene NINGUNA policy (RLS
+    // activado sin policies = invisible para anon/authenticated) -- se
+    // escribe con la service role key, que bypasea RLS por diseño de
+    // Supabase. La proteccion real de este endpoint publico es el rate
+    // limit por IP de aca abajo, no una policy. on_conflict+ignore-
+    // duplicates trata un mail repetido como exito silencioso -- no hace
+    // falta que la persona sepa si ya estaba anotada o no.
     if (accion === 'registrarInteresado') {
       if (!email || typeof email !== 'string' || !email.includes('@')) {
         return res.status(400).json({ error: 'email_invalido' });
       }
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!serviceKey) return res.status(500).json({ error: 'Supabase no configurado' });
       const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || 'ip_desconocida';
       const limiteInfo = await chequearLimite(ip, 'registrarInteresado', 10, 3600);
       if (!limiteInfo.permitido) {
         return res.status(429).json({ error: 'limite_alcanzado' });
       }
-      await fetch(`${supabaseUrl}/rest/v1/lista_espera_testers?on_conflict=email`, {
+      const insertRes = await fetch(`${supabaseUrl}/rest/v1/lista_espera_testers?on_conflict=email`, {
         method: 'POST',
-        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal,resolution=ignore-duplicates' },
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal,resolution=ignore-duplicates' },
         body: JSON.stringify({ email: String(email).trim().toLowerCase().slice(0, 200) })
       });
+      if (!insertRes.ok) {
+        await registrarErrorSilencioso({ contexto: 'api/auth: registrarInteresado', error: new Error(await insertRes.text()) });
+        return res.status(500).json({ error: 'No se pudo guardar' });
+      }
       return res.status(200).json({ ok: true });
     }
 
