@@ -7,6 +7,52 @@
 const CACHE_NAME = 'soul-shell-v1';
 const APP_SHELL = ['/soul.html', '/manifest.json'];
 
+// Push en el navegador (gente que usa Soul desde Chrome sin instalar la
+// app) -- mismo proyecto de Firebase que la app Android, mismo endpoint de
+// envio del lado del servidor (lib/push.js le manda a cualquier token sin
+// importar la plataforma). Se importa el SDK "compat" via importScripts
+// porque un service worker clasico (no type=module) no puede usar import
+// estatico -- es el patron que documenta la propia Firebase para esto.
+// Si Firebase no llega a cargar (sin red, bloqueado, etc.) el resto del
+// service worker (cache/fetch de arriba) sigue funcionando igual, por eso
+// va en un try/catch aparte.
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.13.1/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.13.1/firebase-messaging-compat.js');
+  firebase.initializeApp({
+    apiKey: 'AIzaSyCnL4QNw51zccaM5hredj3oezAAtPkPXZ4',
+    authDomain: 'soulapp-2d92e.firebaseapp.com',
+    projectId: 'soulapp-2d92e',
+    storageBucket: 'soulapp-2d92e.firebasestorage.app',
+    messagingSenderId: '586817950812',
+    appId: '1:586817950812:web:502edf98783e3b32c54299'
+  });
+  // Con esto inicializado, Firebase ya muestra sola la notificacion cuando
+  // llega un push y la pestaña de Soul no esta enfocada -- no hace falta
+  // un listener de 'push' a mano ademas de esto.
+  firebase.messaging();
+} catch (e) {}
+
+// Click en la notificacion (cartel del sistema) -- Firebase la muestra
+// sola, pero el click hay que manejarlo a mano: si ya hay una pestaña de
+// Soul abierta, la enfoca y le manda el "data" del push para que rutee a
+// la pantalla correcta (mismo aplicarDeepLinkPush que usa la app Android,
+// ver soul.html); si no hay ninguna, abre una nueva.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = (event.notification.data && event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.data) || event.notification.data || {};
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((lista) => {
+      const existente = lista.find((c) => c.url.includes('/soul.html'));
+      if (existente) {
+        existente.postMessage({ tipoMensaje: 'push_click', data });
+        return existente.focus();
+      }
+      return self.clients.openWindow('/soul.html');
+    })
+  );
+});
+
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(

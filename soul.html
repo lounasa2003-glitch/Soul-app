@@ -2587,6 +2587,7 @@ async function cargarProgreso(email){
       window.userNombre=u.nombre;
       window.usuarioPlan=u.plan||'free';
       registrarPushTokenSiNativo();
+      window.dispatchEvent(new CustomEvent('soul:sesion-lista'));
       if(window.pushDeepLinkPendiente){
         aplicarDeepLinkPush(window.pushDeepLinkPendiente);
         window.pushDeepLinkPendiente=null;
@@ -5069,6 +5070,72 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('/sw.js').catch(function(){});
   });
 }
+</script>
+
+<script type="module">
+// Push en el navegador (Web Push) -- equivalente de registrarPushTokenSiNativo
+// para gente que usa Soul desde Chrome sin instalar la app. Va en un
+// <script type="module"> aparte (no en el bloque principal de arriba)
+// porque el SDK moderno de Firebase solo se distribuye como modulos ES;
+// para comunicarse con el resto de la app (que es JS clasico, sin build)
+// usa el mismo objeto global window de siempre -- window.guardarTabla,
+// window.usuarioId, window.aplicarDeepLinkPush ya existen ahi porque el
+// script de arriba los declara a nivel superior.
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js';
+import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.13.1/firebase-messaging.js';
+
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyCnL4QNw51zccaM5hredj3oezAAtPkPXZ4',
+  authDomain: 'soulapp-2d92e.firebaseapp.com',
+  projectId: 'soulapp-2d92e',
+  storageBucket: 'soulapp-2d92e.firebasestorage.app',
+  messagingSenderId: '586817950812',
+  appId: '1:586817950812:web:502edf98783e3b32c54299'
+};
+const VAPID_KEY = 'BLQC95f1O061s3a0QCPJltiYeCq59D3P_jZ7aGWL0yoFJN2WeqOSiItsaeep13dWt0ZaSyrf28P8RxJyXm2bB2I';
+
+async function registrarPushWebSiCorresponde(){
+  // Si esto corre DENTRO de la app nativa (Capacitor), el push ya lo
+  // maneja registrarPushTokenSiNativo() -- hacerlo tambien aca duplicaria
+  // el registro para el mismo dispositivo.
+  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())return;
+  if(!('Notification' in window)||!('serviceWorker' in navigator))return;
+  try{
+    var permiso=Notification.permission;
+    if(permiso==='default')permiso=await Notification.requestPermission();
+    if(permiso!=='granted')return;
+    var registro=await navigator.serviceWorker.ready;
+    var app=initializeApp(FIREBASE_CONFIG);
+    var messaging=getMessaging(app);
+    var token=await getToken(messaging,{vapidKey:VAPID_KEY,serviceWorkerRegistration:registro});
+    if(!token)return;
+    // Insert simple -- mismo criterio que en push_tokens para Android: si
+    // ya existia el mismo token, el UNIQUE(usuario_id,plataforma,token) lo
+    // rechaza sin romper nada.
+    window.guardarTabla('push_tokens',{token:token,plataforma:'web'}).catch(function(){});
+    // Con la pestaña enfocada, Firebase NO muestra sola la notificacion
+    // (eso solo pasa en segundo plano, ver sw.js) -- se muestra a mano acá
+    // para que tambien avise si la persona esta mirando otra pestaña con
+    // Soul de fondo.
+    onMessage(messaging,function(payload){
+      var n=payload.notification||{};
+      try{ new Notification(n.title||'Soul',{body:n.body,data:payload.data}); }catch(e){}
+    });
+  }catch(e){}
+}
+
+// Click en la notificacion en segundo plano -- sw.js enfoca/abre la
+// pestaña y manda el "data" por postMessage; acá se recibe y rutea con la
+// misma funcion que usa la app Android.
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message',function(evento){
+    if(!evento.data||evento.data.tipoMensaje!=='push_click')return;
+    if(window.usuarioId)window.aplicarDeepLinkPush(evento.data.data);
+    else window.pushDeepLinkPendiente=evento.data.data;
+  });
+}
+
+window.addEventListener('soul:sesion-lista',registrarPushWebSiCorresponde);
 </script>
 
 <div id="sesionExpiradaModal" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem">
