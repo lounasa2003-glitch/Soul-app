@@ -399,6 +399,14 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <p class="sesion-title" id="sesionSaludo">Hola de nuevo</p>
     <p class="sesion-sub" id="sesionSub">¿Qué querés hacer hoy?</p>
 
+    <div id="bannerPushWeb" style="display:none;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);border-radius:6px;padding:.9rem 1.1rem;margin-bottom:1.2rem;text-align:center">
+      <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.92rem;color:#c9a84c;margin-bottom:.6rem">¿Querés que te avisemos acá cuando tengas novedades?</p>
+      <div style="display:flex;gap:.6rem;justify-content:center">
+        <button id="btnActivarPushWeb" style="padding:.5rem 1rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.75rem;font-weight:600;cursor:pointer">Activar avisos</button>
+        <button id="btnDescartarPushWeb" style="padding:.5rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:'Inter',sans-serif;font-size:.75rem;cursor:pointer">Ahora no</button>
+      </div>
+    </div>
+
     <div class="sesion-opt" onclick="elegirSesion('soul')">
       <p class="sesion-opt-title">Hablar con Soul (Módulos)</p>
       <p class="sesion-opt-desc">Continuá tu proceso — los módulos que te van a preparar mejor para el encuentro.</p>
@@ -5101,8 +5109,12 @@ async function registrarPushWebSiCorresponde(){
   if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())return;
   if(!('Notification' in window)||!('serviceWorker' in navigator))return;
   try{
-    var permiso=Notification.permission;
-    if(permiso==='default')permiso=await Notification.requestPermission();
+    // requestPermission() cuando ya esta 'granted' o 'denied' resuelve al
+    // toque sin mostrar nada -- solo hace falta que esto se llame como
+    // reaccion directa a un click cuando el permiso todavia esta en
+    // 'default' (ver mostrarBannerPushSiCorresponde/el listener del boton
+    // mas abajo: por eso esto nunca se llama solo, directo al loguearse).
+    var permiso=await Notification.requestPermission();
     if(permiso!=='granted')return;
     var registro=await navigator.serviceWorker.ready;
     var app=initializeApp(FIREBASE_CONFIG);
@@ -5121,8 +5133,37 @@ async function registrarPushWebSiCorresponde(){
       var n=payload.notification||{};
       try{ new Notification(n.title||'Soul',{body:n.body,data:payload.data}); }catch(e){}
     });
-  }catch(e){ console.error('registrarPushWebSiCorresponde fallo:',e); }
+  }catch(e){}
 }
+
+// Los navegadores exigen que pedir permiso de notificaciones sea reaccion
+// DIRECTA a un click -- llamarlo automaticamente despues del login (varios
+// await de por medio: leer la sesion, etc.) hace que Chrome lo descarte en
+// silencio, sin cartel ni error. Por eso esto solo decide si mostrar un
+// banner con un boton propio; registrarPushWebSiCorresponde recien se
+// llama desde el click de ESE boton, mas abajo.
+function mostrarBannerPushSiCorresponde(){
+  if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())return;
+  if(!('Notification' in window)||!('serviceWorker' in navigator))return;
+  if(Notification.permission!=='default')return; // ya decidido (granted o denied), no hay nada que preguntar
+  var banner=document.getElementById('bannerPushWeb');
+  if(banner)banner.style.display='block';
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+  var btnActivar=document.getElementById('btnActivarPushWeb');
+  var btnDescartar=document.getElementById('btnDescartarPushWeb');
+  var banner=document.getElementById('bannerPushWeb');
+  if(btnActivar)btnActivar.addEventListener('click',function(){
+    if(banner)banner.style.display='none';
+    registrarPushWebSiCorresponde();
+  });
+  if(btnDescartar)btnDescartar.addEventListener('click',function(){
+    if(banner)banner.style.display='none';
+  });
+});
+
+window.addEventListener('soul:sesion-lista',mostrarBannerPushSiCorresponde);
 
 // Click en la notificacion en segundo plano -- sw.js enfoca/abre la
 // pestaña y manda el "data" por postMessage; acá se recibe y rutea con la
@@ -5134,8 +5175,6 @@ if('serviceWorker' in navigator){
     else window.pushDeepLinkPendiente=evento.data.data;
   });
 }
-
-window.addEventListener('soul:sesion-lista',registrarPushWebSiCorresponde);
 </script>
 
 <div id="sesionExpiradaModal" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem">
