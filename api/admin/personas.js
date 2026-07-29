@@ -212,6 +212,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ diagnosticos });
     }
 
+    if (modo === 'pushTokens') {
+      // ── Debug de instalacion de push notifications -- solo para
+      // confirmar que un dispositivo quedo registrado, no pensado para
+      // uso regular del panel. ──
+      const tokensRes = await fetch(
+        `${supabaseUrl}/rest/v1/push_tokens?select=id,usuario_id,plataforma,creado_en&order=creado_en.desc&limit=20`,
+        { headers }
+      );
+      const tokens = tokensRes.ok ? await tokensRes.json() : [];
+      return res.status(200).json({ tokens });
+    }
+
     if (modo === 'listaEsperaTesters') {
       // ── Interesados en probar la app via Play Store (ver
       // reclutamiento-testers.html + accion 'registrarInteresado' en
