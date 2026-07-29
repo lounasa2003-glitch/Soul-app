@@ -2213,6 +2213,8 @@ var userEmail=null;
 // eso el resultado siempre termina en "iniciá sesión para seguir", nunca
 // intenta retomar nada de memoria.
 window.addEventListener('DOMContentLoaded',async function(){
+  escucharAperturaPush();
+
   // Tope de "hace 18 años" en el selector de fecha -- solo UX (el chequeo
   // real que no se puede evitar esta en el servidor, ver EDAD_MINIMA en
   // api/guardar.js), pero evita que alguien menor llegue a mandar el
@@ -2536,6 +2538,46 @@ async function registrarPushTokenSiNativo(){
   }catch(e){}
 }
 
+// A donde llevar a la persona segun el "tipo" que se mando desde el
+// servidor al armar cada push (ver lib/push.js y sus 4 puntos de disparo).
+// Los nombres de pantalla vienen del menu "Que queres hacer hoy" (ver
+// eEleccionSesion) -- mismas funciones que tocaria la persona a mano.
+function aplicarDeepLinkPush(data){
+  if(!data||!data.tipo)return;
+  try{
+    if(data.tipo==='match_nuevo'||data.tipo==='recordatorio_eleccion'){
+      mostrarMisMatches();
+    }else if(data.tipo==='mensaje_cita'||data.tipo==='recordatorio_sin_mensaje'){
+      if(data.citaId)abrirCitaDesdeM(data.citaId);
+      else mostrarSalaDeEncuentros();
+    }else if(data.tipo==='debriefing_listo'){
+      mostrarSalaDeEncuentros();
+    }
+    // 'recordatorio_intake' no necesita ruteo especial -- si el intake
+    // sigue incompleto, cargarProgreso ya manda ahi derecho apenas hay
+    // sesion (ver mas abajo), sin importar por donde entro la persona.
+  }catch(e){}
+}
+
+// Se registra apenas arranca la app (no espera al login) para no perderse
+// el toque a una notificacion que abrio la app desde cerrada del todo --
+// Capacitor guarda esa apertura pendiente y la entrega en cuanto este
+// listener queda enganchado. Si todavia no hay sesion en ese momento, el
+// deep link queda guardado y cargarProgreso lo aplica apenas confirma quien
+// es la persona.
+function escucharAperturaPush(){
+  if(!window.Capacitor||!window.Capacitor.isNativePlatform||!window.Capacitor.isNativePlatform())return;
+  var PushNotifications=window.Capacitor.Plugins&&window.Capacitor.Plugins.PushNotifications;
+  if(!PushNotifications)return;
+  try{
+    PushNotifications.addListener('pushNotificationActionPerformed',function(accion){
+      var data=accion&&accion.notification&&accion.notification.data;
+      if(usuarioId)aplicarDeepLinkPush(data);
+      else window.pushDeepLinkPendiente=data;
+    });
+  }catch(e){}
+}
+
 async function cargarProgreso(email){
   try{
     var usuarios=await leerTabla('usuarios','email=eq.'+email);
@@ -2545,6 +2587,10 @@ async function cargarProgreso(email){
       window.userNombre=u.nombre;
       window.usuarioPlan=u.plan||'free';
       registrarPushTokenSiNativo();
+      if(window.pushDeepLinkPendiente){
+        aplicarDeepLinkPush(window.pushDeepLinkPendiente);
+        window.pushDeepLinkPendiente=null;
+      }
 
       // Si dejó los datos básicos a medias (se registró, empezó la Etapa 1
       // y no la terminó), vuelve derecho ahí en vez de pasar a "¿Qué querés
