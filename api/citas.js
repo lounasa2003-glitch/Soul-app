@@ -3,6 +3,7 @@ import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { notificarMensajeCita, notificarSalaEncuentrosPendiente } from '../lib/email.js';
+import { enviarPushAUsuario } from '../lib/push.js';
 import { EXTRACT_PROMPT } from './analisisExterno.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
@@ -255,6 +256,11 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   }
 
   const remitenteNombre = remitente ? (remitente.nombre || remitente.email) : null;
+  enviarPushAUsuario(receptorId, {
+    titulo: 'Nuevo mensaje en tu encuentro',
+    cuerpo: remitenteNombre ? `${remitenteNombre} te escribió` : 'Tenés un mensaje nuevo',
+    data: { tipo: 'mensaje_cita', citaId }
+  }).catch(() => {});
   const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email, remitenteNombre, comunicaciones_producto_aceptadas: receptor.comunicaciones_producto_aceptadas });
   if (!enviado) return; // si Resend fallo, no marcar cooldown -- que reintente en el proximo mensaje
 

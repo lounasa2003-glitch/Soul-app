@@ -6,6 +6,7 @@ import { registrarEvento } from '../lib/logEvento.js';
 import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCompatibles } from '../lib/matchCompatible.js';
+import { enviarPushAUsuario } from '../lib/push.js';
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
@@ -219,6 +220,13 @@ export default async function handler(req, res) {
           potencial_construccion: comp.potencial_construccion,
           mensaje_dupla: comp.mensaje_dupla
         };
+        // Push a la OTRA persona (usuario_b) -- usuarioId ya esta viendo el
+        // resultado en pantalla en este mismo momento, no necesita aviso.
+        enviarPushAUsuario(otro.usuario_id, {
+          titulo: 'Soul encontró un match para vos',
+          cuerpo: 'Los planetas se alinearon con alguien nuevo.',
+          data: { tipo: 'match_nuevo' }
+        }).catch(() => {});
       }
     }
 
