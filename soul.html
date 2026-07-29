@@ -455,8 +455,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
       <p class="step-sub">Cuándo naciste</p>
       <input class="step-in" type="date" id="mpFnac">
-      <p class="step-sub">Hora de nacimiento (opcional)</p>
-      <input class="step-in" type="time" id="mpHnac">
 
       <p class="step-sub">Ciudad o zona</p>
       <input class="step-in" type="text" id="mpCiudad">
@@ -753,8 +751,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <p class="step-lbl">Paso 1 de 8</p>
         <p class="step-q">¿Cuándo naciste?</p>
         <input class="step-in" type="date" id="fnac" onchange="chkStep(0)" oninput="chkStep(0)">
-        <p class="step-sub">Hora de nacimiento (opcional)</p>
-        <input class="step-in" type="time" id="hnac">
         <button class="btn-gold" id="btn0" onclick="nextStep(0)" style="width:100%;margin-top:.5rem">Continuar →</button>
       </div>
       <div class="step" id="st1">
@@ -2035,12 +2031,15 @@ async function pedirJSON(datosLlamada){
   }
 }
 
+// hora_nacimiento (Decision 8) se dejo de pedir/guardar a proposito -- no
+// tenia ningun uso funcional comprobado (IA, matching, compatibilidad,
+// filtros, admin, reportes). No reintroducir el campo sin volver a
+// verificar eso primero.
 async function guardarUsuarioYContinuar(){
   var datos={
     nombre: window.userNombre||null,
     email: userEmail||null,
     fecha_nacimiento: document.getElementById('fnac').value||null,
-    hora_nacimiento: document.getElementById('hnac').value||null,
     ciudad: document.getElementById('ciudad').value||null,
     distancia_max: chipSels['dist']||null,
     genero: chipSels['gen']||null,
@@ -3077,7 +3076,6 @@ async function mostrarMiPerfil(){
     var u=rows[0]||{};
     document.getElementById('mpNombre').value=u.nombre||'';
     document.getElementById('mpFnac').value=u.fecha_nacimiento||'';
-    document.getElementById('mpHnac').value=u.hora_nacimiento||'';
     document.getElementById('mpCiudad').value=u.ciudad||'';
     document.getElementById('mpOcup').value=u.ocupacion||'';
     document.getElementById('mpNoNeg').value=u.no_negociables||'';
@@ -3121,7 +3119,6 @@ async function guardarMiPerfil(){
   var datos={
     nombre: document.getElementById('mpNombre').value.trim()||null,
     fecha_nacimiento: document.getElementById('mpFnac').value||null,
-    hora_nacimiento: document.getElementById('mpHnac').value||null,
     ciudad: document.getElementById('mpCiudad').value.trim()||null,
     distancia_max: perfilChipSels['dist']||null,
     genero: perfilChipSels['gen']||null,
