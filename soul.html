@@ -5121,7 +5121,7 @@ async function registrarPushWebSiCorresponde(){
       var n=payload.notification||{};
       try{ new Notification(n.title||'Soul',{body:n.body,data:payload.data}); }catch(e){}
     });
-  }catch(e){}
+  }catch(e){ console.error('registrarPushWebSiCorresponde fallo:',e); }
 }
 
 // Click en la notificacion en segundo plano -- sw.js enfoca/abre la
