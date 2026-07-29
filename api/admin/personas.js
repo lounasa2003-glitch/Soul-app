@@ -1,6 +1,7 @@
 import { verificarAdmin } from '../../lib/verificarAdmin.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 import { cerrarSiInactiva } from '../../lib/cierreCita.js';
+import { enviarPushAUsuario } from '../../lib/push.js';
 
 // Fusiona lo que antes eran admin/personas.js (listado), admin/persona.js
 // (hoja de vida completa) y admin/perfil.js (par de perfiles para comparar)
@@ -37,6 +38,19 @@ export default async function handler(req, res) {
   // PATCH tambien cambia 'plan' (free/pro) -- no hay pago conectado todavia
   // (StoreKit/IAP pendiente para iOS), asi que esto es el interruptor manual
   // que usa Lu mientras tanto para dar Pro a alguien a mano.
+  if (req.method === 'PATCH' && modo === 'probarPush') {
+    // ── Debug puntual para confirmar que el envio de verdad funciona,
+    // sin esperar a que se dispare un evento real (match/mensaje/cierre).
+    // No pensado para quedarse como funcionalidad del panel. ──
+    if (!id) return res.status(400).json({ error: 'Falta id' });
+    const resultado = await enviarPushAUsuario(id, {
+      titulo: 'Prueba de Soul',
+      cuerpo: 'Si ves esto, las notificaciones push funcionan.',
+      data: { tipo: 'prueba' }
+    });
+    return res.status(200).json({ ok: true, resultado });
+  }
+
   if (req.method === 'PATCH' && modo === 'solicitudRevision') {
     // ── Cambiar estado y/o dejar respuesta en un pedido de revisión de
     // perfil (Decisión 5). Nunca toca 'perfiles' -- la corrección real, si
