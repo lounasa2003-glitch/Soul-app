@@ -1,4 +1,4 @@
-import { verificarUsuario } from '../lib/authUtil.js';
+import { verificarUsuario, nombreMostrable } from '../lib/authUtil.js';
 import { llamarClaude } from '../lib/anthropicClient.js';
 import { registrarEvento } from '../lib/logEvento.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
@@ -71,11 +71,11 @@ async function listarMisMatches(req, res, supabaseUrl, headers, usuario) {
     // role key, mi token propio solo veria mi propia fila.
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const usuariosRes = await fetch(
-      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
+      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
       { headers: { ...headers, apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
     );
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
-    usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
+    usuarios.forEach(u => { nombrePorId[u.id] = nombreMostrable(u); });
   }
   const matchesConNombre = matches
     // Un match que ESTA persona eliminó deja de aparecer en su propia

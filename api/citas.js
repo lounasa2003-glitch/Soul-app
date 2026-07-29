@@ -1,4 +1,4 @@
-import { verificarUsuario } from '../lib/authUtil.js';
+import { verificarUsuario, nombreMostrable } from '../lib/authUtil.js';
 import { llamarClaude, llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
@@ -146,13 +146,11 @@ async function listarMisCitas(req, res, supabaseUrl, headers, usuario) {
     // nombre/email de las OTRAS personas del match necesita la service role
     // key, el token propio solo veria la fila de esta persona.
     const usuariosRes = await fetch(
-      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
+      `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada&id=in.(${otrosIds.map(encodeURIComponent).join(',')})`,
       { headers: headersServicePerfiles(headers) }
     );
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
-    // Algunas personas del piloto nunca guardaron "nombre" (solo email) --
-    // mismo fallback ya aplicado en api/admin/personas.js para el panel.
-    usuarios.forEach(u => { nombrePorId[u.id] = u.nombre || u.email || null; });
+    usuarios.forEach(u => { nombrePorId[u.id] = nombreMostrable(u); });
   }
   const matchesConNombre = matches.map(m => {
     const otraId = m.usuario_a === usuario.usuarioId ? m.usuario_b : m.usuario_a;
@@ -240,7 +238,7 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
 
   // Lectura cruzada (remitente Y receptor) -- service role, ninguno de los
   // dos tokens propios alcanza para ver la fila del otro.
-  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,ultima_actividad,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers: headersServicePerfiles(headers) });
+  const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada,ultima_actividad,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(receptorId)},${encodeURIComponent(remitenteId)})`, { headers: headersServicePerfiles(headers) });
   const usuarios = uRes.ok ? await uRes.json() : [];
   const receptor = usuarios.find(u => u.id === receptorId);
   const remitente = usuarios.find(u => u.id === remitenteId);
@@ -255,7 +253,7 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
     return; // ya se le aviso hace poco, no juntar mail por cada mensaje
   }
 
-  const remitenteNombre = remitente ? (remitente.nombre || remitente.email) : null;
+  const remitenteNombre = nombreMostrable(remitente);
   enviarPushAUsuario(receptorId, {
     titulo: 'Nuevo mensaje en tu encuentro',
     cuerpo: remitenteNombre ? `${remitenteNombre} te escribió` : 'Tenés un mensaje nuevo',
@@ -632,7 +630,7 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
         const otroId = soyA ? match.usuario_b : match.usuario_a;
         // Lectura cruzada (mi nombre Y el de la otra persona) -- service role.
         const usuariosRes = await fetch(
-          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
+          `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada,comunicaciones_producto_aceptadas&id=in.(${encodeURIComponent(usuario.usuarioId)},${encodeURIComponent(otroId)})`,
           { headers: headersServicePerfiles(headers) }
         );
         const usuariosFilas = usuariosRes.ok ? await usuariosRes.json() : [];
@@ -642,7 +640,7 @@ async function decidirSalaEncuentros(req, res, supabaseUrl, headers, usuario) {
           await notificarSalaEncuentrosPendiente({
             nombre: otro.nombre,
             email: otro.email,
-            remitenteNombre: yo ? (yo.nombre || yo.email) : null,
+            remitenteNombre: nombreMostrable(yo),
             comunicaciones_producto_aceptadas: otro.comunicaciones_producto_aceptadas
           });
         }
@@ -940,9 +938,9 @@ async function obtenerReflexion(req, res, supabaseUrl, headers, usuario) {
   const soyA = match.usuario_a === usuario.usuarioId;
   const otraId = soyA ? match.usuario_b : match.usuario_a;
   // Nombre/email de la OTRA persona -- service role, mi token no la alcanza.
-  const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email&id=eq.${encodeURIComponent(otraId)}`, { headers: headersServicePerfiles(headers) });
+  const otraRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,email,cuenta_eliminada&id=eq.${encodeURIComponent(otraId)}`, { headers: headersServicePerfiles(headers) });
   const otras = otraRes.ok ? await otraRes.json() : [];
-  const otraPersonaNombre = otras[0] ? (otras[0].nombre || otras[0].email || null) : null;
+  const otraPersonaNombre = nombreMostrable(otras[0]);
 
   const reflexionRes = await fetch(
     `${supabaseUrl}/rest/v1/cita_reflexiones?select=historial&cita_id=eq.${encodeURIComponent(reflexionCitaId)}&usuario_id=eq.${encodeURIComponent(usuario.usuarioId)}`,

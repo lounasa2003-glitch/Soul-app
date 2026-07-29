@@ -285,6 +285,23 @@ async function cargarSolicitudesRevision(){
   }
 }
 
+async function guardarEstadoReporte(id){
+  var estado=document.getElementById('repEstado_'+id).value;
+  try{
+    var res=await llamarAdmin('/api/admin/personas?modo=reporte',{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({reporteId:id,estado:estado})
+    });
+    if(!res.ok){alert('No se pudo guardar.');return;}
+    var ok=document.getElementById('repGuardado_'+id);
+    ok.style.display='inline';
+    setTimeout(function(){ok.style.display='none';},2500);
+  }catch(e){
+    alert('Error de conexión.');
+  }
+}
+
 async function guardarSolicitudRevision(id){
   var estado=document.getElementById('srEstado_'+id).value;
   var respuesta=document.getElementById('srRespuesta_'+id).value;
@@ -1091,7 +1108,15 @@ function renderHojaDeVida(data){
     reportesRecibidos.forEach(function(r){
       var fecha=new Date(r.created_at).toLocaleString('es-AR',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
       var motivoTxt=MOTIVO_REPORTE_LEGIBLE[r.motivo]||r.motivo;
-      htmlSeguridad+='<div class="campo"><div class="campo-nombre">'+esc(fecha)+' — reportado por '+esc(r.reportante_nombre||'(sin nombre)')+'</div><div class="campo-valor">'+esc(motivoTxt)+'</div></div>';
+      var estadoActual=r.estado||'abierto';
+      htmlSeguridad+='<div class="campo"><div class="campo-nombre">'+esc(fecha)+' — reportado por '+esc(r.reportante_nombre||'(sin nombre)')+'</div><div class="campo-valor">'+esc(motivoTxt)+'</div>'+
+        '<select class="personas-orden" id="repEstado_'+r.id+'" style="margin-top:.4rem">'+
+        '<option value="abierto"'+(estadoActual==='abierto'?' selected':'')+'>Abierto</option>'+
+        '<option value="cerrado"'+(estadoActual==='cerrado'?' selected':'')+'>Cerrado</option>'+
+        '</select> '+
+        '<button class="btn-secundario" onclick="guardarEstadoReporte(\''+r.id+'\')">Guardar</button>'+
+        '<span class="auth-loading" id="repGuardado_'+r.id+'" style="display:none;margin-left:.5rem;color:#4ecb71">✓ Guardado</span>'+
+        '</div>';
     });
   }
 

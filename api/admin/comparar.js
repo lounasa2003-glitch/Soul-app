@@ -3,6 +3,7 @@ import { llamarClaudeJSON } from '../../lib/anthropicClient.js';
 import { registrarUsoTokens } from '../../lib/logUso.js';
 import { COMPARE_PROMPT } from '../../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
+import { nombreMostrable } from '../../lib/authUtil.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -32,15 +33,15 @@ export default async function handler(req, res) {
     const [resA, resB, usuariosRes] = await Promise.all([
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(idA)}`, { headers }),
       fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=eq.${encodeURIComponent(idB)}`, { headers }),
-      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,no_negociables,negociables&id=in.(${encodeURIComponent(idA)},${encodeURIComponent(idB)})`, { headers })
+      fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada,no_negociables,negociables&id=in.(${encodeURIComponent(idA)},${encodeURIComponent(idB)})`, { headers })
     ]);
     const perfilesA = resA.ok ? await resA.json() : [];
     const perfilesB = resB.ok ? await resB.json() : [];
     const usuarios = usuariosRes.ok ? await usuariosRes.json() : [];
     const usuarioA = usuarios.find(u => u.id === idA);
     const usuarioB = usuarios.find(u => u.id === idB);
-    const nombreA = (usuarioA && (usuarioA.nombre || usuarioA.email)) || null;
-    const nombreB = (usuarioB && (usuarioB.nombre || usuarioB.email)) || null;
+    const nombreA = nombreMostrable(usuarioA);
+    const nombreB = nombreMostrable(usuarioB);
 
     if (!perfilesA[0] || !perfilesB[0]) {
       return res.status(400).json({ error: 'sin_perfil', mensaje: 'Una o ambas personas todavía no tienen perfil.' });

@@ -193,6 +193,84 @@ async function purgarPorAntiguedad(supabaseUrl, supabaseKey) {
   return resultado;
 }
 
+// Retención de cita_mensajes (Decisión 6, propuesta-retencion-citas.md
+// aprobada) -- cita_mensajes es la transcripción íntima entre dos personas
+// reales, así que no se conserva indefinidamente como el resto de lo
+// compartido (citas/matches). citas.cerrada_en (ver finalizarCita en
+// lib/cierreCita.js) es el momento en que arranca a correr este plazo. La
+// fila de 'citas' en sí NUNCA se borra -- la otra persona necesita poder
+// seguir viendo que el encuentro existió (Mis citas, Hoja de Vida) -- solo
+// se borran los mensajes y se limpian los campos derivados por IA que
+// resumen esa conversación (resumen_ia, insights_debriefing_a/b,
+// perfil_cita_a/b, compatibilidad_cita_a/b, refinamiento_a/b), dejando en
+// 'citas' únicamente lo estructural (estado, fechas, elecciones, flags de
+// lectura/consentimiento) -- lo mínimo para que quede constancia de que la
+// cita existió, sin transcripción ni análisis íntimo.
+const RETENCION_MESES_CITA_MENSAJES = 12;
+
+// Campos derivados por IA que resumen/analizan la conversación real de la
+// cita -- se limpian junto con cita_mensajes porque son, en los hechos, otra
+// forma de la misma transcripción íntima (un resumen sigue siendo
+// contenido íntimo, no un dato estructural).
+const CAMPOS_IA_CITA_A_LIMPIAR = {
+  resumen_ia: null,
+  insights_debriefing_a: null,
+  insights_debriefing_b: null,
+  perfil_cita_a: null,
+  perfil_cita_b: null,
+  compatibilidad_cita_a: null,
+  compatibilidad_cita_b: null,
+  refinamiento_a: null,
+  refinamiento_b: null
+};
+
+async function purgarCitaMensajesVencidos(supabaseUrl, supabaseKey) {
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  const limite = new Date(Date.now() - RETENCION_MESES_CITA_MENSAJES * 30 * 24 * 3600 * 1000).toISOString();
+
+  const citasRes = await fetch(
+    `${supabaseUrl}/rest/v1/citas?select=id,match_id&cerrada_en=lte.${encodeURIComponent(limite)}`,
+    { headers }
+  );
+  const citasVencidas = citasRes.ok ? await citasRes.json() : [];
+  if (citasVencidas.length === 0) return { citasVencidas: 0, citasPurgadas: 0, citasFrenadasPorReporte: 0 };
+
+  // Un reporte ABIERTO sobre el match frena la purga de TODAS las citas de
+  // ese match (no solo la reportada) -- puede necesitarse la transcripción
+  // completa como evidencia mientras el caso sigue abierto.
+  const matchIds = [...new Set(citasVencidas.map((c) => c.match_id))];
+  const reportesRes = await fetch(
+    `${supabaseUrl}/rest/v1/reportes?select=match_id&match_id=in.(${matchIds.map(encodeURIComponent).join(',')})&estado=eq.abierto`,
+    { headers }
+  );
+  const reportesAbiertos = reportesRes.ok ? await reportesRes.json() : [];
+  const matchesConReporteAbierto = new Set(reportesAbiertos.map((r) => r.match_id));
+
+  let citasPurgadas = 0;
+  let citasFrenadasPorReporte = 0;
+  for (const cita of citasVencidas) {
+    if (matchesConReporteAbierto.has(cita.match_id)) {
+      citasFrenadasPorReporte += 1;
+      continue;
+    }
+    try {
+      await fetch(`${supabaseUrl}/rest/v1/cita_mensajes?cita_id=eq.${encodeURIComponent(cita.id)}`, {
+        method: 'DELETE',
+        headers
+      });
+      await fetch(`${supabaseUrl}/rest/v1/citas?id=eq.${encodeURIComponent(cita.id)}`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify(CAMPOS_IA_CITA_A_LIMPIAR)
+      });
+      citasPurgadas += 1;
+    } catch (e) {
+      await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCitaMensajesVencidos', error: e, meta: { citaId: cita.id } });
+    }
+  }
+  return { citasVencidas: citasVencidas.length, citasPurgadas, citasFrenadasPorReporte };
+}
+
 // Este HTML se guarda en diagnosticos_diarios.texto_resumen y despues se
 // inserta con innerHTML en el panel admin (ver cargarDiagnosticos en
 // panel-admin.html) -- varios de los valores que arma este reporte son
@@ -286,6 +364,15 @@ export default async function handler(req, res) {
         return {};
       });
 
+    // Retención de cita_mensajes a 12 meses desde el cierre (Decisión 6,
+    // propuesta-retencion-citas.md) -- mismo motivo de orden que arriba
+    // (escritura antes que lectura).
+    const purgadoCitaMensajes = await purgarCitaMensajesVencidos(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
+      .catch(async (e) => {
+        await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCitaMensajesVencidos', error: e });
+        return { citasVencidas: 0, citasPurgadas: 0, citasFrenadasPorReporte: 0, error: true };
+      });
+
     const [errores, reportes, fugas, tokens, resend, sinConfirmar, reportesTecnicos] = await Promise.all([
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
@@ -324,6 +411,7 @@ export default async function handler(req, res) {
       reportesTecnicos: { total: reportesTecnicos.length, porContexto: reportesTecnicosPorContexto, filas: reportesTecnicos },
       borradoDeCuentas: purgado,
       purgaPorAntiguedad: purgadoAntiguedad,
+      purgaCitaMensajes: purgadoCitaMensajes,
       tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
@@ -367,6 +455,11 @@ export default async function handler(req, res) {
     lineas.push('<ul>' + Object.entries(purgadoAntiguedad).map(([tabla, r]) =>
       `<li>${esc(tabla)}: ${r.ok ? r.borradas + ' borradas' : 'error al purgar'}</li>`
     ).join('') + '</ul>');
+
+    lineas.push(`<h3>Retención de cita_mensajes a 12 meses (Decisión 6): ${purgadoCitaMensajes.citasPurgadas} de ${purgadoCitaMensajes.citasVencidas} citas vencidas</h3>`);
+    if (purgadoCitaMensajes.citasFrenadasPorReporte > 0) {
+      lineas.push(`<p>${purgadoCitaMensajes.citasFrenadasPorReporte} citas frenadas por tener un reporte abierto en su match.</p>`);
+    }
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);
     lineas.push(`<p>Input: ${totalInput.toLocaleString()} | Output: ${totalOutput.toLocaleString()} | Cache creado: ${totalCacheCreation.toLocaleString()} | Cache leído: ${totalCacheRead.toLocaleString()} | Costo estimado: ~$${costoEstimado.toFixed(2)} USD (aproximado, no es el numero de facturacion real)</p>`);

@@ -2,6 +2,7 @@ import { verificarAdmin } from '../../lib/verificarAdmin.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
 import { cerrarSiInactiva } from '../../lib/cierreCita.js';
 import { enviarPushAUsuario } from '../../lib/push.js';
+import { nombreMostrable } from '../../lib/authUtil.js';
 
 // Fusiona lo que antes eran admin/personas.js (listado), admin/persona.js
 // (hoja de vida completa) y admin/perfil.js (par de perfiles para comparar)
@@ -72,6 +73,29 @@ export default async function handler(req, res) {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
       body: JSON.stringify(cambios)
+    });
+    if (!patchRes.ok) {
+      return res.status(500).json({ error: 'No se pudo actualizar' });
+    }
+    return res.status(200).json({ ok: true });
+  }
+
+  if (req.method === 'PATCH' && modo === 'reporte') {
+    // ── Cambiar estado (abierto/cerrado) de un reporte, desde la Hoja de
+    // Vida -> Seguridad (Decisión 6, retención de citas). Mientras un
+    // reporte relacionado a un match sigue "abierto", el cron de retención
+    // no borra los cita_mensajes de ninguna cita de ese match (ver
+    // purgarCitaMensajesVencidos en api/cron/diagnostico-diario.js) -- cerrar
+    // el reporte acá es lo que despues permite que esa retención se aplique. ──
+    const { reporteId, estado } = req.body || {};
+    if (!reporteId) return res.status(400).json({ error: 'Falta reporteId' });
+    if (estado !== 'abierto' && estado !== 'cerrado') {
+      return res.status(400).json({ error: "estado invalido, tiene que ser 'abierto' o 'cerrado'" });
+    }
+    const patchRes = await fetch(`${supabaseUrl}/rest/v1/reportes?id=eq.${encodeURIComponent(reporteId)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ estado })
     });
     if (!patchRes.ok) {
       return res.status(500).json({ error: 'No se pudo actualizar' });
@@ -268,9 +292,9 @@ export default async function handler(req, res) {
       const idsUsuarios = [...new Set(solicitudes.map((s) => s.usuario_id))];
       let nombrePorId = {};
       if (idsUsuarios.length > 0) {
-        const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${idsUsuarios.map(encodeURIComponent).join(',')})`, { headers });
+        const uRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada&id=in.(${idsUsuarios.map(encodeURIComponent).join(',')})`, { headers });
         const usuarios = uRes.ok ? await uRes.json() : [];
-        usuarios.forEach((u) => { nombrePorId[u.id] = u.nombre || u.email || null; });
+        usuarios.forEach((u) => { nombrePorId[u.id] = nombreMostrable(u); });
       }
       const solicitudesConNombre = solicitudes.map((s) => ({ ...s, nombre_usuario: nombrePorId[s.usuario_id] || null }));
       return res.status(200).json({ solicitudes: solicitudesConNombre });
@@ -308,9 +332,9 @@ export default async function handler(req, res) {
 
       let nombrePorId = {};
       if (match) {
-        const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
+        const nRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada&id=in.(${encodeURIComponent(match.usuario_a)},${encodeURIComponent(match.usuario_b)})`, { headers });
         const nombres = nRes.ok ? await nRes.json() : [];
-        nombres.forEach((u) => { nombrePorId[u.id] = u.nombre || u.email || null; });
+        nombres.forEach((u) => { nombrePorId[u.id] = nombreMostrable(u); });
       }
       const mensajesConNombre = mensajes.map((m) => ({ ...m, remitente_nombre: m.usuario_id ? (nombrePorId[m.usuario_id] || null) : 'Soul' }));
       return res.status(200).json({ estadoCita: citaFila.estado, mensajes: mensajesConNombre });
@@ -402,7 +426,7 @@ export default async function handler(req, res) {
     if (otrosIds.length > 0) {
       const listaIds = otrosIds.map(encodeURIComponent).join(',');
       const otrosRes = await fetch(
-        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email&id=in.(${listaIds})`,
+        `${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,cuenta_eliminada&id=in.(${listaIds})`,
         { headers }
       );
       const otros = otrosRes.ok ? await otrosRes.json() : [];
@@ -412,7 +436,7 @@ export default async function handler(req, res) {
       // tenia nombre) pero como "(persona sin nombre)" del propio lado,
       // dando la falsa impresion de que el match no era el mismo de los dos
       // lados.
-      otros.forEach(o => { nombrePorId[o.id] = o.nombre || o.email || null; });
+      otros.forEach(o => { nombrePorId[o.id] = nombreMostrable(o); });
     }
 
     // Se suman TODAS las citas (encuentros) de cada match, no solo la
