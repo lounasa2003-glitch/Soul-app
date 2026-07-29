@@ -10,6 +10,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Soul">
+<!-- Puente de Capacitor para notificaciones push -- sin esto,
+window.Capacitor.Plugins.PushNotifications no existe ni siquiera dentro
+del WebView nativo, porque el bridge que Android inyecta solo trae el
+transporte de bajo nivel (isNativePlatform, etc.), no el registro de
+plugins individuales. En un navegador normal (no la app instalada) esto
+carga igual pero no hace nada -- isNativePlatform() da false ahi. -->
+<script src="/vendor/capacitor-core.js"></script>
+<script src="/vendor/capacitor-push-notifications.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
