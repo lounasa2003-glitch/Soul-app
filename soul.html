@@ -2500,6 +2500,34 @@ async function hacerAuth(){
   }
 }
 
+// Solo hace algo dentro de la app nativa (Capacitor la inyecta como
+// window.Capacitor al cargar en el WebView de Android) -- en un navegador
+// comun window.Capacitor no existe, asi que esto no hace nada ahi (el push
+// del navegador es una integracion aparte, todavia no armada). Se llama
+// recien con sesion ya confirmada porque guardarTabla('push_tokens',...)
+// necesita usuarioId, que TABLAS_PERMITIDAS exige para cualquier tabla que
+// no sea 'usuarios'.
+async function registrarPushTokenSiNativo(){
+  if(!window.Capacitor||!window.Capacitor.isNativePlatform||!window.Capacitor.isNativePlatform())return;
+  var PushNotifications=window.Capacitor.Plugins&&window.Capacitor.Plugins.PushNotifications;
+  if(!PushNotifications)return;
+  try{
+    var estado=await PushNotifications.checkPermissions();
+    if(estado.receive!=='granted'){
+      estado=await PushNotifications.requestPermissions();
+    }
+    if(estado.receive!=='granted')return;
+    PushNotifications.addListener('registration',function(token){
+      // Insert simple -- si ya existia el mismo token (misma persona,
+      // mismo dispositivo, sin cambios), el UNIQUE(usuario_id,plataforma,
+      // token) lo rechaza y se ignora sin romper nada.
+      guardarTabla('push_tokens',{token:token.value,plataforma:'android'}).catch(function(){});
+    });
+    PushNotifications.addListener('registrationError',function(){});
+    await PushNotifications.register();
+  }catch(e){}
+}
+
 async function cargarProgreso(email){
   try{
     var usuarios=await leerTabla('usuarios','email=eq.'+email);
@@ -2508,6 +2536,7 @@ async function cargarProgreso(email){
       usuarioId=u.id;
       window.userNombre=u.nombre;
       window.usuarioPlan=u.plan||'free';
+      registrarPushTokenSiNativo();
 
       // Si dejó los datos básicos a medias (se registró, empezó la Etapa 1
       // y no la terminó), vuelve derecho ahí en vez de pasar a "¿Qué querés
