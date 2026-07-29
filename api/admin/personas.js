@@ -43,10 +43,11 @@ export default async function handler(req, res) {
     // sin esperar a que se dispare un evento real (match/mensaje/cierre).
     // No pensado para quedarse como funcionalidad del panel. ──
     if (!id) return res.status(400).json({ error: 'Falta id' });
+    const tipoPrueba = (req.body && req.body.tipo) || 'prueba';
     const resultado = await enviarPushAUsuario(id, {
       titulo: 'Prueba de Soul',
       cuerpo: 'Si ves esto, las notificaciones push funcionan.',
-      data: { tipo: 'prueba' }
+      data: { tipo: tipoPrueba, citaId: (req.body && req.body.citaId) || undefined }
     });
     return res.status(200).json({ ok: true, resultado });
   }
