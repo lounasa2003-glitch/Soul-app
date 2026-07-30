@@ -6,11 +6,13 @@
 # No corre en push ni en ningun horario -- no hay claves "push:" ni "schedule:"
 # en este archivo.
 #
-# El script (scripts/verificacion-edad-minima-vivo.mjs) crea cuentas
-# descartables contra produccion, verifica los 4 casos de edad minima con
-# acceso administrativo directo a Supabase, y borra fisicamente todo lo que
-# haya creado en su propio bloque finally (con manejo de SIGTERM/SIGINT por
-# si este job la corta por timeout a mitad de camino).
+# El script (scripts/verificacion-edad-minima-vivo.mjs) primero hace un
+# diagnostico comparativo (mismo access_token recien emitido, directo contra
+# Supabase vs contra /api/guardar) y solo si ambos lo aceptan sigue con las
+# 4 pruebas de edad minima, con acceso administrativo directo a Supabase para
+# verificar residuos, y borra fisicamente todo lo que haya creado en su
+# propio bloque finally (con manejo de SIGTERM/SIGINT por si este job la
+# corta por timeout a mitad de camino).
 name: Verificacion manual - edad minima (TEMPORAL)
 
 on:
@@ -39,17 +41,22 @@ jobs:
         with:
           node-version: '20'
 
-      # Los tres valores sensibles/de configuracion viajan SOLO como
+      # Los cuatro valores sensibles/de configuracion viajan SOLO como
       # variables de entorno del proceso, resueltas por GitHub a partir de
       # los secrets del repositorio en el momento de ejecutar el step -- en
       # ningun lugar de este archivo YAML aparece un valor literal. GitHub
       # Actions ademas enmascara automaticamente en los logs cualquier texto
       # que coincida con un secret registrado, como red adicional adentro
-      # del proceso mismo (que ya no imprime la key en ningun punto, ver
-      # comentarios al principio del script).
+      # del proceso mismo (que ya no imprime ninguna de las dos keys en
+      # ningun punto, ver comentarios al principio del script).
+      # SUPABASE_ANON_KEY se agrega para el diagnostico comparativo inicial:
+      # el script llama /auth/v1/user directo contra Supabase con el mismo
+      # access_token recien emitido, para distinguir un token invalido de
+      # origen de un problema especifico del backend en Vercel.
       - name: Correr verificacion de edad minima (crea y borra cuentas descartables)
         env:
           SOUL_APP_URL: ${{ secrets.SOUL_APP_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/verificacion-edad-minima-vivo.mjs

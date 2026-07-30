@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 // Verificacion en vivo del bloque de edad minima (commit 33e0f37, deployado en
-// produccion) -- antes de Test 1-4, hace una comprobacion inicial (registro +
-// una llamada autenticada minima) para confirmar que la sesion recien creada
-// es aceptada por el servidor; si no lo es, aborta todo el resto sin correr
-// las 4 pruebas de edad. Si la sesion es valida, corre las 4 pruebas
-// obligatorias contra la API real usando cuentas descartables, verifica
-// residuos con acceso administrativo directo a Supabase (service_role), y
-// borra fisicamente todo lo que haya creado antes de terminar (bloque
-// finally, incluso si alguna prueba o la comprobacion inicial falla).
+// produccion) -- antes de Test 1-4, hace un diagnostico comparativo: registra
+// una cuenta descartable y usa el MISMO access_token recien emitido en dos
+// llamadas paralelas -- una directo contra Supabase (GET /auth/v1/user con
+// SUPABASE_ANON_KEY) y otra contra la operacion minima real de /api/guardar.
+// Compara los dos resultados para distinguir si un eventual rechazo es del
+// lado de Supabase (token invalido de origen) o del lado de Vercel/nuestro
+// codigo (token valido pero rechazado igual). Si ambos aceptan el token,
+// sigue automaticamente con las 4 pruebas de edad; si no, aborta todo el
+// resto sin correrlas. Corre las 4 pruebas obligatorias contra la API real
+// usando cuentas descartables, verifica residuos con acceso administrativo
+// directo a Supabase (service_role), y borra fisicamente todo lo que haya
+// creado antes de terminar (bloque finally, incluso si alguna prueba o el
+// diagnostico inicial falla).
 //
 // GARANTIAS DE SEGURIDAD DE ESTE SCRIPT:
-// - Nunca imprime ni guarda un access/refresh token ni la service role key
-//   (solo presencia + longitud para los tokens de sesion; la service role
-//   key jamas se imprime, ni siquiera enmascarada).
+// - Nunca imprime ni guarda un access/refresh token, la anon key ni la
+//   service role key (solo presencia + longitud para los tokens de sesion;
+//   las dos claves de Supabase jamas se imprimen, ni siquiera enmascaradas).
 // - No escribe nada a disco -- todo el output va a stdout.
 // - Se detiene de entrada si SUPABASE_URL no apunta exactamente al proyecto
 //   esperado (kjughqrjyglfxaiunivw.supabase.co).
@@ -35,6 +40,10 @@
 //   SOUL_APP_URL              -- URL publica de la app (ej: https://soulapp.love)
 //   SUPABASE_URL              -- URL del proyecto de Supabase (debe ser el
 //                                 proyecto kjughqrjyglfxaiunivw)
+//   SUPABASE_ANON_KEY         -- anon/public key de ese mismo proyecto, SOLO
+//                                 para el diagnostico comparativo inicial
+//                                 (llamar /auth/v1/user directo, igual que lo
+//                                 hace lib/authUtil.js del lado del servidor)
 //   SUPABASE_SERVICE_ROLE_KEY -- service role key de ese mismo proyecto,
 //                                 SOLO para verificar y limpiar (nunca se
 //                                 imprime ni se guarda)
@@ -42,11 +51,13 @@
 // USO (PowerShell, Windows):
 //   $env:SOUL_APP_URL = "https://soulapp.love"
 //   $env:SUPABASE_URL = "https://kjughqrjyglfxaiunivw.supabase.co"
-//   $env:SUPABASE_SERVICE_ROLE_KEY = "<pegar la key aca, sin comillas extra>"
+//   $env:SUPABASE_ANON_KEY = "<pegar la anon key aca, sin comillas extra>"
+//   $env:SUPABASE_SERVICE_ROLE_KEY = "<pegar la service role key aca>"
 //   node verificacion-edad-minima-vivo.mjs
 //
 // AL TERMINAR, borrar las variables de entorno de la sesion de PowerShell:
 //   Remove-Item Env:\SUPABASE_SERVICE_ROLE_KEY
+//   Remove-Item Env:\SUPABASE_ANON_KEY
 //   Remove-Item Env:\SUPABASE_URL
 //   Remove-Item Env:\SOUL_APP_URL
 //
@@ -57,6 +68,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 const SOUL_APP_URL = process.env.SOUL_APP_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 function abortar(msg) {
@@ -66,6 +78,7 @@ function abortar(msg) {
 
 if (!SOUL_APP_URL) abortar('Falta SOUL_APP_URL (ej: https://soulapp.love).');
 if (!SUPABASE_URL) abortar('Falta SUPABASE_URL.');
+if (!SUPABASE_ANON_KEY) abortar('Falta SUPABASE_ANON_KEY.');
 if (!SERVICE_KEY) abortar('Falta SUPABASE_SERVICE_ROLE_KEY.');
 
 let supabaseHost = '';
@@ -74,6 +87,7 @@ if (supabaseHost !== `${PROYECTO_ESPERADO}.supabase.co`) {
   abortar(`SUPABASE_URL no corresponde al proyecto esperado (${PROYECTO_ESPERADO}). Hostname visto: "${supabaseHost || '<invalido>'}".`);
 }
 console.log(`Proyecto Supabase verificado: ${supabaseHost}`);
+console.log(`SUPABASE_ANON_KEY: <presente, nunca se imprime>`);
 console.log(`SUPABASE_SERVICE_ROLE_KEY: <presente, nunca se imprime>`);
 
 // Imagen sintetica minima valida (1x1 px, JPEG real) -- no es una foto real
@@ -134,6 +148,23 @@ function leer(token, tabla, filtro) {
   return apiGet(`/api/leer?tabla=${encodeURIComponent(tabla)}&filtro=${encodeURIComponent(filtro)}`, token);
 }
 function solicitarBorrado(token) { return apiPost('/api/auth', { accion: 'solicitarBorrado' }, token); }
+
+// ---------- diagnostico: mismo access_token directo contra Supabase ----------
+// Usa SUPABASE_ANON_KEY (no service_role) -- es exactamente la misma llamada
+// que hace lib/authUtil.js (verificarUsuario) del lado del servidor: GET
+// /auth/v1/user con el apikey del proyecto + el Authorization del usuario.
+// Se llama directo contra Supabase, sin pasar por soulapp.love, para poder
+// distinguir un token invalido de origen (Supabase tambien lo rechaza) de un
+// problema especifico de nuestro backend (Supabase lo acepta, pero
+// /api/guardar no).
+async function supabaseAuthUserDirecto(token) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+  });
+  let data = null;
+  try { data = await res.json(); } catch { /* sin cuerpo JSON */ }
+  return { status: res.status, ok: res.ok, data };
+}
 
 // ---------- llamadas administrativas directas a Supabase (service_role) ----------
 // Todas reciben el id EXACTO a usar en el filtro -- ninguna arma un filtro
@@ -251,38 +282,69 @@ async function crearCuentaDescartable(etiqueta) {
   return { email, password, token, cuenta };
 }
 
-// ---------- comprobacion inicial de sesion ----------
+// ---------- diagnostico comparativo de sesion ----------
 //
-// Registra una cuenta descartable propia (independiente de las de los
-// Test 1-4) y hace UNA sola llamada autenticada minima -- la misma que
-// hace soul.html apenas se registra alguien (crear la fila minima de
-// 'usuarios' con el nombre, ver guardarUsuarioYContinuar/registro en
-// soul.html). Si esa llamada da 401, el problema es de autenticacion
-// (sesion rechazada por el servidor), no de la logica de edad -- se corta
-// ahi, se aborta TODO el resto de las pruebas de edad, y se pasa
-// directamente a la limpieza en vez de generar una cascada de fallos
-// enganosos en Test 1-4 (que fue exactamente lo que paso la corrida
-// anterior: los 401 eran todos sintoma de esto, no de un problema real en
-// el chequeo de edad minima).
-async function comprobacionInicialDeSesion() {
-  console.log('\n--- Comprobacion inicial: registro + primera llamada autenticada ---');
-  const { cuenta } = await crearCuentaDescartable('chequeo-sesion');
+// Registra una cuenta descartable propia (independiente de las de Test 1-4)
+// y usa el MISMO access_token recien emitido en dos llamadas separadas:
+//   1. Directo contra Supabase (supabaseAuthUserDirecto) -- exactamente lo
+//      que hace lib/authUtil.js del lado del servidor, pero sin pasar por
+//      soulapp.love.
+//   2. La operacion minima real de /api/guardar (crear la fila minima con
+//      el nombre -- lo mismo que hace soul.html apenas alguien se registra).
+//
+// Compara los dos resultados para distinguir si un eventual rechazo es del
+// lado de Supabase (token invalido de origen) o especifico de nuestro
+// backend (Supabase acepta el token, pero /api/guardar no):
+//   A. Supabase=200 y /api/guardar=401 -> el token es valido; el problema
+//      esta en Vercel/lib/authUtil.js/variables de produccion o el deploy
+//      activo. Se abortan las pruebas de edad.
+//   B. Supabase=401 y /api/guardar=401 -> el token emitido no es aceptado
+//      por Supabase mismo; hay que revisar configuracion Auth/JWT del
+//      proyecto. Se abortan las pruebas de edad.
+//   C. Ambos=200 -> se continua automaticamente con Test 1-4.
+//   D. Cualquier otra combinacion (incluye Supabase=401 pero
+//      /api/guardar=200, que no deberia poder pasar nunca) -> se abortan
+//      las pruebas de edad con diagnostico sanitizado.
+// En los casos A/B/D se corta antes de generar la cascada de fallos
+// enganosos que produjo la corrida anterior (donde los 401 en Test 1-4 eran
+// todos sintoma de esto, no de un problema real en el chequeo de edad).
+async function diagnosticoComparativoDeSesion() {
+  console.log('\n--- Diagnostico comparativo: mismo access_token, Supabase directo vs /api/guardar ---');
+  const { cuenta } = await crearCuentaDescartable('diagnostico-sesion');
   if (!cuenta) {
-    log('CHEQUEO_SESION.abortado', false, 'no se pudo registrar la cuenta de prueba inicial (ver CHEQUEO_SESION.registro arriba)');
+    log('DIAGNOSTICO.abortado', false, 'no se pudo registrar la cuenta de prueba inicial (ver DIAGNOSTICO.registro arriba)');
     return false;
   }
 
-  const filaMin = await guardar(cuenta.token, 'usuarios', { nombre: 'Test Chequeo Sesion' });
-  fijarUsuarioId(cuenta, filaMin.status === 200 && filaMin.data && filaMin.data[0] && filaMin.data[0].id);
+  const supa = await supabaseAuthUserDirecto(cuenta.token);
+  const supaUserId = supa.data && supa.data.id;
+  const supaIdCoincide = supaUserId === cuenta.authId;
+  const supaOk = supa.status === 200 && supaIdCoincide;
+  log('DIAGNOSTICO.supabase_directo', supaOk,
+    `status=${supa.status} error=${supa.data && (supa.data.error || supa.data.msg || supa.data.error_description) || '<ninguno>'} user.id_esperado_coincide=${supaIdCoincide}`);
 
-  const ok = filaMin.status === 200;
-  log('CHEQUEO_SESION.llamada_autenticada_minima', ok,
-    ok
-      ? `status=${filaMin.status} -- la sesion recien creada es aceptada por /api/guardar`
-      : `status=${filaMin.status} error=${filaMin.data && filaMin.data.error} -- ${filaMin.status === 401
-          ? 'la sesion recien creada NO fue aceptada por el servidor (mismo mecanismo que usan Test 1-4) -- se abortan las pruebas de edad'
-          : 'fallo inesperado en la primera llamada autenticada'}`);
-  return ok;
+  const guardarRes = await guardar(cuenta.token, 'usuarios', { nombre: 'Test Diagnostico Sesion' });
+  fijarUsuarioId(cuenta, guardarRes.status === 200 && guardarRes.data && guardarRes.data[0] && guardarRes.data[0].id);
+  const guardarOk = guardarRes.status === 200;
+  log('DIAGNOSTICO.api_guardar', guardarOk,
+    `status=${guardarRes.status} error=${guardarRes.data && guardarRes.data.error || '<ninguno>'}`);
+
+  let caso, interpretacion, continuar;
+  if (supaOk && guardarOk) {
+    caso = 'C'; continuar = true;
+    interpretacion = 'Supabase directo y /api/guardar aceptan el mismo token -- se continua automaticamente con Test 1 a 4.';
+  } else if (supaOk && !guardarOk) {
+    caso = 'A'; continuar = false;
+    interpretacion = 'Supabase directo acepto el token pero /api/guardar lo rechazo -- el token es valido, el problema esta en Vercel/lib/authUtil.js/variables de produccion o el deploy activo, no en Supabase. Se abortan las pruebas de edad.';
+  } else if (!supaOk && !guardarOk) {
+    caso = 'B'; continuar = false;
+    interpretacion = 'Supabase directo tambien rechazo el token -- el token emitido no es aceptado por Supabase mismo; revisar configuracion Auth/JWT o inconsistencia de proyecto. Se abortan las pruebas de edad.';
+  } else {
+    caso = 'D'; continuar = false;
+    interpretacion = 'Combinacion inesperada (Supabase directo rechazo el token pero /api/guardar lo acepto). Se abortan las pruebas de edad.';
+  }
+  log(`DIAGNOSTICO.interpretacion_caso_${caso}`, continuar, interpretacion);
+  return continuar;
 }
 
 // ---------- TEST 1: menor de 18 en onboarding ----------
@@ -540,9 +602,9 @@ instalarHandlerDeSenal('SIGINT');
 (async () => {
   console.log(`=== Verificacion en vivo -- bloque de edad minima (commit 33e0f37) contra ${SOUL_APP_URL} ===`);
   try {
-    const sesionOk = await comprobacionInicialDeSesion();
+    const sesionOk = await diagnosticoComparativoDeSesion();
     if (!sesionOk) {
-      console.error('\nLa comprobacion inicial de sesion fallo -- se abortan Test 1 a 4 sin ejecutarlos (ver CHEQUEO_SESION arriba para el detalle).');
+      console.error('\nEl diagnostico comparativo de sesion no continua -- se abortan Test 1 a 4 sin ejecutarlos (ver DIAGNOSTICO arriba para el detalle e interpretacion).');
     } else {
       await test1();
       await test2();
