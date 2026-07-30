@@ -699,7 +699,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <h3>7. Tus datos</h3>
         <p><strong>Responsable del tratamiento:</strong> Lourdes Satragno, Ciudad Autónoma de Buenos Aires, Argentina. Contacto: <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</p>
         <p><strong>Transferencias internacionales:</strong> los proveedores que usa Soul (base de datos, IA y notificaciones push) pueden procesar datos fuera de Argentina, incluido Estados Unidos.</p>
-        <p><strong>Edad mínima:</strong> Soul es exclusivamente para personas mayores de 18 años. Validamos tu fecha de nacimiento tanto en tu dispositivo como en nuestro servidor. Este control se basa en la fecha que vos ingresás — no reemplaza una verificación de identidad con documento.</p>
+        <p><strong>Edad mínima:</strong> Soul es exclusivamente para personas mayores de 18 años. Validamos la fecha de nacimiento que declarás, tanto en tu dispositivo como en nuestro servidor, al registrarla y cada vez que la modificás. Este control se basa en la fecha que vos declarás — no reemplaza una verificación de identidad con documento.</p>
         <p>Tus datos se borran dentro de los 30 días posteriores a eliminar tu cuenta. Soul puede modificar sus modelos de análisis para mejorar el servicio. Soul no usa tus datos para entrenar modelos de inteligencia artificial propios.</p>
         <hr>
         <h3>8. Limitaciones</h3>
@@ -2157,11 +2157,23 @@ async function guardarUsuarioYContinuar(){
       }
     }catch(e){
       console.error('Error guardando usuario (intento '+intento+'):',e);
-      // Si el servidor rechazo por faltar datos basicos, no tiene sentido
-      // reintentar (el problema no es de conexion) -- se corta al toque y
-      // se le dice exactamente que falta, en vez de dejarla reintentando
-      // "revisá tu conexión" sin salida cuando el problema real es otro.
-      if(e.data&&(e.data.error==='datos_incompletos'||e.data.error==='edad_minima')){
+      // Rechazo por edad minima: el servidor ya borro la cuenta recien
+      // creada (ver eliminarCuentaPorEdadMinima en api/guardar.js) -- no
+      // tiene sentido reactivar el boton, un reintento solo daria "sesión
+      // inválida" porque el token ya no sirve. Se corta ahi, sin salida.
+      if(e.data&&e.data.error==='edad_minima'){
+        btn.textContent='Hablar con Soul →';
+        errEl.textContent=e.data.mensaje||'Soul es exclusivamente para personas mayores de 18 años.';
+        errEl.style.display='block';
+        btn.style.display='none';
+        return;
+      }
+      // Si el servidor rechazo por faltar datos basicos o por una fecha
+      // invalida, no tiene sentido reintentar sin que la persona corrija
+      // algo -- se corta al toque y se le dice exactamente que falta, en vez
+      // de dejarla reintentando "revisá tu conexión" sin salida cuando el
+      // problema real es otro.
+      if(e.data&&(e.data.error==='datos_incompletos'||e.data.error==='fecha_invalida')){
         btn.disabled=false;
         btn.textContent='Hablar con Soul →';
         errEl.textContent=e.data.mensaje||'Faltan datos básicos antes de poder continuar. Revisá que hayas completado todos los pasos.';
@@ -3306,7 +3318,11 @@ async function guardarMiPerfil(){
     btn.disabled=false;
   }catch(e){
     guardando.style.display='none';
-    errEl.textContent='No pudimos guardar los cambios. Probá de nuevo.';
+    // edad_minima/fecha_invalida: mostrar el motivo real (por que el
+    // servidor rechazo el cambio de fecha de nacimiento) en vez del mensaje
+    // generico de conexion -- ver el chequeo de fecha_nacimiento en
+    // api/guardar.js, que ahora corre tambien en este PATCH.
+    errEl.textContent=(e.data&&e.data.mensaje)||'No pudimos guardar los cambios. Probá de nuevo.';
     errEl.style.display='block';
     btn.disabled=false;
   }

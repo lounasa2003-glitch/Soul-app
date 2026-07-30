@@ -36,6 +36,42 @@ function fotoValida(valor) {
   return typeof valor === 'string' && valor.length <= FOTO_MAX_CHARS && FOTO_REGEX.test(valor);
 }
 
+// Se dispara solo desde el alta (sin filtro, ver mas abajo) cuando el
+// rechazo es por edad minima -- en ese momento la fila de 'usuarios' todavia
+// no tiene ninguna otra fila que dependa de ella (nunca llego a 'chat': sin
+// perfiles, matches ni conversaciones), asi que se puede borrar de una en
+// vez de dejarla huerfana. Importa porque "Eliminar mi cuenta" vive dentro
+// de "Mi perfil" (soul.html), pantalla inalcanzable para quien nunca paso el
+// gate de edad -- sin esto, esa persona quedaria con cuenta de Auth + fila
+// usuarios + consentimiento aceptado sin ninguna via de autoeliminacion.
+// Nunca se llama para una edicion de perfil ya aprobado (con filtro): ahi
+// solo se rechaza el cambio, no se toca la cuenta.
+async function eliminarCuentaPorEdadMinima(supabaseUrl, usuario) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  try {
+    if (!serviceKey) throw new Error('SUPABASE_SERVICE_ROLE_KEY no configurada');
+    const headersService = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+    if (usuario.usuarioId) {
+      await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(usuario.usuarioId)}`, {
+        method: 'DELETE',
+        headers: { ...headersService, Prefer: 'return=minimal' }
+      });
+    }
+    if (usuario.authId) {
+      await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(usuario.authId)}`, {
+        method: 'DELETE',
+        headers: headersService
+      });
+    }
+  } catch (e) {
+    await registrarErrorSilencioso({
+      contexto: 'api/guardar: eliminar cuenta rechazada por edad minima',
+      error: e,
+      meta: { usuarioId: usuario.usuarioId, authId: usuario.authId }
+    });
+  }
+}
+
 // Mismo listado que CAMPOS_FORMULARIO en soul.html -- ahi solo se usa para
 // calcular un porcentaje informativo, nunca bloqueaba nada. Se encontraron
 // cuentas reales (Ezequiel, Marcela) que llegaron a etapa 'chat'/'match' con
@@ -114,23 +150,36 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'foto_invalida', mensaje: 'La foto no tiene un formato válido.' });
         }
       }
+      // Requisito de las tiendas para una app de vinculos/citas -- el
+      // selector de fecha del cliente ya limita el rango, pero eso es solo
+      // UX (se puede mandar cualquier fecha directo al endpoint), asi que la
+      // edad real se valida aca, del lado del servidor. Corre siempre que
+      // fecha_nacimiento viaje en el pedido (alta O edicion posterior desde
+      // "Mi perfil"), no solo al terminar el onboarding -- una cuenta ya
+      // aprobada no puede despues cambiar su fecha de nacimiento a una edad
+      // menor sin que el servidor lo note.
+      if (Object.prototype.hasOwnProperty.call(datosFinales, 'fecha_nacimiento')) {
+        const edad = calcularEdad(datosFinales.fecha_nacimiento);
+        if (edad === null) {
+          return res.status(400).json({ error: 'fecha_invalida', mensaje: 'La fecha de nacimiento no es válida.' });
+        }
+        if (edad < EDAD_MINIMA) {
+          // Solo en el alta (sin filtro) la cuenta todavia no tiene historia
+          // real -- ver el comentario de eliminarCuentaPorEdadMinima.
+          if (!filtro) {
+            await eliminarCuentaPorEdadMinima(supabaseUrl, usuario);
+          }
+          return res.status(403).json({ error: 'edad_minima', mensaje: `Soul es exclusivamente para personas mayores de ${EDAD_MINIMA} años.` });
+        }
+      }
+
       // Solo se valida en el momento exacto de terminar el intake (pasar a
       // etapa 'chat') -- guardarUsuarioYContinuar() en soul.html siempre
       // manda todos estos campos juntos en un solo pedido en ese momento,
       // asi que datosFinales ya trae todo lo necesario para verificar sin
       // tener que leer el estado previo de la fila.
-      if (datosFinales.etapa_actual === 'chat') {
-        // Requisito de las tiendas para una app de vinculos/citas -- el
-        // selector de fecha del cliente ya limita el rango, pero eso es solo
-        // UX (se puede mandar cualquier fecha directo al endpoint), asi que
-        // la edad real se valida aca, del lado del servidor.
-        const edad = calcularEdad(datosFinales.fecha_nacimiento);
-        if (edad !== null && edad < EDAD_MINIMA) {
-          return res.status(403).json({ error: 'edad_minima', mensaje: `Soul es para mayores de ${EDAD_MINIMA} años.` });
-        }
-        if (!basicosCompletos(datosFinales)) {
-          return res.status(400).json({ error: 'datos_incompletos', mensaje: 'Faltan datos básicos antes de poder empezar a hablar con Soul.' });
-        }
+      if (datosFinales.etapa_actual === 'chat' && !basicosCompletos(datosFinales)) {
+        return res.status(400).json({ error: 'datos_incompletos', mensaje: 'Faltan datos básicos antes de poder empezar a hablar con Soul.' });
       }
     }
 
