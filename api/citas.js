@@ -806,13 +806,17 @@ async function extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, mat
     // match, no solo esta. Reusa el mismo resultado, no llama a Claude de
     // nuevo. Con await por el mismo motivo que el resto de este archivo:
     // fire-and-forget no es confiable en serverless.
+    // historial_relacional es de acceso exclusivo server-side (sin
+    // RLS/policy para anon ni authenticated, ver
+    // migracion_rls_tablas_internas.sql) -- antes esto usaba 'headers'
+    // (anon) directo, hace falta la service role key.
     await Promise.all([
       json.a ? fetch(`${supabaseUrl}/rest/v1/historial_relacional`, {
-        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        method: 'POST', headers: { ...headersServicePerfiles(headers), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ usuario_id: match.usuario_a, cita_id: cita.id, match_id: cita.match_id, senales: json.a })
       }) : Promise.resolve(),
       json.b ? fetch(`${supabaseUrl}/rest/v1/historial_relacional`, {
-        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        method: 'POST', headers: { ...headersServicePerfiles(headers), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
         body: JSON.stringify({ usuario_id: match.usuario_b, cita_id: cita.id, match_id: cita.match_id, senales: json.b })
       }) : Promise.resolve()
     ]).catch(async (error) => {
@@ -1025,7 +1029,11 @@ async function revisarNivel2(supabaseUrl, headers, usuario) {
     const usuarios = uRes.ok ? await uRes.json() : [];
     const ultimoMostrado = usuarios[0] ? (usuarios[0].ultimo_nivel2_mostrado || 0) : 0;
 
-    const hrRes = await fetch(`${supabaseUrl}/rest/v1/historial_relacional?select=senales,created_at&usuario_id=eq.${encodeURIComponent(usuarioId)}&order=created_at.asc`, { headers });
+    // historial_relacional es de acceso exclusivo server-side (sin
+    // RLS/policy para anon ni authenticated, ver
+    // migracion_rls_tablas_internas.sql) -- antes esto leia con 'headers'
+    // (anon) directo, hace falta la service role key.
+    const hrRes = await fetch(`${supabaseUrl}/rest/v1/historial_relacional?select=senales,created_at&usuario_id=eq.${encodeURIComponent(usuarioId)}&order=created_at.asc`, { headers: headersServicePerfiles(headers) });
     const filas = hrRes.ok ? await hrRes.json() : [];
     const proximoUmbral = ultimoMostrado + NIVEL2_UMBRAL;
     if (filas.length < proximoUmbral) return null;
