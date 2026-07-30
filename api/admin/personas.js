@@ -147,8 +147,7 @@ export default async function handler(req, res) {
       // PostgREST, sin asumir que el tope siempre va a ser 1000: sigue
       // pidiendo paginas hasta que una vuelva mas corta que lo pedido, o
       // hasta que Content-Range confirme que no queda nada mas.
-      let _debugTotalUsoTokensSegunPostgrest = null; // DIAGNOSTICO TEMPORAL -- sacar tras verificar en Preview.
-      async function traerTodasLasFilas(url, { onTotal } = {}) {
+      async function traerTodasLasFilas(url) {
         const TAMANO_PAGINA = 1000;
         let filas = [];
         let desde = 0;
@@ -166,7 +165,6 @@ export default async function handler(req, res) {
           const contentRange = pageRes.headers.get('content-range');
           const total = contentRange && contentRange.split('/')[1];
           const totalConocido = total && total !== '*' ? Number(total) : null;
-          if (totalConocido !== null && onTotal) onTotal(totalConocido); // DIAGNOSTICO TEMPORAL
           if (pagina.length < TAMANO_PAGINA) break;
           if (totalConocido !== null && filas.length >= totalConocido) break;
           desde += TAMANO_PAGINA;
@@ -175,9 +173,7 @@ export default async function handler(req, res) {
       }
 
       const [tokensFilas, eventosRes] = await Promise.all([
-        traerTodasLasFilas(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,modulo_fase,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens&order=id.asc`, {
-          onTotal: (t) => { _debugTotalUsoTokensSegunPostgrest = t; } // DIAGNOSTICO TEMPORAL
-        }),
+        traerTodasLasFilas(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,modulo_fase,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens&order=id.asc`),
         fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=tipo,usuario_id`, { headers })
       ]);
       const eventosFilas = eventosRes.ok ? await eventosRes.json() : [];
@@ -284,12 +280,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint, porEtapa: tokensPorEtapa },
-        embudo,
-        // DIAGNOSTICO TEMPORAL -- sacar tras verificar en Preview que
-        // tokensFilas.length (suma de porEndpoint.llamadas) coincide con el
-        // total real de uso_tokens segun Postgres (Content-Range).
-        _debugTotalUsoTokensSegunPostgrest,
-        _debugFilasProcesadas: tokensFilas.length
+        embudo
       });
     }
 
