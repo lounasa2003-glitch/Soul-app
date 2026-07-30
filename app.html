@@ -897,7 +897,6 @@ function renderMod(n,data){
         <hr style="border:none;border-top:1px solid #ddd;margin:.7rem 0">
         <h3 style="font-family:Georgia,serif;font-size:.95rem;color:#1a1015;margin-bottom:.5rem">3. Funciones opcionales</h3>
         <ul style="padding-left:1.1rem;margin-bottom:.5rem">
-          <li style="font-family:Arial,sans-serif;font-size:.76rem;color:#2a1f28;line-height:1.6;margin-bottom:.25rem">Contribuir con datos anonimizados al entrenamiento del sistema.</li>
           <li style="font-family:Arial,sans-serif;font-size:.76rem;color:#2a1f28;line-height:1.6">Recibir comunicaciones fuera de la plataforma.</li>
         </ul>
 
@@ -911,7 +910,7 @@ function renderMod(n,data){
         <hr style="border:none;border-top:1px solid #ddd;margin:.7rem 0">
         <h3 style="font-family:Georgia,serif;font-size:.95rem;color:#1a1015;margin-bottom:.5rem">5. Tus datos</h3>
         <p style="font-family:Arial,sans-serif;font-size:.76rem;color:#2a1f28;line-height:1.6;margin-bottom:.4rem">Tus datos se almacenan de forma segura y no se comparten con terceros con fines comerciales. Al eliminar tu cuenta, tus datos se borran dentro de los 30 días posteriores a la solicitud, salvo obligación legal de retención.</p>
-        <p style="font-family:Arial,sans-serif;font-size:.76rem;color:#2a1f28;line-height:1.6">Soul puede modificar sus modelos de análisis para mejorar el servicio. Esto puede generar cambios en las inferencias obtenidas con el tiempo.</p>
+        <p style="font-family:Arial,sans-serif;font-size:.76rem;color:#2a1f28;line-height:1.6">Soul puede modificar sus modelos de análisis para mejorar el servicio. Esto puede generar cambios en las inferencias obtenidas con el tiempo. Soul no usa tus datos personales para entrenar modelos de inteligencia artificial propios.</p>
 
         <hr style="border:none;border-top:1px solid #ddd;margin:.7rem 0">
         <h3 style="font-family:Georgia,serif;font-size:.95rem;color:#1a1015;margin-bottom:.5rem">6. Limitaciones importantes</h3>
@@ -937,14 +936,6 @@ function renderMod(n,data){
         <div>
           <strong style="display:block;font-family:Georgia,serif;font-size:.88rem;color:#f2ece4;margin-bottom:.15rem">Acepto los términos y condiciones</strong>
           <span style="font-family:Arial,sans-serif;font-size:.72rem;color:#7a6e78">Incluye las funciones indispensables necesarias para usar Soul.</span>
-        </div>
-      </div>
-
-      <div onclick="toggleConOpt()" style="display:flex;align-items:flex-start;gap:.8rem;padding:.85rem;background:rgba(36,26,32,.4);border:1px solid #2a1f28;border-radius:6px;margin-bottom:.8rem;cursor:pointer">
-        <div id="conCboxOpt" style="width:20px;height:20px;border-radius:4px;border:2px solid #2a1f28;flex-shrink:0;margin-top:.1rem;display:flex;align-items:center;justify-content:center"></div>
-        <div>
-          <strong style="display:block;font-family:Georgia,serif;font-size:.88rem;color:#f2ece4;margin-bottom:.15rem">Acepto contribuir con datos anonimizados (opcional)</strong>
-          <span style="font-family:Arial,sans-serif;font-size:.72rem;color:#7a6e78">Podés cambiar esto en cualquier momento desde tu perfil.</span>
         </div>
       </div>
 
@@ -996,14 +987,6 @@ function toggleConMain(){
   cbox.style.borderColor=conMainChecked?'#c9a84c':'#2a1f28';
   cbox.innerHTML=conMainChecked?'<span style="color:#07050a;font-size:.75rem">✓</span>':'';
   document.getElementById('conAcceptBtn').disabled=!conMainChecked;
-}
-
-function toggleConOpt(){
-  var cbox=document.getElementById('conCboxOpt');
-  var checked=cbox.innerHTML!=='';
-  cbox.style.background=!checked?'#c9a84c':'transparent';
-  cbox.style.borderColor=!checked?'#c9a84c':'#2a1f28';
-  cbox.innerHTML=!checked?'<span style="color:#07050a;font-size:.75rem">✓</span>':'';
 }
 
 function showModErr(msg){var el=document.getElementById('modErr');el.textContent=msg;el.style.display='block';}

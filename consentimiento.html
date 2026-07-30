@@ -134,9 +134,8 @@ body{background:#07050a;min-height:100vh;font-family:Arial,sans-serif;color:#f2e
 
       <hr>
       <h2>4. Funciones opcionales</h2>
-      <p>Podés activar o desactivar estas opciones en cualquier momento desde tu perfil:</p>
+      <p>Podés activar o desactivar esta opción en cualquier momento desde tu perfil:</p>
       <ul>
-        <li>Contribuir con datos anonimizados al entrenamiento del sistema.</li>
         <li>Recibir comunicaciones fuera de la plataforma.</li>
       </ul>
 
@@ -158,7 +157,7 @@ body{background:#07050a;min-height:100vh;font-family:Arial,sans-serif;color:#f2e
       <p>Tus datos se almacenan de forma segura y no se comparten con terceros con fines comerciales. Mientras tu cuenta esté activa, se conservan para que Soul pueda seguir funcionando para vos. Al eliminar tu cuenta, tus datos se borran dentro de los 30 días posteriores a la solicitud, salvo obligación legal de retención.</p>
       <p><strong>Transferencias internacionales:</strong> Soul usa proveedores de infraestructura (base de datos y el sistema de inteligencia artificial) que pueden procesar datos fuera de Argentina, incluido Estados Unidos. Estos proveedores tienen sus propias políticas de seguridad y confidencialidad.</p>
       <p><strong>Ante un incidente de seguridad</strong> que pudiera comprometer tus datos, te lo vamos a informar sin demora injustificada, junto con las medidas tomadas.</p>
-      <p>Soul puede modificar sus modelos de análisis para mejorar el servicio. Esto puede generar cambios en las inferencias obtenidas con el tiempo.</p>
+      <p>Soul puede modificar sus modelos de análisis para mejorar el servicio. Esto puede generar cambios en las inferencias obtenidas con el tiempo. Soul no usa tus datos personales para entrenar modelos de inteligencia artificial propios.</p>
 
       <hr>
       <h2>8. Limitaciones importantes</h2>
@@ -186,14 +185,6 @@ body{background:#07050a;min-height:100vh;font-family:Arial,sans-serif;color:#f2e
       <div class="cbox-text">
         <strong>Acepto los términos y condiciones</strong>
         <span>Incluye las funciones indispensables necesarias para usar Soul.</span>
-      </div>
-    </div>
-
-    <div class="checkbox-row" id="checkOpt" onclick="toggleOpt()">
-      <div class="cbox"><span class="cbox-icon">✓</span></div>
-      <div class="cbox-text">
-        <strong>Acepto contribuir con datos anonimizados (opcional)</strong>
-        <span>Podés cambiar esto en cualquier momento desde tu perfil.</span>
       </div>
     </div>
 
@@ -268,10 +259,6 @@ function toggleMain(){
   mainChecked=!mainChecked;
   document.getElementById('checkMain').classList.toggle('checked',mainChecked);
   document.getElementById('acceptBtn').disabled=!mainChecked;
-}
-
-function toggleOpt(){
-  document.getElementById('checkOpt').classList.toggle('checked');
 }
 
 function finish(){
