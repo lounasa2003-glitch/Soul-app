@@ -1,18 +1,24 @@
 #!/usr/bin/env node
 // Verificacion en vivo del bloque de edad minima (commit 33e0f37, deployado en
 // produccion) -- antes de Test 1-4, hace un diagnostico comparativo: registra
-// una cuenta descartable y usa el MISMO access_token recien emitido en dos
-// llamadas paralelas -- una directo contra Supabase (GET /auth/v1/user con
-// SUPABASE_ANON_KEY) y otra contra la operacion minima real de /api/guardar.
-// Compara los dos resultados para distinguir si un eventual rechazo es del
-// lado de Supabase (token invalido de origen) o del lado de Vercel/nuestro
-// codigo (token valido pero rechazado igual). Si ambos aceptan el token,
-// sigue automaticamente con las 4 pruebas de edad; si no, aborta todo el
-// resto sin correrlas. Corre las 4 pruebas obligatorias contra la API real
-// usando cuentas descartables, verifica residuos con acceso administrativo
-// directo a Supabase (service_role), y borra fisicamente todo lo que haya
-// creado antes de terminar (bloque finally, incluso si alguna prueba o el
-// diagnostico inicial falla).
+// una cuenta descartable y usa el MISMO access_token recien emitido en TRES
+// llamadas -- directo contra Supabase (GET /auth/v1/user con
+// SUPABASE_ANON_KEY), contra la operacion minima real de /api/guardar, y
+// contra api/diagnosticoTemporal.js (el mismo chequeo que verificarUsuario()
+// pero corriendo DENTRO del runtime de Vercel, devolviendo el resultado
+// sanitizado en la respuesta en vez de silenciarlo). Ese tercer endpoint esta
+// protegido con una firma HMAC-SHA256 sobre un timestamp, usando
+// SUPABASE_SERVICE_ROLE_KEY como secreto -- la key nunca viaja en la
+// request, solo la firma. Compara los resultados para distinguir si un
+// eventual rechazo es del lado de Supabase (token invalido de origen) o del
+// lado de Vercel/nuestro codigo (token valido pero rechazado igual). Si
+// Supabase directo y /api/guardar aceptan el token, sigue automaticamente
+// con las 4 pruebas de edad; si no, aborta todo el resto sin correrlas.
+// Corre las 4 pruebas obligatorias contra la API real usando cuentas
+// descartables, verifica residuos con acceso administrativo directo a
+// Supabase (service_role), y borra fisicamente todo lo que haya creado --
+// cuentas Y la fila anti-reuso del diagnostico HMAC -- antes de terminar
+// (bloque finally, incluso si alguna prueba o el diagnostico inicial falla).
 //
 // GARANTIAS DE SEGURIDAD DE ESTE SCRIPT:
 // - Nunca imprime ni guarda un access/refresh token, la anon key ni la
@@ -62,6 +68,8 @@
 //   Remove-Item Env:\SOUL_APP_URL
 //
 // Requiere Node 18+ (fetch nativo). No requiere npm install.
+
+import crypto from 'crypto';
 
 const PROYECTO_ESPERADO = 'kjughqrjyglfxaiunivw';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -164,6 +172,34 @@ async function supabaseAuthUserDirecto(token) {
   let data = null;
   try { data = await res.json(); } catch { /* sin cuerpo JSON */ }
   return { status: res.status, ok: res.ok, data };
+}
+
+// ---------- diagnostico server-side temporal (api/diagnosticoTemporal.js) ----------
+// Firma HMAC-SHA256 de un timestamp usando SERVICE_KEY como secreto -- la
+// clave nunca viaja en la request, el servidor la conoce por su propia
+// variable de entorno y recalcula la misma firma para verificar. Cada
+// timestamp usado se registra para poder borrar despues, en la limpieza,
+// la fila anti-reuso que crea el propio endpoint en 'rate_limits'.
+const timestampsDiagnosticoUsados = [];
+
+async function diagnosticoTemporalServerSide(token) {
+  const timestamp = String(Date.now());
+  const firma = crypto.createHmac('sha256', SERVICE_KEY).update(timestamp).digest('hex');
+  timestampsDiagnosticoUsados.push(timestamp);
+
+  const headers = { 'X-Diagnostico-Timestamp': timestamp, 'X-Diagnostico-Firma': firma };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const res = await fetch(`${SOUL_APP_URL}/api/diagnosticoTemporal`, { headers });
+  let data = null;
+  try { data = await res.json(); } catch { /* sin cuerpo JSON */ }
+  return { status: res.status, ok: res.ok, data };
+}
+
+async function limpiarNoncesDiagnostico() {
+  for (const timestamp of timestampsDiagnosticoUsados) {
+    const r = await restDeletePorId('rate_limits', 'email', `diag_${timestamp}`);
+    console.log(`  ${r.ok ? 'OK  ' : 'FAIL'} borrar nonce anti-reuso rate_limits (email=diag_${timestamp}) -> status=${r.status}`);
+  }
 }
 
 // ---------- llamadas administrativas directas a Supabase (service_role) ----------
@@ -328,6 +364,15 @@ async function diagnosticoComparativoDeSesion() {
   const guardarOk = guardarRes.status === 200;
   log('DIAGNOSTICO.api_guardar', guardarOk,
     `status=${guardarRes.status} error=${guardarRes.data && guardarRes.data.error || '<ninguno>'}`);
+
+  // Vista desde ADENTRO de Vercel: el endpoint temporal repite la misma
+  // llamada que hace verificarUsuario() (GET /auth/v1/user con el mismo
+  // token), pero corriendo en el runtime real de produccion en vez de desde
+  // la red del runner -- si hay una diferencia de comportamiento especifica
+  // de Vercel, esta es la evidencia que la va a mostrar.
+  const diagServer = await diagnosticoTemporalServerSide(cuenta.token);
+  log('DIAGNOSTICO.servidor_vercel', diagServer.status === 200,
+    `status=${diagServer.status} respuesta=${JSON.stringify(diagServer.data)}`);
 
   let caso, interpretacion, continuar;
   if (supaOk && guardarOk) {
@@ -541,14 +586,23 @@ async function limpiarTodo() {
   console.log('\n=== LIMPIEZA FISICA (todas las cuentas que este script confirmo haber creado) ===');
   if (cuentasCreadas.length === 0) {
     console.log('No hay cuentas registradas para limpiar.');
-    return;
+  } else {
+    for (const cuenta of cuentasCreadas) {
+      try {
+        await limpiarYVerificarCuenta(cuenta);
+      } catch (e) {
+        log(`${cuenta.etiqueta}.limpieza_error`, false,
+          `excepcion durante la limpieza: ${e && e.message ? e.message : e} -- borrar a mano: authId=${cuenta.authId}${cuenta.usuarioId ? `, usuarioId=${cuenta.usuarioId}` : ''}`);
+      }
+    }
   }
-  for (const cuenta of cuentasCreadas) {
+
+  if (timestampsDiagnosticoUsados.length > 0) {
+    console.log('\n-- Limpiando nonces anti-reuso del diagnostico temporal (tabla rate_limits) --');
     try {
-      await limpiarYVerificarCuenta(cuenta);
+      await limpiarNoncesDiagnostico();
     } catch (e) {
-      log(`${cuenta.etiqueta}.limpieza_error`, false,
-        `excepcion durante la limpieza: ${e && e.message ? e.message : e} -- borrar a mano: authId=${cuenta.authId}${cuenta.usuarioId ? `, usuarioId=${cuenta.usuarioId}` : ''}`);
+      log('DIAGNOSTICO.limpieza_nonces_error', false, `excepcion limpiando nonces: ${e && e.message ? e.message : e}`);
     }
   }
 }
