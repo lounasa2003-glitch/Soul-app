@@ -36,7 +36,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method_not_allowed' });
   }
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // .trim() defensivo -- ver mismo comentario en el script de verificacion:
+  // un espacio/salto de linea de mas al pegar el secret en Vercel alcanza
+  // para que la firma nunca coincida con la del lado de GitHub Actions.
+  const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
   if (!serviceKey || !supabaseUrl || !supabaseAnonKey) {

@@ -77,7 +77,12 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const SOUL_APP_URL = process.env.SOUL_APP_URL;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
-const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// .trim() defensivo -- un espacio o salto de linea de mas al pegar el
+// secret en GitHub o en Vercel (plataformas distintas, copiado por
+// separado) alcanza para que la firma HMAC nunca coincida aunque el valor
+// "sea el mismo" a simple vista. No cambia el criterio de autenticacion de
+// la app real, solo como se usa esta clave para firmar el diagnostico.
+const SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
 function abortar(msg) {
   console.error('ABORTADO: ' + msg);
