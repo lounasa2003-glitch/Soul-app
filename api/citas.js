@@ -254,10 +254,13 @@ async function avisarSiDesconectado(supabaseUrl, headers, citaId, cita, match, r
   }
 
   const remitenteNombre = nombreMostrable(remitente);
+  // DE PRODUCTO -- gateado por comunicaciones_producto_aceptadas dentro de
+  // enviarPushAUsuario (ver lib/push.js).
   enviarPushAUsuario(receptorId, {
     titulo: 'Nuevo mensaje en tu encuentro',
     cuerpo: remitenteNombre ? `${remitenteNombre} te escribió` : 'Tenés un mensaje nuevo',
-    data: { tipo: 'mensaje_cita', citaId }
+    data: { tipo: 'mensaje_cita', citaId },
+    esencial: false
   }).catch(() => {});
   const enviado = await notificarMensajeCita({ nombre: receptor.nombre, email: receptor.email, remitenteNombre, comunicaciones_producto_aceptadas: receptor.comunicaciones_producto_aceptadas });
   if (!enviado) return; // si Resend fallo, no marcar cooldown -- que reintente en el proximo mensaje

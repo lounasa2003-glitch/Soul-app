@@ -222,10 +222,13 @@ export default async function handler(req, res) {
         };
         // Push a la OTRA persona (usuario_b) -- usuarioId ya esta viendo el
         // resultado en pantalla en este mismo momento, no necesita aviso.
+        // DE PRODUCTO -- gateado por comunicaciones_producto_aceptadas dentro
+        // de enviarPushAUsuario (ver lib/push.js).
         enviarPushAUsuario(otro.usuario_id, {
           titulo: 'Soul encontró un match para vos',
           cuerpo: 'Los planetas se alinearon con alguien nuevo.',
-          data: { tipo: 'match_nuevo' }
+          data: { tipo: 'match_nuevo' },
+          esencial: false
         }).catch(() => {});
       }
     }

@@ -37,7 +37,7 @@ Al aceptar este consentimiento, autorizás que este tipo de información se proc
 
 - **Indispensable para usar Soul**: conversar con la inteligencia artificial de Soul es la base del producto — sin esa conversación, no podemos construir tu perfil ni calcular compatibilidad con otras personas. Si no estás de acuerdo con que ese contenido se procese como se describe acá, no vas a poder usar las funciones centrales de Soul (chat, matching, Sala de Encuentros).
 - **Opcional**: el análisis específico de una cita (el debriefing y el resumen interno de calidad) requiere tu consentimiento explícito y el de tu match, dado **por separado**, en el momento de esa cita puntual. Si cualquiera de las dos personas no lo da, esa cita en particular no se analiza. Este consentimiento puntual es distinto del consentimiento general que estás dando en este documento.
-- **Opcional y revocable en cualquier momento**: recibir comunicaciones de producto — no es necesaria para usar la app.
+- **Opcional y revocable en cualquier momento**: recibir comunicaciones de producto, por email y por notificación push — no es necesaria para usar la app.
 
 > Nota: una versión anterior de este documento mencionaba la opción de "contribuir con datos anonimizados" como función opcional. Se retiró esa mención porque no corresponde a ninguna función real de Soul: no existe como campo del sistema ni tiene hoy una finalidad de uso concreta. Ver también `aviso-ia.md`.
 

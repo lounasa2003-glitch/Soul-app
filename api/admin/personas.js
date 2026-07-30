@@ -45,10 +45,15 @@ export default async function handler(req, res) {
     // No pensado para quedarse como funcionalidad del panel. ──
     if (!id) return res.status(400).json({ error: 'Falta id' });
     const tipoPrueba = (req.body && req.body.tipo) || 'prueba';
+    // esencial:true -- esto no es una comunicacion de producto a la persona,
+    // es una herramienta de diagnostico que dispara la administradora a
+    // mano para confirmar que el envio tecnico funciona; no debe depender
+    // de la preferencia de comunicaciones de la cuenta que se esta probando.
     const resultado = await enviarPushAUsuario(id, {
       titulo: 'Prueba de Soul',
       cuerpo: 'Si ves esto, las notificaciones push funcionan.',
-      data: { tipo: tipoPrueba, citaId: (req.body && req.body.citaId) || undefined }
+      data: { tipo: tipoPrueba, citaId: (req.body && req.body.citaId) || undefined },
+      esencial: true
     });
     return res.status(200).json({ ok: true, resultado });
   }

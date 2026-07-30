@@ -28,7 +28,7 @@ Tenés derecho a pedir que se elimine tu cuenta y tus datos. Ver el detalle comp
 
 ## Revocación de consentimientos opcionales
 
-Los consentimientos que son opcionales (por ejemplo, recibir comunicaciones de producto) los podés activar o desactivar cuando quieras. Esto no afecta tu capacidad de seguir usando las funciones centrales de Soul.
+Los consentimientos que son opcionales (por ejemplo, recibir comunicaciones de producto — que incluye tanto los emails de producto como las notificaciones push de match, mensajes y recordatorios) los podés activar o desactivar cuando quieras, con la misma opción para ambos canales. Esto no afecta tu capacidad de seguir usando las funciones centrales de Soul.
 
 **Cómo ejercerlo**: desde "Mi perfil".
 

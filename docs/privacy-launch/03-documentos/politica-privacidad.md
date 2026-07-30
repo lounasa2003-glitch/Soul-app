@@ -149,10 +149,12 @@ Esto significa que, al usar Soul, aceptás que parte de tu información (en part
 
 ## 14. Comunicaciones
 
-Separamos dos tipos de comunicaciones:
+Soul se comunica con vos por dos canales — email y notificaciones push — pero con **una sola preferencia** que controla lo que no es indispensable en ambos:
 
-- **Esenciales** (siempre se envían, no podés desactivarlas porque son necesarias para el funcionamiento de tu cuenta): confirmación de cuenta y recuperación de contraseña.
-- **De producto** (opcionales, requieren tu autorización explícita): avisos de nuevo match, recordatorios de mensajes sin responder, y novedades similares. Podés activar o desactivar esta opción en cualquier momento desde "Mi perfil". Por defecto, esta opción **no está activada** — tenés que optar por recibirlas.
+- **Esenciales** (siempre se envían, no podés desactivarlas porque son necesarias para el funcionamiento de tu cuenta): confirmación de cuenta y recuperación de contraseña. Hoy estas solo se mandan por email.
+- **De producto** (opcionales, requieren tu autorización explícita): avisos de nuevo match, mensajes nuevos en la Sala de Encuentros, recordatorios, y el aviso de que tu reflexión post-cita está lista. Esto aplica **tanto al email como a la notificación push** — la misma opción de "Mi perfil" activa o desactiva las dos cosas juntas. Por defecto, esta opción **no está activada** — tenés que optar por recibirlas.
+
+Para que te llegue una notificación push además necesitás haberle dado permiso a Soul en tu dispositivo — eso es un permiso técnico aparte, no reemplaza ni se controla desde tu preferencia de comunicaciones. Es decir: para recibir un push de producto hacen falta las dos cosas (permiso del dispositivo **y** la opción activada en "Mi perfil"); para no recibirlo alcanza con que falte cualquiera de las dos.
 
 ---
 
