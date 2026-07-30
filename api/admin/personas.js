@@ -137,11 +137,49 @@ export default async function handler(req, res) {
       // mismo criterio que el resto del panel (ranking, listado de
       // personas), y el volumen de un piloto no justifica nada mas
       // elaborado. Se calcula al pedirlo, no en vivo/cacheado.
-      const [tokensRes, eventosRes] = await Promise.all([
-        fetch(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,modulo_fase,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens`, { headers }),
+      //
+      // uso_tokens ya paso las filas que PostgREST devuelve por default en
+      // un solo request (1000 en Supabase) -- sin paginar, este fetch
+      // recortaba en silencio ahi, sin ningun error visible, y el conteo de
+      // llamadas quedaba "congelado" apenas la tabla cruzaba ese umbral,
+      // sin relacion con si el insert de logUso.js realmente funcionaba o
+      // no (funcionaba). traerTodasLasFilas pagina con el header Range de
+      // PostgREST, sin asumir que el tope siempre va a ser 1000: sigue
+      // pidiendo paginas hasta que una vuelva mas corta que lo pedido, o
+      // hasta que Content-Range confirme que no queda nada mas.
+      let _debugTotalUsoTokensSegunPostgrest = null; // DIAGNOSTICO TEMPORAL -- sacar tras verificar en Preview.
+      async function traerTodasLasFilas(url, { onTotal } = {}) {
+        const TAMANO_PAGINA = 1000;
+        let filas = [];
+        let desde = 0;
+        while (true) {
+          const hasta = desde + TAMANO_PAGINA - 1;
+          const pageRes = await fetch(url, {
+            headers: { ...headers, Range: `${desde}-${hasta}`, Prefer: 'count=exact' }
+          });
+          if (!pageRes.ok) {
+            const texto = await pageRes.text();
+            throw new Error(`Fallo al paginar ${url} (rango ${desde}-${hasta}): HTTP ${pageRes.status} ${texto}`);
+          }
+          const pagina = await pageRes.json();
+          filas = filas.concat(pagina);
+          const contentRange = pageRes.headers.get('content-range');
+          const total = contentRange && contentRange.split('/')[1];
+          const totalConocido = total && total !== '*' ? Number(total) : null;
+          if (totalConocido !== null && onTotal) onTotal(totalConocido); // DIAGNOSTICO TEMPORAL
+          if (pagina.length < TAMANO_PAGINA) break;
+          if (totalConocido !== null && filas.length >= totalConocido) break;
+          desde += TAMANO_PAGINA;
+        }
+        return filas;
+      }
+
+      const [tokensFilas, eventosRes] = await Promise.all([
+        traerTodasLasFilas(`${supabaseUrl}/rest/v1/uso_tokens?select=endpoint,modulo_fase,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens&order=id.asc`, {
+          onTotal: (t) => { _debugTotalUsoTokensSegunPostgrest = t; } // DIAGNOSTICO TEMPORAL
+        }),
         fetch(`${supabaseUrl}/rest/v1/eventos_piloto?select=tipo,usuario_id`, { headers })
       ]);
-      const tokensFilas = tokensRes.ok ? await tokensRes.json() : [];
       const eventosFilas = eventosRes.ok ? await eventosRes.json() : [];
 
       // Tarifa de Claude Sonnet -- USD por millon de tokens. Ajustar aca si
@@ -246,7 +284,12 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoTotalEstimadoUsd, porEndpoint: tokensPorEndpoint, porEtapa: tokensPorEtapa },
-        embudo
+        embudo,
+        // DIAGNOSTICO TEMPORAL -- sacar tras verificar en Preview que
+        // tokensFilas.length (suma de porEndpoint.llamadas) coincide con el
+        // total real de uso_tokens segun Postgres (Content-Range).
+        _debugTotalUsoTokensSegunPostgrest,
+        _debugFilasProcesadas: tokensFilas.length
       });
     }
 
