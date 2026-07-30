@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 // Verificacion en vivo del bloque de edad minima (commit 33e0f37, deployado en
-// produccion) -- corre las 4 pruebas obligatorias contra la API real usando
-// cuentas descartables, verifica residuos con acceso administrativo directo a
-// Supabase (service_role), y borra fisicamente todo lo que haya creado antes
-// de terminar (bloque finally, incluso si alguna prueba falla).
+// produccion) -- antes de Test 1-4, hace una comprobacion inicial (registro +
+// una llamada autenticada minima) para confirmar que la sesion recien creada
+// es aceptada por el servidor; si no lo es, aborta todo el resto sin correr
+// las 4 pruebas de edad. Si la sesion es valida, corre las 4 pruebas
+// obligatorias contra la API real usando cuentas descartables, verifica
+// residuos con acceso administrativo directo a Supabase (service_role), y
+// borra fisicamente todo lo que haya creado antes de terminar (bloque
+// finally, incluso si alguna prueba o la comprobacion inicial falla).
 //
 // GARANTIAS DE SEGURIDAD DE ESTE SCRIPT:
 // - Nunca imprime ni guarda un access/refresh token ni la service role key
@@ -218,17 +222,67 @@ function actualizarToken(cuenta, nuevoToken) {
   if (cuenta && nuevoToken) cuenta.token = nuevoToken;
 }
 
+// api/auth.js (accion 'registro') reenvia tal cual la respuesta de
+// POST /auth/v1/signup de Supabase -- el formato "de fabrica" de GoTrue es
+// plano (access_token/refresh_token/user en la raiz), y es exactamente lo
+// que soul.html lee (accessToken=data.access_token, ver linea ~2601). Se
+// prueba primero esa forma; si no esta, se prueba la forma anidada bajo
+// "session" (algunas versiones/configuraciones de GoTrue devuelven
+// {user, session:{access_token,...}} en vez de plano) antes de darse por
+// vencido -- asi el script no falla en silencio si la forma real difiere de
+// lo que asume soul.html.
+function extraerSesion(data) {
+  if (!data) return { token: null, userId: null };
+  const token = data.access_token || (data.session && data.session.access_token) || null;
+  const userId = (data.user && data.user.id) || (data.session && data.session.user && data.session.user.id) || null;
+  return { token, userId };
+}
+
 async function crearCuentaDescartable(etiqueta) {
   const email = `edadtest-${etiqueta}-${Date.now()}-${randSuffix(4)}@example.com`;
   const password = 'Aa1!' + randSuffix(12);
   const reg = await registrar(email, password);
-  const token = reg.data && reg.data.access_token;
-  const authId = (reg.data && reg.data.user && reg.data.user.id) || (token ? decodeJwtSub(token) : null);
+  const { token, userId } = extraerSesion(reg.data);
+  const authId = userId || (token ? decodeJwtSub(token) : null);
   log(`${etiqueta}.registro`, reg.status === 200 && !!token && !!authId,
     `status=${reg.status} access_token=${maskToken(token)} authId=${authId || '<no obtenido>'}`);
   if (reg.status !== 200 || !token || !authId) return { email, password, token: null, cuenta: null };
   const cuenta = registrarCuentaCreada({ etiqueta, email, password, token, authId });
   return { email, password, token, cuenta };
+}
+
+// ---------- comprobacion inicial de sesion ----------
+//
+// Registra una cuenta descartable propia (independiente de las de los
+// Test 1-4) y hace UNA sola llamada autenticada minima -- la misma que
+// hace soul.html apenas se registra alguien (crear la fila minima de
+// 'usuarios' con el nombre, ver guardarUsuarioYContinuar/registro en
+// soul.html). Si esa llamada da 401, el problema es de autenticacion
+// (sesion rechazada por el servidor), no de la logica de edad -- se corta
+// ahi, se aborta TODO el resto de las pruebas de edad, y se pasa
+// directamente a la limpieza en vez de generar una cascada de fallos
+// enganosos en Test 1-4 (que fue exactamente lo que paso la corrida
+// anterior: los 401 eran todos sintoma de esto, no de un problema real en
+// el chequeo de edad minima).
+async function comprobacionInicialDeSesion() {
+  console.log('\n--- Comprobacion inicial: registro + primera llamada autenticada ---');
+  const { cuenta } = await crearCuentaDescartable('chequeo-sesion');
+  if (!cuenta) {
+    log('CHEQUEO_SESION.abortado', false, 'no se pudo registrar la cuenta de prueba inicial (ver CHEQUEO_SESION.registro arriba)');
+    return false;
+  }
+
+  const filaMin = await guardar(cuenta.token, 'usuarios', { nombre: 'Test Chequeo Sesion' });
+  fijarUsuarioId(cuenta, filaMin.status === 200 && filaMin.data && filaMin.data[0] && filaMin.data[0].id);
+
+  const ok = filaMin.status === 200;
+  log('CHEQUEO_SESION.llamada_autenticada_minima', ok,
+    ok
+      ? `status=${filaMin.status} -- la sesion recien creada es aceptada por /api/guardar`
+      : `status=${filaMin.status} error=${filaMin.data && filaMin.data.error} -- ${filaMin.status === 401
+          ? 'la sesion recien creada NO fue aceptada por el servidor (mismo mecanismo que usan Test 1-4) -- se abortan las pruebas de edad'
+          : 'fallo inesperado en la primera llamada autenticada'}`);
+  return ok;
 }
 
 // ---------- TEST 1: menor de 18 en onboarding ----------
@@ -486,9 +540,14 @@ instalarHandlerDeSenal('SIGINT');
 (async () => {
   console.log(`=== Verificacion en vivo -- bloque de edad minima (commit 33e0f37) contra ${SOUL_APP_URL} ===`);
   try {
-    await test1();
-    await test2();
-    await test3y4();
+    const sesionOk = await comprobacionInicialDeSesion();
+    if (!sesionOk) {
+      console.error('\nLa comprobacion inicial de sesion fallo -- se abortan Test 1 a 4 sin ejecutarlos (ver CHEQUEO_SESION arriba para el detalle).');
+    } else {
+      await test1();
+      await test2();
+      await test3y4();
+    }
   } catch (e) {
     console.error('\nERROR FATAL durante las pruebas:', e && e.message ? e.message : e);
     log('ERROR_FATAL', false, `las pruebas se cortaron antes de terminar: ${e && e.message ? e.message : e}`);
