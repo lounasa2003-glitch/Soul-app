@@ -1459,16 +1459,27 @@ async function obtenerHistorialVivo(uid){
   }catch(e){return null;}
 }
 
-async function initModulo(perfilExtraido, moduloEsencial, referencias, fortalezas, oportunidades, transcriptoCharla, historialPrevio){
+async function initModulo(perfilExtraido, moduloEsencial, moduloRecomendado, moduloFaseGuardada, referencias, fortalezas, oportunidades, transcriptoCharla, historialPrevio){
   // Si no viene un transcripto ya armado (ej. reconstruido desde la BD tras
   // una recarga), se arma a partir de la charla viva en esta pestana.
   if(!transcriptoCharla){
     transcriptoCharla=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
   }
+  // moduloFaseGuardada es la fase real persistida en 'perfiles' (null,
+  // 'esencial', 'recomendado' u 'obligatorio') -- antes esta funcion
+  // adivinaba la fase comparando moduloEsencial contra el nombre fijo del
+  // obligatorio, lo cual siempre daba 'esencial' al reanudar una sesion que
+  // ya habia avanzado a 'recomendado' u 'obligatorio'. Ahora se confia en lo
+  // guardado y solo se cae al viejo calculo cuando no hay nada guardado
+  // todavia (primera vez, fase recien asignada en memoria).
+  var nombreModuloActivo = moduloFaseGuardada==='obligatorio' ? 'Capacidad de volver a elegir'
+    : moduloFaseGuardada==='recomendado' ? (moduloRecomendado||moduloEsencial)
+    : moduloEsencial;
   moduloData={
-    modulo:moduloEsencial, perfil:perfilExtraido, referencias:referencias,
+    modulo:nombreModuloActivo, moduloEsencial:moduloEsencial, moduloRecomendado:moduloRecomendado,
+    perfil:perfilExtraido, referencias:referencias,
     transcriptoCharla:transcriptoCharla, fortalezas:fortalezas, oportunidades:oportunidades,
-    fase: moduloEsencial==='Capacidad de volver a elegir'?'obligatorio':'esencial'
+    fase: moduloFaseGuardada || (moduloEsencial==='Capacidad de volver a elegir'?'obligatorio':'esencial')
   };
   document.getElementById('moduloArea').innerHTML='';
   document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
@@ -1622,7 +1633,15 @@ function moduloRequierePro(){
 // Pro) en lugar de intentar y fallar.
 function mostrarPaywallModulo(){
   var t=document.getElementById('moduloTyping');if(t)t.remove();
-  addModuloMsg('soul','Este momento de profundización es parte de Soul Pro. Si en algún momento querés seguir explorando esto conmigo, va a estar acá esperándote.');
+  // Antes decía solo "este momento es parte de Soul Pro", generico -- ahora
+  // nombra el modulo puntual que ya se detecto para esta persona (mismo
+  // nombre que usa MODULOS_INFO/buildModuloPrompt), para no perder la
+  // especificidad que ya construyo el espejo justo antes de este corte.
+  var nombreModulo=moduloData.modulo&&moduloData.modulo!=='Capacidad de volver a elegir'?moduloData.modulo:null;
+  var mensajePaywall=nombreModulo
+    ?('Lo que noté en vos tiene nombre: '+nombreModulo+'. Profundizar ahí conmigo es parte de Soul Pro -- si en algún momento querés ir a ese lugar, va a estar acá esperándote.')
+    :'Este momento de profundización es parte de Soul Pro. Si en algún momento querés seguir explorando esto conmigo, va a estar acá esperándote.';
+  addModuloMsg('soul',mensajePaywall);
   var btn=document.getElementById('moduloBtn');if(btn)btn.disabled=true;
   var inp=document.getElementById('moduloIn');
   if(inp){inp.disabled=true;inp.placeholder='Este momento está pausado';}
@@ -1701,9 +1720,55 @@ function manejarCierreDeModulo(){
     moduloData.fase='completo';
     guardarTabla('perfiles',{modulo_fase:'completo'}).catch(function(){});
     addBotonMatch();
+  }else if(moduloData.fase==='esencial' && moduloData.moduloRecomendado && moduloData.moduloRecomendado!==moduloData.modulo){
+    // Antes de encadenar directo al obligatorio, se ofrece el modulo
+    // recomendado (segunda capa personalizada, hoy calculada y guardada en
+    // 'perfiles' pero nunca entregada a nadie) -- a diferencia del
+    // obligatorio, este SI se pregunta antes de arrancar, porque es la
+    // extension paga y merece invitacion, no un empujon.
+    addBotonesModuloRecomendado();
   }else{
     iniciarModuloObligatorio();
   }
+}
+
+function addBotonesModuloRecomendado(){
+  var div=document.createElement('div');
+  div.style.cssText='display:flex;gap:.6rem;justify-content:flex-end;padding:.3rem 0';
+  div.id='recomendadoBtns';
+  div.innerHTML='<button onclick="iniciarModuloRecomendado()" style="padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;letter-spacing:.08em;cursor:pointer">Sí, sigamos →</button><button onclick="saltearModuloRecomendado()" style="padding:.6rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.82rem;cursor:pointer">Prefiero que no, por ahora</button>';
+  document.getElementById('moduloArea').appendChild(div);
+  scrollAlFondo('moduloArea');
+  addModuloMsg('soul','Hay algo más que noté en lo que hablamos. ¿Seguimos con eso también, o preferís dejarlo por ahora?');
+}
+
+function saltearModuloRecomendado(){
+  var b=document.getElementById('recomendadoBtns');if(b)b.remove();
+  addModuloMsg('user','Prefiero que no, por ahora.');
+  moduloHistory.push({role:'user',content:'Prefiero que no, por ahora.'});
+  guardarModuloHistorial().catch(function(){});
+  iniciarModuloObligatorio();
+}
+
+// Mismo guard de doble-tap que mostrarEspejo/saltearEspejo -- dos clicks
+// encolados casi juntos podian arrancar el modulo recomendado dos veces.
+var recomendadoEnCurso=false;
+function iniciarModuloRecomendado(){
+  if(recomendadoEnCurso)return;
+  recomendadoEnCurso=true;
+  var b=document.getElementById('recomendadoBtns');if(b)b.remove();
+  addModuloMsg('user','Sí, sigamos.');
+  moduloHistory.push({role:'user',content:'Sí, sigamos.'});
+  moduloData.modulo=moduloData.moduloRecomendado;
+  moduloData.fase='recomendado';
+  guardarTabla('perfiles',{modulo_fase:'recomendado'}).catch(function(){});
+  // Defensivo, igual que el resto de los puntos de entrada a un modulo --
+  // en la practica ya tuvo que pasar el gate del esencial para llegar hasta
+  // aca, pero moduloRequierePro() es la unica fuente de verdad y conviene
+  // no asumir.
+  if(moduloRequierePro()){recomendadoEnCurso=false;mostrarPaywallModulo();return;}
+  iniciarModuloReal();
+  recomendadoEnCurso=false;
 }
 
 function addModuloBtns(){
@@ -3523,7 +3588,7 @@ async function elegirSesion(tipo){
       window.perfilRecienExtraido=null;
       window.moduloInfoGuardada=null;
       ir('4b');
-      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.referencias_culturales, moduloInfo.fortalezas, moduloInfo.oportunidades);
+      initModulo(perfil, moduloInfo.modulo_esencial, moduloInfo.modulo_recomendado, null, moduloInfo.referencias_culturales, moduloInfo.fortalezas, moduloInfo.oportunidades);
       return;
     }
     // perfilRecienExtraido/moduloInfoGuardada viven solo en memoria de esta
@@ -3578,6 +3643,7 @@ async function elegirSesion(tipo){
           }catch(e){}
 
           var moduloEsencial=perfilGuardado.modulo_esencial;
+          var moduloRecomendado=perfilGuardado.modulo_recomendado;
 
           if(!moduloEsencial){
             // Falta el paso de asignación de módulo -- se corre ahora mismo
@@ -3591,6 +3657,7 @@ async function elegirSesion(tipo){
                 messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaDeteccion)+'\n\nConversación resumida: '+transcriptoGuardado.slice(-2000)}]
               });
               moduloEsencial=moduloInfo.modulo_esencial;
+              moduloRecomendado=moduloInfo.modulo_recomendado||null;
               fortalezasGuardadas=moduloInfo.fortalezas||[];
               oportunidadesGuardadas=moduloInfo.oportunidades||[];
               if(!referenciasGuardadas)referenciasGuardadas=moduloInfo.referencias_culturales||null;
@@ -3598,7 +3665,7 @@ async function elegirSesion(tipo){
               guardarTabla('perfiles',{
                 usuario_id: usuarioId,
                 modulo_esencial: moduloEsencial||null,
-                modulo_recomendado: moduloInfo.modulo_recomendado||null,
+                modulo_recomendado: moduloRecomendado,
                 modulo_fase: moduloEsencial?'esencial':null,
                 senales_modulo: moduloInfo.senales_detectadas||null,
                 sintesis_espejo: JSON.stringify({fortalezas:fortalezasGuardadas,oportunidades:oportunidadesGuardadas})
@@ -3616,7 +3683,7 @@ async function elegirSesion(tipo){
             }catch(e){}
 
             ir('4b');
-            initModulo(perfilGuardado, moduloEsencial, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado, historialModuloGuardado);
+            initModulo(perfilGuardado, moduloEsencial, moduloRecomendado, perfilGuardado.modulo_fase, referenciasGuardadas, fortalezasGuardadas, oportunidadesGuardadas, transcriptoGuardado, historialModuloGuardado);
             return;
           }
         }
