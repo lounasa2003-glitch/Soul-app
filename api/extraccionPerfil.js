@@ -29,10 +29,7 @@ const SUBPASOS_VALIDOS = Object.keys(MAX_TOKENS_POR_SUBPASO);
 // llamadas (una de cada subpaso) mas alguna de mas por pausas/recuperacion
 // -- 12 cada 15 min y 40 por dia dejan margen de sobra sin abrir la puerta
 // a abuso sostenido.
-// TEMPORAL PARA TEST DE PREVIEW -- LIMITE_EXTRACCION baja a 2 (en vez de 12)
-// para poder probar el 429 con 3 llamadas reales en vez de 13. Restaurar a
-// 12 antes de mergear a produccion (ver segundo commit de esta rama).
-const LIMITE_EXTRACCION = 2;
+const LIMITE_EXTRACCION = 12;
 const VENTANA_EXTRACCION_SEGUNDOS = 900;
 const LIMITE_EXTRACCION_DIARIO = 40;
 const VENTANA_EXTRACCION_DIARIO_SEGUNDOS = 86400;
