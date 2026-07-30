@@ -9,14 +9,23 @@
 // sanitizado en la respuesta HTTP en vez de silenciarlo en un simple null.
 //
 // Protegido con una firma HMAC-SHA256 sobre un timestamp, usando
-// SUPABASE_SERVICE_ROLE_KEY como secreto -- la MISMA clave que ya existe
-// como secret en Vercel y en GitHub Actions, sin agregar ningun secreto
-// nuevo. La key nunca viaja en la request (ni como valor ni enmascarada):
-// el llamador demuestra que la conoce firmando el timestamp, el servidor
-// verifica recalculando la misma firma. Quien ya tiene la service role key
-// ya tiene acceso total a la base por diseño (bypassea RLS); este endpoint
-// no le da a esa persona ningun privilegio nuevo, solo una lectura
-// sanitizada de un diagnostico puntual.
+// SUPABASE_ANON_KEY como secreto -- la MISMA clave que ya existe como
+// secret en Vercel y en GitHub Actions, sin agregar ningun secreto nuevo.
+// (Se cambio de SUPABASE_SERVICE_ROLE_KEY a SUPABASE_ANON_KEY porque un
+// primer diagnostico con huellas SHA-256 no reversibles confirmo que el
+// valor de SUPABASE_SERVICE_ROLE_KEY en Vercel Production y el del secret
+// del mismo nombre en GitHub Actions NO coinciden -- hallazgo real y
+// separado, reportado aparte, que bloqueaba la firma sin tener nada que ver
+// con el 401 que se esta investigando. SUPABASE_ANON_KEY si coincidio en
+// ese mismo diagnostico.) La key nunca viaja en la request (ni como valor
+// ni enmascarada): el llamador demuestra que la conoce firmando el
+// timestamp, el servidor verifica recalculando la misma firma.
+// SUPABASE_ANON_KEY ya es, en esta app, una clave exclusivamente
+// server-side (nunca se expone al cliente/navegador -- ver api/auth.js,
+// api/guardar.js, api/leer.js), asi que da la misma garantia practica que
+// la service role key para este proposito puntual: solo alguien con
+// acceso a las variables de entorno del servidor puede generar una firma
+// valida.
 import crypto from 'crypto';
 
 const VENTANA_MS = 2 * 60 * 1000; // tolerancia de reloj para la firma
@@ -41,7 +50,7 @@ export default async function handler(req, res) {
   // para que la firma nunca coincida con la del lado de GitHub Actions.
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
   const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY || '').trim();
   if (!serviceKey || !supabaseUrl || !supabaseAnonKey) {
     return res.status(500).json({ error: 'no_configurado' });
   }
@@ -57,7 +66,10 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'firma_vencida' });
   }
 
-  const firmaEsperada = crypto.createHmac('sha256', serviceKey).update(String(timestamp)).digest('hex');
+  // Ver comentario grande al principio del archivo -- firma con
+  // SUPABASE_ANON_KEY, no con SUPABASE_SERVICE_ROLE_KEY (que resulto no
+  // coincidir entre Vercel y GitHub Actions).
+  const firmaEsperada = crypto.createHmac('sha256', supabaseAnonKey).update(String(timestamp)).digest('hex');
   if (!timingSafeEqualHex(String(firma), firmaEsperada)) {
     // No se puede seguir sin la firma valida (es lo que autoriza leer nada
     // de este endpoint), pero SI se puede devolver una huella no reversible

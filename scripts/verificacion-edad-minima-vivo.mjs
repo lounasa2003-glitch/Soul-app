@@ -180,11 +180,20 @@ async function supabaseAuthUserDirecto(token) {
 }
 
 // ---------- diagnostico server-side temporal (api/diagnosticoTemporal.js) ----------
-// Firma HMAC-SHA256 de un timestamp usando SERVICE_KEY como secreto -- la
-// clave nunca viaja en la request, el servidor la conoce por su propia
-// variable de entorno y recalcula la misma firma para verificar. Cada
-// timestamp usado se registra para poder borrar despues, en la limpieza,
-// la fila anti-reuso que crea el propio endpoint en 'rate_limits'.
+// Firma HMAC-SHA256 de un timestamp usando SUPABASE_ANON_KEY como secreto
+// -- la clave nunca viaja en la request, el servidor la conoce por su
+// propia variable de entorno y recalcula la misma firma para verificar.
+// (Empezo firmando con SERVICE_KEY, pero un primer diagnostico con huellas
+// SHA-256 no reversibles mostro que SUPABASE_SERVICE_ROLE_KEY en Vercel
+// Production y el secret del mismo nombre en GitHub Actions NO coinciden
+// -- hallazgo real y separado, reportado aparte, que bloqueaba la firma
+// sin relacion con el 401 que se esta investigando. SUPABASE_ANON_KEY si
+// coincidio en ese mismo diagnostico, y ya es una clave exclusivamente
+// server-side en esta app, asi que sirve igual de bien para este proposito
+// puntual.) Cada timestamp usado se registra para poder borrar despues, en
+// la limpieza, la fila anti-reuso que crea el propio endpoint en
+// 'rate_limits' (con SERVICE_KEY, que sigue haciendo falta para eso y para
+// el resto de la verificacion/limpieza -- ver mas abajo).
 const timestampsDiagnosticoUsados = [];
 
 // Huella no reversible (SHA-256, primeros 16 caracteres hex) -- sirve solo
@@ -196,7 +205,7 @@ function huellaClave(valor) {
 
 async function diagnosticoTemporalServerSide(token) {
   const timestamp = String(Date.now());
-  const firma = crypto.createHmac('sha256', SERVICE_KEY).update(timestamp).digest('hex');
+  const firma = crypto.createHmac('sha256', SUPABASE_ANON_KEY.trim()).update(timestamp).digest('hex');
   timestampsDiagnosticoUsados.push(timestamp);
 
   const headers = { 'X-Diagnostico-Timestamp': timestamp, 'X-Diagnostico-Firma': firma };
