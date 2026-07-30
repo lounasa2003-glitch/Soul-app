@@ -965,6 +965,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
   <p class="match-sub">Ahora empieza la parte que ningún algoritmo puede hacer por ustedes.</p>
   <div class="match-msg" id="matchMsg"></div>
+  <p class="match-sub" id="matchProUpsell" style="display:none"></p>
   <button class="btn-gold" id="btnPrepararEncuentro" onclick="ir(6)" style="margin-top:1rem">Prepararme para el encuentro →</button>
 </div>
 
@@ -2024,9 +2025,13 @@ function actualizarAvisoLimiteRestante(elId,restante){
   }
 }
 
-async function llamarChat(datos){
+// url es opcional (default '/api/chat') -- lo usan las llamadas de
+// extraccion/deteccion de modulo para apuntar a /api/extraccionPerfil en
+// vez del chat generico. Todo llamador que no lo pasa sigue exactamente
+// igual que antes.
+async function llamarChat(datos,url){
   var res=await fetchConSesion(function(){
-    return fetch('/api/chat',{
+    return fetch(url||'/api/chat',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
       body:JSON.stringify(datos)
@@ -2102,9 +2107,9 @@ function extraerJSON(texto){
 // alrededor del JSON); si aun asi no parsea, reintenta la llamada una sola
 // vez antes de tirar el error — evita repetir todo el pipeline por un JSON
 // mal formado en un solo paso puntual.
-async function pedirJSON(datosLlamada){
+async function pedirJSON(datosLlamada,url){
   for(var intento=1;intento<=2;intento++){
-    var data=await llamarChat(datosLlamada);
+    var data=await llamarChat(datosLlamada,url);
     var texto=data.content.map(function(b){return b.text||''}).join('');
     try{
       return extraerJSON(texto);
@@ -2218,8 +2223,37 @@ function calcularPorcentajePerfil(usuario,perfil){
   return Math.round(completos/total*100);
 }
 
+// Cuenta que tan lleno vino el perfil extraido -- EXTRACT_PROMPT ya deja
+// null lo que no tiene base real en la charla, asi que un perfil corto
+// real no deberia disparar esto. Sirve para no pisar un perfil valido ya
+// guardado con uno peor (ej. una extraccion que salio rara por una charla
+// muy corta o un fallo puntual del modelo).
+function perfilEsSuficiente(perfil){
+  var grupos=[perfil.grupo1,perfil.grupo2,perfil.grupo3,perfil.grupo4];
+  var llenos=0,totales=0;
+  grupos.forEach(function(g){
+    if(!g)return;
+    Object.keys(g).forEach(function(k){
+      totales++;
+      if(g[k]!==null&&g[k]!==undefined&&g[k]!=='')llenos++;
+    });
+  });
+  if(totales===0)return false;
+  return (llenos/totales)>=0.25;
+}
+
 async function guardarPerfil(perfil){
   if(!usuarioId)return;
+  if(!perfilEsSuficiente(perfil)){
+    console.error('Perfil extraido parece insuficiente/generico:',perfil);
+    try{
+      var existentes=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
+      if(existentes&&existentes[0]&&perfilEsSuficiente(existentes[0])){
+        console.error('Se descarta el perfil nuevo para no pisar uno valido ya guardado.');
+        return;
+      }
+    }catch(e){}
+  }
   var datos={
     usuario_id: usuarioId,
     grupo1: perfil.grupo1,
@@ -2836,6 +2870,25 @@ function entrarAPendiente(item){
   }
 }
 
+// Se llama en los dos lugares donde se revela un match (entrarADecisionMatch
+// y calcularMatches) -- muestra Y oculta explicitamente, nunca solo una de
+// las dos ramas, para que no quede un resto visible de una cuenta Free si
+// la misma pestaña despues ve un match como Pro. Mismo chequeo doble que
+// moduloRequierePro(): TODOS_PRO_TEMPORAL del cliente primero, porque
+// window.usuarioPlan no pasa por esa resolucion (esa solo ocurre
+// server-side en verificarUsuario).
+function actualizarUpsellMatch(){
+  var upsell=document.getElementById('matchProUpsell');
+  if(!upsell)return;
+  if(!TODOS_PRO_TEMPORAL && window.usuarioPlan!=='pro'){
+    upsell.textContent='Con Pro, Soul puede comprender más matices de tu perfil y afinar aún más tu búsqueda de compatibilidad.';
+    upsell.style.display='';
+  }else{
+    upsell.textContent='';
+    upsell.style.display='none';
+  }
+}
+
 // Preámbulo breve antes de la animación de "los planetas se alinearon" --
 // antes arrancaba de inmediato, sin ningún momento para asimilar que algo
 // importante está por pasar.
@@ -2846,6 +2899,7 @@ function entrarADecisionMatch(item){
   document.getElementById('scoreHoy').textContent=m.compatibilidad_hoy+'%';
   document.getElementById('scorePot').textContent=m.potencial_construccion+'%';
   document.getElementById('matchMsg').textContent=m.mensaje_dupla||'';
+  actualizarUpsellMatch();
   // El panel ya marca 'match' de entrada al activarlo (server-side, en
   // api/admin/matches.js) -- este re-guardado es solo para el caso en que
   // esta persona haya sido usuario_a/b de un match que el sistema (a
@@ -3668,12 +3722,13 @@ async function elegirSesion(tipo){
             // con lo que ya tenemos guardado, en vez de perder el perfil.
             try{
               var perfilParaDeteccion={grupo1:perfilGuardado.grupo1,grupo2:perfilGuardado.grupo2,grupo3:perfilGuardado.grupo3,grupo4:perfilGuardado.grupo4};
+              var conversacionParaDeteccion=await transcriptoParaExtraccion(transcriptoGuardado);
               var moduloInfo=await pedirJSON({
-                model:'claude-sonnet-4-6',
                 max_tokens:1024,
                 system:MODULO_DETECCION_PROMPT,
-                messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaDeteccion)+'\n\nConversación resumida: '+transcriptoGuardado.slice(-2000)}]
-              });
+                messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaDeteccion)+'\n\nConversación resumida: '+conversacionParaDeteccion}],
+                subpaso:'deteccion_modulo'
+              },'/api/extraccionPerfil');
               moduloEsencial=moduloInfo.modulo_esencial;
               moduloRecomendado=moduloInfo.modulo_recomendado||null;
               fortalezasGuardadas=moduloInfo.fortalezas||[];
@@ -4377,6 +4432,76 @@ function pausarChatPrincipal(){
   guardarProgresoAlPausar();
 }
 
+// Free usa una version comprimida de la charla antes de extraer el perfil
+// (Haiku, mas barata); Pro ve la charla entera (Sonnet, mas fina) -- mismo
+// schema de salida para los dos, diferenciador consciente de producto, no
+// un recorte tecnico disimulado. Nunca prioriza solo lo mas reciente: la
+// consigna es preservar respuestas + las preguntas de Soul que las
+// explican, identidad, valores, expectativas, limites y contradicciones.
+var COMPRESION_PARA_EXTRACCION_PROMPT=`Sos un sistema de compresión para preparar una charla de onboarding antes de extraer un perfil vincular. Tu única tarea es reducir el tamaño de la conversación sin perder lo que hace falta para entender a la persona -- no es un resumen de temas, es una selección de lo esencial.
+
+QUÉ CONSERVAR SIEMPRE, TEXTUAL O CASI TEXTUAL:
+- Las respuestas de la persona (nunca las parafrasees de forma que pierdan matiz -- si dijo algo con una frase particular, conservá esa frase)
+- La pregunta de Soul que hizo falta para entender cada respuesta
+- Identidad, valores declarados, expectativas de vínculo, límites explícitos, y cualquier contradicción entre lo que dice y lo que cuenta que hace
+
+QUÉ PODÉS DESCARTAR:
+- Saludos, chiquichacha, mensajes de transición ("dale", "genial", "ok")
+- Repeticiones de algo ya dicho antes sin matiz nuevo
+- Intervenciones de Soul que no aportan información nueva sobre la persona
+
+Nunca inventes ni agregues nada que no esté en la charla real. Es preferible una compresión más larga que perder una respuesta real de la persona.
+
+Respondé ÚNICAMENTE con JSON sin backticks: {"resumen":"la version comprimida de la charla, en el mismo formato Soul:/Usuario: turno por turno"}`;
+
+// Se llama antes de mandar la charla a EXTRACT_PROMPT/MODULO_DETECCION_PROMPT
+// -- Pro y TODOS_PRO_TEMPORAL ven la charla entera, sin este paso. Si la
+// compresion por IA falla, esta vacia o invalida, cae a un truncado de
+// respaldo que tampoco es un corte ciego (ver truncarTranscriptoSeguro):
+// nunca se pierde el perfil por esto.
+async function transcriptoParaExtraccion(conv){
+  if(TODOS_PRO_TEMPORAL||window.usuarioPlan==='pro')return conv;
+  try{
+    var comprimido=await pedirJSON({
+      max_tokens:800, system:COMPRESION_PARA_EXTRACCION_PROMPT,
+      messages:[{role:'user',content:conv}], subpaso:'compresion'
+    },'/api/extraccionPerfil');
+    var texto=comprimido&&comprimido.resumen;
+    if(!texto||typeof texto!=='string'||texto.trim().length<40)throw new Error('compresion invalida o vacia');
+    return texto;
+  }catch(e){
+    console.error('Compresion de transcript para extraccion fallo, uso truncado de respaldo:',e);
+    return truncarTranscriptoSeguro(conv);
+  }
+}
+
+// Red de seguridad si la compresion por IA fallo -- NUNCA "ultimos N
+// caracteres/mensajes" (seria el mismo corte ciego que la compresion evita
+// a proposito). Corta por turnos completos: se queda con los turnos de
+// Usuario + la pregunta de Soul que los precede (sin eso la respuesta
+// pierde contexto). Si con eso alcanza, listo. Si la charla es tan larga
+// que sigue sin entrar, reparte el presupuesto de caracteres entre el
+// inicio, el medio y el final por partes iguales -- nunca se queda solo
+// con el final.
+function truncarTranscriptoSeguro(conv){
+  var MAX_CHARS=8000;
+  if(conv.length<=MAX_CHARS)return conv;
+  var lineas=conv.split('\n').filter(function(l){return l.trim();});
+  var conservar={};
+  lineas.forEach(function(l,i){
+    if(l.indexOf('Usuario:')===0){
+      conservar[i]=true;
+      if(i>0&&lineas[i-1].indexOf('Usuario:')!==0)conservar[i-1]=true;
+    }
+  });
+  var reducido=lineas.filter(function(l,i){return conservar[i];}).join('\n');
+  if(reducido.length<=MAX_CHARS)return reducido;
+  var lr=reducido.split('\n');
+  var n=lr.length,c1=Math.floor(n/3),c2=Math.floor(2*n/3),tercio=Math.floor(MAX_CHARS/3);
+  function tomar(arr,max){var out=[],tot=0;for(var i=0;i<arr.length;i++){tot+=arr[i].length+1;if(tot>max)break;out.push(arr[i]);}return out;}
+  return tomar(lr.slice(0,c1),tercio).concat(tomar(lr.slice(c1,c2),tercio)).concat(tomar(lr.slice(c2),tercio)).join('\n');
+}
+
 var EXTRACT_PROMPT=`Sos un sistema de análisis de compatibilidad vincular basado en coaching ontológico. Leé la conversación y extraé un perfil estructurado. Respondé ÚNICAMENTE con JSON válido sin backticks: {"grupo1":{"valores":["v1","v2","v3"],"estilo_comunicacion":"","ritmo_emocional":"","mascara_vs_autentico":"","momento_evolutivo":""},"grupo2":{"tipo_vinculo":"","proyecto_vida":"","necesidades_intimidad":"","no_puede_faltar":"","no_puede_estar":""},"grupo3":{"modo_conflictos":"","capacidad_reparacion":"","reciprocidad":"","flexibilidad":"","patrones_vinculares":""},"grupo4":{"apertura":"","consistencia":"","estabilidad_emocional":"","revision_creencias":"","metalenguaje":"","indice_disponibilidad":5}}
 
 MUY IMPORTANTE -- NO INVENTES: si un campo específico no tiene información real en la conversación (no se tocó, o se tocó de forma demasiado vaga para decir algo concreto), su valor tiene que ser exactamente null -- nunca una inferencia plausible generada sin base. Esto incluye "no_puede_faltar"/"no_puede_estar" (el límite real, narrativo, que la persona haya contado con contexto -- no lo inventes ni lo confundas con una lista genérica) y "reciprocidad" (cómo tiende a darse en sus vínculos pasados). Es preferible un campo en null a uno con contenido inventado -- el sistema de matching necesita saber qué se comparó de verdad y qué no.`;
@@ -4411,7 +4536,8 @@ async function guardarProgresoAlPausar(){
   if(!usuarioId||chatHistory.length<UMBRAL_VIABLE_PAUSA)return;
   try{
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var perfilParcial=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación (puede estar incompleta -- extraé lo que se pueda, dejá en blanco lo que no):\n\n'+conv}]});
+    var convParaExtraccion=await transcriptoParaExtraccion(conv);
+    var perfilParcial=await pedirJSON({max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación (puede estar incompleta -- extraé lo que se pueda, dejá en blanco lo que no):\n\n'+convParaExtraccion}],subpaso:'extraccion'},'/api/extraccionPerfil');
     await guardarPerfil(perfilParcial);
   }catch(e){}
 }
@@ -4459,7 +4585,13 @@ var RESUMEN_PERFIL_PROMPT='Sos Soul. Le vas a hablar directo a la persona, en se
 async function hacerAvanzar(miToken){
   // 1. Extraer perfil
   var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-  var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
+  // Se comprime UNA sola vez acá (si corresponde -- Pro/TODOS_PRO_TEMPORAL
+  // devuelve la charla entera sin tocar) y se reusa en
+  // continuarTrasValidacion() para la deteccion de modulo, en vez de
+  // comprimir dos veces el mismo camino feliz.
+  var convParaExtraccion=await transcriptoParaExtraccion(conv);
+  window.transcriptoComprimidoParaValidar=convParaExtraccion;
+  var perfil=await pedirJSON({max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+convParaExtraccion}],subpaso:'extraccion'},'/api/extraccionPerfil');
   if(miToken!==avanzarAlMatchToken)return; // otra corrida mas nueva ya tomo la posta
   window.perfilParaValidar=perfil;
 
@@ -4521,18 +4653,28 @@ async function ejecutarContinuarTrasValidacion(){
 
 async function continuarTrasValidacion(){
   var perfil=window.perfilParaValidar;
+  // Se captura y limpia el global ACA, antes de usarlo -- no al final --
+  // asi ninguna salida anticipada de esta funcion (error en guardarPerfil,
+  // en la deteccion de modulo, timeout de ejecutarContinuarTrasValidacion)
+  // puede dejarlo pisando una sesion de onboarding posterior.
+  var transcriptoComprimido=window.transcriptoComprimidoParaValidar;
+  window.transcriptoComprimidoParaValidar=null;
 
   // 2. Guardar perfil y conversación
   await guardarPerfil(perfil);
   await guardarConversacion();
 
-  // 3. Detectar módulo esencial con sistema de módulos
+  // 3. Detectar módulo esencial con sistema de módulos -- reusa la misma
+  // compresion de hacerAvanzar() cuando existe (camino feliz); si no (ej.
+  // se perdio por recarga), usa las ultimas 10 lineas como respaldo, igual
+  // que antes.
+  var conversacionParaDeteccion=transcriptoComprimido||chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n');
   var moduloInfo=await pedirJSON({
-    model:'claude-sonnet-4-6',
     max_tokens:1024,
     system:MODULO_DETECCION_PROMPT,
-    messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+chatHistory.slice(-10).map(function(m){return m.role+': '+m.content}).join('\n')}]
-  });
+    messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfil)+'\n\nConversación resumida: '+conversacionParaDeteccion}],
+    subpaso:'deteccion_modulo'
+  },'/api/extraccionPerfil');
 
   // Guardar info para cuando elija qué hacer
   window.perfilRecienExtraido=perfil;
@@ -4628,6 +4770,7 @@ async function calcularMatches(){
       document.getElementById('scoreHoy').textContent=data.matchData.compatibilidad_hoy+'%';
       document.getElementById('scorePot').textContent=data.matchData.potencial_construccion+'%';
       document.getElementById('matchMsg').textContent=data.matchData.mensaje_dupla;
+      actualizarUpsellMatch();
     }
   }catch(e){console.error('Error calculando matches:',e);}
 }
@@ -4636,7 +4779,8 @@ async function extraerYGuardarPerfil(){
   if(chatHistory.length<4)return;
   try{
     var conv=chatHistory.map(function(m){return(m.role==='assistant'?'Soul: ':'Usuario: ')+m.content}).join('\n');
-    var perfil=await pedirJSON({model:'claude-sonnet-4-6',max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+conv}]});
+    var convParaExtraccion=await transcriptoParaExtraccion(conv);
+    var perfil=await pedirJSON({max_tokens:1200,system:EXTRACT_PROMPT,messages:[{role:'user',content:'Analizá esta conversación:\n\n'+convParaExtraccion}],subpaso:'extraccion'},'/api/extraccionPerfil');
     await guardarPerfil(perfil);
     await guardarConversacion();
   }catch(e){console.error('Error extrayendo perfil:',e);}
