@@ -187,6 +187,13 @@ async function supabaseAuthUserDirecto(token) {
 // la fila anti-reuso que crea el propio endpoint en 'rate_limits'.
 const timestampsDiagnosticoUsados = [];
 
+// Huella no reversible (SHA-256, primeros 16 caracteres hex) -- sirve solo
+// para comparar "es el mismo valor si o no" contra lo que devuelva el
+// endpoint del lado de Vercel, nunca para reconstruir la clave real.
+function huellaClave(valor) {
+  return crypto.createHash('sha256').update((valor || '').trim()).digest('hex').slice(0, 16);
+}
+
 async function diagnosticoTemporalServerSide(token) {
   const timestamp = String(Date.now());
   const firma = crypto.createHmac('sha256', SERVICE_KEY).update(timestamp).digest('hex');
@@ -197,6 +204,18 @@ async function diagnosticoTemporalServerSide(token) {
   const res = await fetch(`${SOUL_APP_URL}/api/diagnosticoTemporal`, { headers });
   let data = null;
   try { data = await res.json(); } catch { /* sin cuerpo JSON */ }
+
+  if (data && data.error === 'firma_invalida' && data.serviceKeyHashVercel) {
+    const huellaServiceLocal = huellaClave(SERVICE_KEY);
+    const huellaAnonLocal = huellaClave(SUPABASE_ANON_KEY);
+    log('DIAGNOSTICO.service_role_key_coincide_con_vercel',
+      huellaServiceLocal === data.serviceKeyHashVercel,
+      `huella local=${huellaServiceLocal} huella_vercel=${data.serviceKeyHashVercel}`);
+    log('DIAGNOSTICO.anon_key_coincide_con_vercel',
+      huellaAnonLocal === data.anonKeyHashVercel,
+      `huella local=${huellaAnonLocal} huella_vercel=${data.anonKeyHashVercel}`);
+  }
+
   return { status: res.status, ok: res.ok, data };
 }
 

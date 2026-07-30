@@ -59,7 +59,18 @@ export default async function handler(req, res) {
 
   const firmaEsperada = crypto.createHmac('sha256', serviceKey).update(String(timestamp)).digest('hex');
   if (!timingSafeEqualHex(String(firma), firmaEsperada)) {
-    return res.status(401).json({ error: 'firma_invalida' });
+    // No se puede seguir sin la firma valida (es lo que autoriza leer nada
+    // de este endpoint), pero SI se puede devolver una huella no reversible
+    // de las dos claves que Vercel esta usando en este momento -- un hash
+    // SHA-256 de un secreto de alta entropia (un JWT largo) no se puede
+    // invertir al valor original ni por fuerza bruta, asi que compararlo no
+    // expone la clave. Sirve para confirmar (o descartar) que el valor que
+    // ve Vercel en produccion es distinto del que tiene el secret del mismo
+    // nombre en GitHub Actions -- exactamente lo que la firma invalida ya
+    // sugiere, pero sin adivinar.
+    const serviceKeyHash = crypto.createHash('sha256').update(serviceKey).digest('hex').slice(0, 16);
+    const anonKeyHash = crypto.createHash('sha256').update((supabaseAnonKey || '').trim()).digest('hex').slice(0, 16);
+    return res.status(401).json({ error: 'firma_invalida', serviceKeyHashVercel: serviceKeyHash, anonKeyHashVercel: anonKeyHash });
   }
 
   // Anti-reuso: una fila por timestamp, misma tabla/patron que ya usa
