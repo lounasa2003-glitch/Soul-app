@@ -21,7 +21,7 @@ Soul **no te pide** estos datos con preguntas directas y cerradas — surgen, si
 
 - La usa para construir tu **perfil vincular**, que es una interpretación —no un hecho objetivo— sobre cómo te vinculás con otras personas.
 - La usa para calcular tu **compatibilidad** con otras personas, como parte del proceso de matching.
-- **Nunca muestra esta información, ni tu perfil vincular completo, a otra persona usuaria de Soul.** Solo el equipo que administra la plataforma puede acceder a ella, con el fin de dar soporte al funcionamiento de la app y a la seguridad del piloto.
+- **Nunca muestra esta información, ni tu perfil vincular completo, a otra persona usuaria de Soul.** El acceso humano directo por parte del equipo que administra la plataforma no es rutinario: solo puede ocurrir ante un reporte o una situación de seguridad, cuando una función administrativa concreta lo requiere (por ejemplo, dar soporte a una consulta tuya), o cuando corresponde el análisis de una cita con el consentimiento de ambas personas (ver más abajo). El detalle completo está en `politica-privacidad.md` (sección 11).
 
 ## Las inferencias que la IA genera a partir de estos datos
 

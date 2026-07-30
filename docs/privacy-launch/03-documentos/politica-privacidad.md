@@ -119,6 +119,18 @@ El motor de compatibilidad de Soul compara tu perfil vincular con los perfiles d
 - Revisamos los reportes de seguridad recibidos como parte del funcionamiento normal de la plataforma.
 - Si ocurriera un incidente de seguridad que afecte tus datos personales, nos comprometemos a evaluarlo, tomar las medidas correspondientes, y notificarlo a las personas afectadas y, cuando corresponda, a la autoridad competente. [REVISIÓN LEGAL — definir con precisión los plazos y el procedimiento de notificación de incidentes según la normativa aplicable.]
 
+### Acceso administrativo a tu conversación
+
+**El equipo que administra Soul no revisa tus conversaciones de forma rutinaria ni indiscriminada.** Es importante diferenciar dos cosas que a veces se confunden:
+
+- **El análisis con inteligencia artificial** (construir tu perfil, calcular compatibilidad, generar el resumen de una cita) es un proceso automático. En el caso puntual del resumen de una cita, solo ocurre si vos y tu match dieron su consentimiento explícito para esa cita — ver `aviso-ia.md`.
+- **El acceso humano directo** a tu conversación o a los mensajes de una cita (una persona del equipo leyéndolos) es distinto, y solo puede ocurrir en alguna de estas situaciones concretas:
+  1. Ante un reporte o una situación de seguridad que lo amerite (por ejemplo, para evaluar un reporte que hiciste o que recibiste).
+  2. Cuando una función administrativa concreta lo requiere — por ejemplo, dar soporte a una consulta tuya, revisar una solicitud de corrección de perfil que enviaste, o diagnosticar un error técnico.
+  3. Cuando corresponde el análisis de una cita con el consentimiento de ambas personas, descrito en el punto anterior.
+
+Nadie más que este equipo tiene este tipo de acceso — ni otras personas usuarias, ni terceros ajenos a Soul.
+
 ---
 
 ## 12. Proveedores
@@ -132,6 +144,7 @@ Soul trabaja con un número reducido de proveedores externos para poder funciona
 | **Resend** | Envío de emails (confirmación de cuenta, recuperación de contraseña, avisos de match si los autorizaste) | Tu email, tu nombre, y en algunos casos el nombre de tu match; nunca el contenido real de tus conversaciones |
 | **Vercel** | Alojamiento de la aplicación y ejecución del sistema (incluida la tarea diaria que ejecuta los borrados de cuentas vencidas) | El tráfico técnico de tu uso de la app |
 | **Google Fonts** | Tipografías de la interfaz visual | Tu dirección IP se comparte con Google al cargar la fuente (comportamiento estándar de este servicio) |
+| **Firebase Cloud Messaging** (Google) | Envío de notificaciones push a tu dispositivo (nuevo match, mensaje en la Sala de Encuentros, cierre de una cita) | El identificador técnico de notificación de tu dispositivo (token), y el texto breve de cada notificación (por ejemplo, "Soul encontró un match para vos") |
 
 No usamos pasarelas de pago (hoy no hay cobros reales conectados en la app), ni herramientas de publicidad, ni analítica de terceros (como Google Analytics o Meta Pixel), ni servicios de geolocalización.
 
@@ -144,6 +157,7 @@ Parte de tus datos se procesan fuera de Argentina:
 - **Supabase** (base de datos): la región confirmada del proyecto de Soul es **São Paulo, Brasil (`sa-east-1`)**.
 - **Resend** (email): la región de envío confirmada para el dominio de Soul es **São Paulo, Brasil (`sa-east-1`)**. Sin embargo, los metadatos, registros y la mayoría de los proveedores que usa Resend para operar internamente están ubicados en **Estados Unidos**, sin importar la región de envío elegida.
 - **Anthropic** (inteligencia artificial): procesa datos en **Estados Unidos y otros países fuera del Espacio Económico Europeo**, con mecanismos de transferencia estándar de la industria.
+- **Firebase Cloud Messaging** (Google, notificaciones push): es un servicio de Google, con infraestructura fuera de Argentina. [NO CONFIRMADO — verificar la región específica de procesamiento de Firebase Cloud Messaging para el proyecto de Soul.]
 
 Esto significa que, al usar Soul, aceptás que parte de tu información (en particular, el contenido que se envía a la inteligencia artificial y los registros técnicos vinculados al envío de emails) puede procesarse en Brasil y en Estados Unidos. [REVISIÓN LEGAL — confirmar el mecanismo de transferencia internacional aplicable bajo la normativa argentina (por ejemplo, cláusulas contractuales tipo o el nivel de adecuación reconocido para cada país) y reflejarlo con precisión jurídica en esta sección.]
 
@@ -168,9 +182,9 @@ Aplicamos plazos distintos según el tipo de dato, porque no todos tienen el mis
 **Cuando pedís eliminar tu cuenta:**
 - Tu acceso se corta de inmediato.
 - **A los 30 días** de la solicitud, se borran de forma definitiva: tu perfil vincular, tu conversación con Soul, tu historial relacional, los registros de intentos de manipulación del chat, tu debriefing privado, tus registros de uso de "ayuda privada" en una cita, y tus solicitudes de revisión de perfil.
-- Tu feedback del piloto se conserva, pero se desvincula de tu identidad (deja de estar asociado a tu cuenta).
+- Tu feedback sobre tu experiencia en Soul, si lo dejaste, se conserva, pero se desvincula de tu identidad (deja de estar asociado a tu cuenta).
 - Tu fila de cuenta (nombre, email, fecha de nacimiento, fotos) se anonimiza — no se borra por completo, para no romper la información de otras personas con las que tuviste un match o una cita. Tu email se reemplaza por un valor genérico que no te identifica.
-- [PENDIENTE DE PRODUCTO — no está confirmado si tu credencial de acceso (usuario y contraseña del sistema de autenticación) se elimina siempre de forma efectiva junto con estos 30 días, o si depende de una configuración técnica que todavía no pudo confirmarse en el ambiente de producción. Esto se está verificando.]
+- Además de anonimizar tu fila de cuenta, Soul intenta borrar tu credencial real de acceso (usuario y contraseña del sistema de autenticación). La configuración técnica necesaria para esto (una clave de administración del sistema de autenticación) está confirmada en el ambiente de producción, y el proceso automático diario que ejecuta este borrado corre todos los días sin errores. [PENDIENTE DE PRODUCTO — queda pendiente verificar, sobre un caso real completo de eliminación de cuenta, que la credencial de acceso efectivamente termina borrada al cabo de los 30 días, y no solo que el proceso está técnicamente habilitado para hacerlo.]
 
 **Contenido compartido con otra persona (mensajes de una cita):**
 - Mientras la cita esté activa, se conserva sin límite.
@@ -180,7 +194,7 @@ Aplicamos plazos distintos según el tipo de dato, porque no todos tienen el mis
 **Datos técnicos y operativos, con plazos propios, independientes de tu cuenta:**
 - Reportes técnicos de soporte: 180 días.
 - Registros de errores técnicos: 90 días.
-- Diagnósticos operativos internos: 90 días.
+- Diagnósticos operativos internos (diagnósticos diarios): 90 días.
 
 **Reportes de seguridad entre personas usuarias:**
 - El reporte y sus metadatos (motivo, fecha, quién reportó a quién, estado del reporte) se conservan **durante 5 años desde la fecha de cierre del reporte**.
@@ -209,7 +223,7 @@ Si no estás de acuerdo con algo que la inteligencia artificial infirió sobre t
 
 Soul es una aplicación exclusivamente para personas mayores de 18 años. Validamos tu fecha de nacimiento tanto en tu dispositivo como en nuestro servidor, y no vas a poder acceder al chat con la inteligencia artificial ni al resto de las funciones de la aplicación si la fecha ingresada indica que sos menor de edad.
 
-Esto no reemplaza una verificación de identidad con documento — es un control basado en la fecha que vos mismo/a ingresás. [PENDIENTE DE PRODUCTO — evaluar en el futuro un control más riguroso (por ejemplo, una declaración jurada explícita separada, o verificación de documento) si Soul avanza hacia un lanzamiento más amplio.]
+Esto no reemplaza una verificación de identidad con documento — es un control basado en la fecha que vos mismo/a ingresás. [PENDIENTE DE PRODUCTO — evaluar en el futuro un control más riguroso, por ejemplo verificación de documento, si Soul lo considera necesario más adelante.] [REVISIÓN LEGAL — evaluar si, además de la validación por fecha de nacimiento, conviene incorporar una declaración expresa y separada ("declaro bajo juramento que soy mayor de 18 años"), como la que ya está prevista en el modelo de `aviso-breve-onboarding.md`, y si eso es suficiente o insuficiente frente a la normativa aplicable para una app de citas.]
 
 ## 20. Contacto y reclamo ante la AAIP
 
