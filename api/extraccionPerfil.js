@@ -102,12 +102,9 @@ export default async function handler(req, res) {
       (subpaso === 'compresion' ? 'compresion_extraccion_free'
         : subpaso === 'deteccion_modulo' ? 'deteccion_modulo_free'
           : 'extraccion_perfil_free');
-    const resultadoLog = await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: endpointLog, usage: data.usage });
+    await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: endpointLog, usage: data.usage });
 
-    // DIAGNOSTICO TEMPORAL (sesion harmonic-launching-finch) -- sin acceso a
-    // los logs de Vercel de este proyecto, es la unica forma de ver el error
-    // real de Supabase para uso_tokens. Sacar apenas se encuentre la causa.
-    return res.status(200).json(resultadoLog && !resultadoLog.ok ? { ...data, _debugLogUso: resultadoLog } : data);
+    return res.status(200).json(data);
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json(error.data);
