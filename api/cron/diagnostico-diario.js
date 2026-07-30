@@ -289,10 +289,15 @@ function esc(valor) {
 async function leerSupabase(tabla, params) {
   const supabaseUrl = process.env.SUPABASE_URL;
   // Este cron no tiene sesion de ninguna persona (corre solo, con
-  // CRON_SECRET) -- varias de estas tablas ya tienen politica RLS real, asi
-  // que el anon key devolveria 0 filas ahi. Service role bypasea RLS
-  // siempre, y no afecta a las tablas que todavia no tienen politica.
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  // CRON_SECRET) -- todas las tablas que lee este cron ya tienen politica
+  // RLS real (o, para las tablas puramente internas -- errores_silenciosos,
+  // uso_tokens, diagnosticos_diarios -- directamente cero acceso para
+  // anon/authenticated, ver migracion_rls_tablas_internas.sql), asi que el
+  // anon key devolveria 0 filas en cualquiera de los dos casos. Sin
+  // fallback: si falta la service role key, que falle explicito (se ve en
+  // el resultado de cada leerSupabase, no queda enmascarado con "0 filas"
+  // silencioso como si no hubiera nada que reportar).
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const res = await fetch(`${supabaseUrl}/rest/v1/${tabla}?${params}`, {
     headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
   });
@@ -348,8 +353,10 @@ export default async function handler(req, res) {
     // esto SI escribe/borra -- si algo de la lectura de mas abajo fallara,
     // preferible que el borrado de cuentas vencidas ya haya corrido.
     // Service role key: matches/citas ya tienen politica RLS real, y este
-    // cron no tiene sesion de nadie para usar un token propio.
-    const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
+    // cron no tiene sesion de nadie para usar un token propio. Sin fallback
+    // a anon -- si falta la key, mejor que falle explicito (queda como
+    // error en el diagnostico) a que corra en silencio sin borrar nada.
+    const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
       .catch(async (e) => {
         await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e });
         return { candidatas: 0, purgadas: 0, authBorrados: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
@@ -358,7 +365,7 @@ export default async function handler(req, res) {
     // Purga por antiguedad (Decision 6) -- independiente de si alguien pidio
     // borrar su cuenta o no, corre siempre, mismo motivo de orden que arriba
     // (escritura antes que lectura).
-    const purgadoAntiguedad = await purgarPorAntiguedad(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
+    const purgadoAntiguedad = await purgarPorAntiguedad(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
       .catch(async (e) => {
         await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarPorAntiguedad', error: e });
         return {};
@@ -367,7 +374,7 @@ export default async function handler(req, res) {
     // Retención de cita_mensajes a 12 meses desde el cierre (Decisión 6,
     // propuesta-retencion-citas.md) -- mismo motivo de orden que arriba
     // (escritura antes que lectura).
-    const purgadoCitaMensajes = await purgarCitaMensajesVencidos(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY)
+    const purgadoCitaMensajes = await purgarCitaMensajesVencidos(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
       .catch(async (e) => {
         await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCitaMensajesVencidos', error: e });
         return { citasVencidas: 0, citasPurgadas: 0, citasFrenadasPorReporte: 0, error: true };
@@ -467,7 +474,11 @@ export default async function handler(req, res) {
     const html = lineas.join('\n');
 
     const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    // diagnosticos_diarios es de acceso exclusivo server-side (sin
+    // RLS/policy para anon ni authenticated, ver
+    // migracion_rls_tablas_internas.sql) -- contiene nombres/emails reales
+    // en texto plano, hace falta la service role key.
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     await fetch(`${supabaseUrl}/rest/v1/diagnosticos_diarios`, {
       method: 'POST',
       headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
