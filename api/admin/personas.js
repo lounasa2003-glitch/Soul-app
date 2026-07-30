@@ -172,6 +172,11 @@ export default async function handler(req, res) {
         if (endpoint === 'citaAyuda') return 'encuentro_ayuda';
         if (['debriefingApertura', 'cierreDebriefing', 'dinamicaRelacional', 'perfilCompatibilidadCita', 'nivel2'].includes(endpoint)) return 'debriefing';
         if (['adminComparar', 'adminRanking', 'adminForzarCierrePerfil'].includes(endpoint)) return 'operativo_admin';
+        // Extraccion/deteccion de modulo para Free (api/extraccionPerfil.js)
+        // -- mismas etapas que ya usa 'chat' para las llamadas Pro
+        // equivalentes, para que sigan comparables en el desglose de arriba.
+        if (['compresion_extraccion_free', 'extraccion_perfil_free'].includes(endpoint)) return 'onboarding_y_chat';
+        if (endpoint === 'deteccion_modulo_free') return 'modulos_perfil';
         return 'otro';
       }
       // Etapa del embudo (ver ORDEN_EMBUDO) que sirve de denominador para el
