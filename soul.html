@@ -1963,6 +1963,26 @@ async function fetchConSesion(hacerFetch){
   return res;
 }
 
+// Unico lugar que arma los headers de autenticacion de toda la app -- manda
+// el token dos veces, en Authorization y en X-Soul-Authorization (mismo
+// valor). Se agrego X-Soul-Authorization como respaldo porque se detecto
+// que el header Authorization podia perderse en algun punto entre el
+// navegador y la funcion serverless de Vercel (motivo exacto no confirmado
+// del lado de Vercel, no reproducible tocando codigo propio): las llamadas
+// autenticadas fallaban con 401 aun con un token valido, y el mismo pedido
+// con el token en un header no estandar SI llegaba entero. lib/authUtil.js
+// (verificarUsuario) intenta primero Authorization y cae a
+// X-Soul-Authorization si el primero no esta. Centralizar el armado de
+// headers aca evita que agregar/cambiar este mecanismo dependa de tocar a
+// mano cada uno de los fetch sueltos por la app -- eso es lo que en su
+// momento hizo dificil ver que headers realmente estaba mandando cada
+// pantalla.
+function authHeaders(extra){
+  var h={'Authorization':'Bearer '+accessToken,'X-Soul-Authorization':'Bearer '+accessToken};
+  if(extra){for(var k in extra){h[k]=extra[k];}}
+  return h;
+}
+
 // vercel dev trunca el query string en el segundo "=" de un valor sin encodear
 // (ej. ?filtro=email=eq.x llega a la funcion como filtro="email"), asi que el
 // filtro completo va siempre encodeado como un solo bloque.
@@ -1970,7 +1990,7 @@ async function leerTabla(tabla,filtro){
   var url='/api/leer?tabla='+encodeURIComponent(tabla);
   if(filtro) url+='&filtro='+encodeURIComponent(filtro);
   var res=await fetchConSesion(function(){
-    return fetch(url,{headers:{'Authorization':'Bearer '+accessToken}});
+    return fetch(url,{headers:authHeaders()});
   });
   if(!res.ok){throw new Error('error_leyendo_'+tabla);}
   return res.json();
@@ -1982,7 +2002,7 @@ async function guardarTabla(tabla,datos,filtro){
   var res=await fetchConSesion(function(){
     return fetch('/api/guardar',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      headers:authHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify(body)
     });
   });
@@ -2033,7 +2053,7 @@ async function llamarChat(datos,url){
   var res=await fetchConSesion(function(){
     return fetch(url||'/api/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      headers:authHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify(datos)
     });
   });
@@ -2064,7 +2084,7 @@ async function llamarChatStreaming(datos,onChunk){
   var res=await fetchConSesion(function(){
     return fetch('/api/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      headers:authHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify(Object.assign({},datos,{stream:true}))
     });
   });
@@ -2415,7 +2435,7 @@ async function confirmarNuevaPassword(){
   try{
     var res=await fetch('/api/auth',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      headers:authHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify({accion:'actualizarPassword',password:pass})
     });
     var data=await res.json();
@@ -2771,7 +2791,7 @@ async function cargarProgreso(email){
 // falta ver matches donde esta persona sea cualquiera de los dos lados.
 async function obtenerMisMatches(){
   var res=await fetchConSesion(function(){
-    return fetch('/api/matches',{headers:{'Authorization':'Bearer '+accessToken}});
+    return fetch('/api/matches',{headers:authHeaders()});
   });
   if(!res.ok)throw new Error('error_mis_matches');
   return res.json();
@@ -2805,7 +2825,7 @@ async function recolectarPendientes(){
   }catch(e){}
   try{
     var resC=await fetchConSesion(function(){
-      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/citas',{headers:authHeaders()});
     });
     if(resC.ok){
       var dataC=await resC.json();
@@ -2956,7 +2976,7 @@ async function continuarTrasCierreMatch(){
   if(window.matchIdParaCerrar){
     try{
       await fetchConSesion(function(){
-        return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrar',matchId:window.matchIdParaCerrar})});
+        return fetch('/api/matches',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'cerrar',matchId:window.matchIdParaCerrar})});
       });
     }catch(e){}
     window.matchIdParaCerrar=null;
@@ -2988,7 +3008,7 @@ async function decidirEnMatch(si){
     var res=await fetchConSesion(function(){
       return fetch('/api/matches',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+        headers:authHeaders({'Content-Type':'application/json'}),
         body:JSON.stringify({accion:'elegir',matchId:window.matchData.id,eleccion:si?'acepta':'rechaza'})
       });
     });
@@ -3066,7 +3086,7 @@ async function mostrarMisMatches(soloConCitas){
   ir('MisMatches');
   try{
     var resM=await fetchConSesion(function(){
-      return fetch('/api/matches',{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/matches',{headers:authHeaders()});
     });
     var dataM=await resM.json();
     var matches=dataM.matches||[];
@@ -3075,7 +3095,7 @@ async function mostrarMisMatches(soloConCitas){
       return;
     }
     var resC=await fetchConSesion(function(){
-      return fetch('/api/citas',{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/citas',{headers:authHeaders()});
     });
     var dataC=await resC.json();
     // Sala de Encuentros: puede haber varias citas (encuentros) por match --
@@ -3191,7 +3211,7 @@ async function confirmarEliminarConMotivo(motivo){
   if(!matchId)return;
   try{
     await fetchConSesion(function(){
-      return fetch('/api/matches',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'eliminarMatch',matchId:matchId,motivo:motivo||undefined})});
+      return fetch('/api/matches',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'eliminarMatch',matchId:matchId,motivo:motivo||undefined})});
     });
   }catch(e){}
   mostrarMisMatches();
@@ -3438,7 +3458,7 @@ async function solicitarBorrarCuenta(){
   if(!confirm('¿Eliminar tu cuenta de Soul? Vas a perder el acceso ahora mismo. Tus datos se borran dentro de los próximos 30 días, como indican los Términos. Esto no se puede deshacer.'))return;
   try{
     await fetchConSesion(function(){
-      return fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'solicitarBorrado'})});
+      return fetch('/api/auth',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'solicitarBorrado'})});
     });
   }catch(e){}
   alert('Tu cuenta va a eliminarse dentro de los próximos 30 días. Gracias por haber sido parte de Soul.');
@@ -3505,7 +3525,7 @@ async function initReflexionCita(){
   document.getElementById('reflexionArea').appendChild(puntitos);
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/citas?reflexionCitaId='+encodeURIComponent(reflexionCitaIdActual),{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/citas?reflexionCitaId='+encodeURIComponent(reflexionCitaIdActual),{headers:authHeaders()});
     });
     var data=await res.json();
     var puntitosEl=document.getElementById('reflexionTyping');
@@ -3565,7 +3585,7 @@ function addReflexionMsg(tipo,txt){
 }
 function guardarReflexionHistorial(){
   fetchConSesion(function(){
-    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'guardarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
+    return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'guardarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
   }).catch(function(){});
 }
 async function enviarReflexion(){
@@ -3589,7 +3609,7 @@ async function enviarReflexion(){
   if(reflexionIntercambios>=TOPE_MENSAJES_REFLEXION){
     try{
       var resCierre=await fetchConSesion(function(){
-        return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'cerrarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
+        return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'cerrarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});
       });
       var dataCierre=await resCierre.json();
       var t=document.getElementById('reflexionTyping');if(t)t.remove();
@@ -3806,7 +3826,7 @@ async function analizarConversacionExterna(){
     var res=await fetchConSesion(function(){
       return fetch('/api/analisisExterno',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+        headers:authHeaders({'Content-Type':'application/json'}),
         body:JSON.stringify({conversacion:conv,nombre:nombre})
       });
     });
@@ -4747,7 +4767,7 @@ async function calcularMatches(){
     var res=await fetchConSesion(function(){
       return fetch('/api/calcularMatches',{
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken}
+        headers:authHeaders({'Content-Type':'application/json'})
       });
     });
     var data=await res.json();
@@ -4792,7 +4812,7 @@ async function extraerYGuardarPerfil(){
 async function cargarPresentacionMatch(matchId){
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/matches?presentacionMatchId='+encodeURIComponent(matchId),{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/matches?presentacionMatchId='+encodeURIComponent(matchId),{headers:authHeaders()});
     });
     if(!res.ok)return;
     var data=await res.json();
@@ -4898,7 +4918,7 @@ function reportarProblema(contexto,btn){
   if(typeof usuarioId!=='undefined'&&usuarioId&&typeof accessToken!=='undefined'&&accessToken){
     promesa=fetch('/api/guardar',{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},
+      headers:authHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify({tabla:'reportes_tecnicos',datos:{contexto:contexto}})
     });
   }else{
@@ -5020,7 +5040,7 @@ function responderConsentimientoCita(valor){
   citaConsentimientoRespondido=true;
   document.getElementById('consentimientoCita').style.display='none';
   fetchConSesion(function(){
-    return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'consentirAnalisis',citaId:window.citaActualId,consiente:valor})});
+    return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'consentirAnalisis',citaId:window.citaActualId,consiente:valor})});
   }).catch(function(){});
 }
 
@@ -5028,7 +5048,7 @@ async function cargarCita(){
   if(!window.citaActualId)return;
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/citas?citaId='+encodeURIComponent(window.citaActualId),{headers:{'Authorization':'Bearer '+accessToken}});
+      return fetch('/api/citas?citaId='+encodeURIComponent(window.citaActualId),{headers:authHeaders()});
     });
     if(!res.ok)return;
     var data=await res.json();
@@ -5192,7 +5212,7 @@ async function sendCita(){
   if(citaUltimaCita)renderCita(citaUltimaCita,citaUltimosMensajes);
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'texto',contenido:txt})});
+      return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'mensaje',citaId:window.citaActualId,tipo:'texto',contenido:txt})});
     });
     if(res.status===429){
       var err=await res.json();
@@ -5239,7 +5259,7 @@ function avisarEscribiendo(){
   if(ahora-citaUltimoPingEscribiendo<MS_THROTTLE_ESCRIBIENDO)return;
   citaUltimoPingEscribiendo=ahora;
   if(!window.citaActualId||!accessToken)return;
-  fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'escribiendo',citaId:window.citaActualId})}).catch(function(){});
+  fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'escribiendo',citaId:window.citaActualId})}).catch(function(){});
 }
 
 function toggleAyuda(){document.getElementById('ayudaOpts').classList.toggle('vis')}
@@ -5251,7 +5271,7 @@ async function pedirAyudaPrivada(tipo){
   document.getElementById('ayudaOpts').classList.remove('vis');
   try{
     var res=await fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'ayudaPrivada',citaId:window.citaActualId,tipoAyuda:tipo})});
+      return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'ayudaPrivada',citaId:window.citaActualId,tipoAyuda:tipo})});
     });
     if(res.status===429){
       var err=await res.json();
@@ -5266,7 +5286,7 @@ async function pedirAyudaPrivada(tipo){
 async function responderCierreCita(respuesta){
   try{
     await fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'responderCierre',citaId:window.citaActualId,respuesta:respuesta})});
+      return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'responderCierre',citaId:window.citaActualId,respuesta:respuesta})});
     });
   }catch(e){}
   cargarCita();
@@ -5294,7 +5314,7 @@ function decidirSala(decision){
   var matchId=window.matchData&&window.matchData.id;
   if(matchId){
     fetchConSesion(function(){
-      return fetch('/api/citas',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+accessToken},body:JSON.stringify({accion:'decidirSalaEncuentros',matchId:matchId,decision:decision})});
+      return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'decidirSalaEncuentros',matchId:matchId,decision:decision})});
     }).catch(function(){});
   }
 }
