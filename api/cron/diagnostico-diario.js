@@ -49,9 +49,134 @@ const DIAS_GRACIA_BORRADO = 30;
 // diferencia de cita_mensajes/citas/matches), asi que no tienen el mismo
 // problema de "romper el registro de otra persona" y pueden borrarse igual
 // que perfiles/conversaciones.
-const TABLAS_PERSONALES_A_BORRAR = ['perfiles', 'conversaciones', 'historial_relacional', 'intentos_fuga_prompt', 'cita_reflexiones', 'cita_ayudas', 'solicitudes_revision_perfil'];
+// push_tokens sumada acá (antes no se tocaba): un dispositivo con un token
+// de push para una cuenta ya anonimizada no debería poder seguir recibiendo
+// notificaciones a nombre de esa cuenta que ya no existe.
+const TABLAS_PERSONALES_A_BORRAR = ['perfiles', 'conversaciones', 'historial_relacional', 'intentos_fuga_prompt', 'cita_reflexiones', 'cita_ayudas', 'solicitudes_revision_perfil', 'push_tokens'];
 
-async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
+function normalizarEmailAuth(email) {
+  return typeof email === 'string' ? email.trim().toLowerCase() : '';
+}
+
+// Único fallback cuando la fila de 'usuarios' no tiene auth_id confiable --
+// pagina /auth/v1/admin/users (ese endpoint no filtra de forma confiable por
+// el query param ?email=, confirmado en la practica: dejaba logins vivos
+// sin avisar) y compara el email normalizado con coincidencia EXACTA.
+// Nunca includes/startsWith -- un match parcial podria agarrar la cuenta
+// equivocada. Devuelve cuantas coincidencias exactas encontro, nunca asume
+// cual usar si hay mas de una.
+async function buscarAuthPorEmailExacto(supabaseUrl, serviceKey, email) {
+  const emailNorm = normalizarEmailAuth(email);
+  if (!emailNorm) return { estado: 'sin_email' };
+  const headersAuth = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  const perPage = 200;
+  const coincidencias = [];
+  for (let page = 1; page <= 50; page++) { // tope defensivo -- 10000 usuarios, de sobra para este piloto
+    const res = await fetch(`${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}`, { headers: headersAuth });
+    if (!res.ok) return { estado: 'error', detalle: `HTTP ${res.status}` };
+    const data = await res.json();
+    const pagina = data.users || [];
+    pagina.forEach((u) => { if (normalizarEmailAuth(u.email) === emailNorm) coincidencias.push(u); });
+    if (pagina.length < perPage) break;
+  }
+  if (coincidencias.length === 0) return { estado: 'no_encontrado' };
+  if (coincidencias.length > 1) return { estado: 'ambiguo', cantidad: coincidencias.length };
+  return { estado: 'encontrado', usuario: coincidencias[0] };
+}
+
+// Borra por id exacto -- 404 se interpreta como "ya no existia" (no es un
+// error, el objetivo -- que no exista -- ya estaba cumplido), cualquier
+// otro status no-ok es un error real que no se debe pisar en silencio.
+async function borrarAuthPorId(supabaseUrl, serviceKey, authId) {
+  const headersAuth = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(authId)}`, { method: 'DELETE', headers: headersAuth });
+  if (res.ok) return { estado: 'borrado' };
+  if (res.status === 404) return { estado: 'ya_no_existia' };
+  return { estado: 'error', detalle: `HTTP ${res.status}` };
+}
+
+// Camino de auth_id: antes de borrar, confirma que el usuario de Auth al
+// que apunta ese id realmente tiene el mismo email (normalizado) que la
+// fila de 'usuarios' -- auth_id viene de una columna con indice UNIQUE
+// (migracion_rls_auth_id.sql), pero "confiable" no es lo mismo que
+// "infalible": si por corrupcion de datos, una migracion mal corrida, o un
+// id pisado a mano, ese id termina apuntando a la identidad de OTRA
+// persona, borrarla a ciegas seria borrar el login equivocado. Un 404 acá
+// sigue siendo un exito legitimo (el objetivo -- que no exista -- ya
+// estaba cumplido); un email que no coincide es distinto de eso y nunca se
+// borra automaticamente.
+async function verificarYBorrarAuthPorId(supabaseUrl, serviceKey, authId, emailEsperado) {
+  const headersAuth = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  const getRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(authId)}`, { headers: headersAuth });
+  if (getRes.status === 404) return { estado: 'ya_no_existia' };
+  if (!getRes.ok) return { estado: 'error', detalle: `HTTP ${getRes.status} verificando auth_id` };
+  const authUser = await getRes.json();
+  const emailEsperadoNorm = normalizarEmailAuth(emailEsperado);
+  const emailAuthNorm = normalizarEmailAuth(authUser && authUser.email);
+  if (!emailEsperadoNorm || emailAuthNorm !== emailEsperadoNorm) {
+    return { estado: 'inconsistente', detalle: 'auth_id existe pero el email no coincide con el de usuarios' };
+  }
+  return borrarAuthPorId(supabaseUrl, serviceKey, authId);
+}
+
+// Resuelve y borra la identidad de Supabase Auth de una cuenta, en orden de
+// confianza: (1) usuarios.auth_id, guardado en la fila y con indice UNIQUE
+// (ver migracion_rls_auth_id.sql) -- si esta presente es la fuente de
+// verdad, no hace falta buscar nada; (2) si no hay auth_id (filas viejas
+// sin backfill, o las cuentas sinteticas de Vista Previa que a proposito no
+// tienen auth.users detras), fallback a busqueda por email EXACTO
+// (buscarAuthPorEmailExacto). Nunca borra a ciegas: si el fallback da
+// "ambiguo" o "no_encontrado", se registra y se marca sin confirmar en vez
+// de asumir exito.
+async function resolverYBorrarAuth(supabaseUrl, supabaseKey, headers, usuarioId) {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return { metodo: 'sin_service_key', estado: 'no_confirmado', ok: false };
+
+  const filaRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=email,auth_id&id=eq.${encodeURIComponent(usuarioId)}`, { headers });
+  const fila = (filaRes.ok ? await filaRes.json() : [])[0];
+
+  try {
+    if (fila && fila.auth_id) {
+      const r = await verificarYBorrarAuthPorId(supabaseUrl, serviceKey, fila.auth_id, fila.email);
+      if (r.estado === 'error' || r.estado === 'inconsistente') {
+        // Nunca se loguea el email real -- solo el motivo y el usuarioId
+        // (uuid interno, no dato personal identificable por si solo).
+        await registrarErrorSilencioso({ contexto: `cron/diagnostico-diario: ${r.estado === 'inconsistente' ? 'auth_id inconsistente' : 'borrar auth_id'}`, error: new Error(r.detalle), meta: { usuarioId } });
+        return { metodo: 'auth_id', estado: r.estado, ok: false };
+      }
+      return { metodo: 'auth_id', estado: r.estado, ok: true, authIdVerificado: fila.auth_id };
+    }
+
+    if (fila && fila.email) {
+      const busqueda = await buscarAuthPorEmailExacto(supabaseUrl, serviceKey, fila.email);
+      if (busqueda.estado === 'encontrado') {
+        const r = await borrarAuthPorId(supabaseUrl, serviceKey, busqueda.usuario.id);
+        if (r.estado === 'error') {
+          await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: borrar auth (fallback email)', error: new Error(r.detalle), meta: { usuarioId } });
+          return { metodo: 'busqueda_email', estado: 'error', ok: false };
+        }
+        return { metodo: 'busqueda_email', estado: r.estado, ok: true, authIdVerificado: busqueda.usuario.id };
+      }
+      // 'no_encontrado' y 'ambiguo' quedan igual acá a propósito -- sin
+      // auth_id de por medio, ninguno de los dos se puede confirmar con
+      // certeza (a diferencia del camino por auth_id, donde un 404 sí es
+      // una confirmación confiable de "ya no existía").
+      await registrarErrorSilencioso({
+        contexto: 'cron/diagnostico-diario: busqueda de auth por email sin confirmar',
+        error: new Error(`estado=${busqueda.estado}${busqueda.cantidad ? ' cantidad=' + busqueda.cantidad : ''}`),
+        meta: { usuarioId }
+      });
+      return { metodo: 'busqueda_email', estado: busqueda.estado, ok: false };
+    }
+  } catch (e) {
+    await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: resolverYBorrarAuth', error: e, meta: { usuarioId } });
+    return { metodo: fila && fila.auth_id ? 'auth_id' : 'busqueda_email', estado: 'error', ok: false };
+  }
+
+  return { metodo: 'sin_datos', estado: 'error', ok: false };
+}
+
+export async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
   // Defensivo: si por lo que sea quedo una cita abierta (no deberia, ya se
   // cierran en el momento de solicitarBorrado), no se la deja huerfana.
   const matchesRes = await fetch(
@@ -93,32 +218,10 @@ async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
   // service role key, que hoy NO esta configurada en este proyecto (solo
   // existe SUPABASE_ANON_KEY) -- sin ella se anonimiza igual la fila de
   // 'usuarios', pero el login con ese email tecnicamente seguiria existiendo
-  // en Supabase Auth hasta que se agregue esa env var. Se busca por email
-  // (no se asume que usuarios.id == auth user id, ver soul_seguridad_rls).
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  let authBorrado = false;
-  if (serviceKey) {
-    try {
-      const filaRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=email&id=eq.${encodeURIComponent(usuarioId)}`, { headers });
-      const fila = (filaRes.ok ? await filaRes.json() : [])[0];
-      if (fila && fila.email) {
-        const buscarRes = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(fila.email)}`, {
-          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-        });
-        const buscarData = buscarRes.ok ? await buscarRes.json() : null;
-        const authUser = buscarData && Array.isArray(buscarData.users) ? buscarData.users[0] : null;
-        if (authUser) {
-          const delRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(authUser.id)}`, {
-            method: 'DELETE',
-            headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` }
-          });
-          authBorrado = delRes.ok;
-        }
-      }
-    } catch (e) {
-      await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: borrar usuario de Supabase Auth', error: e, meta: { usuarioId } });
-    }
-  }
+  // en Supabase Auth hasta que se agregue esa env var. Corre ANTES del
+  // tombstone de abajo -- resolverYBorrarAuth lee el email/auth_id actuales
+  // de la fila, que el tombstone esta por pisar.
+  const resultadoAuth = await resolverYBorrarAuth(supabaseUrl, supabaseKey, headers, usuarioId);
 
   // Tombstone: se anonimiza en vez de borrar la fila para no romper los FK
   // de matches/citas que la otra persona real todavia necesita.
@@ -136,7 +239,44 @@ async function purgarUsuario(supabaseUrl, supabaseKey, headers, usuarioId) {
     })
   });
 
-  return authBorrado;
+  // Verificación final -- no se afirma éxito total solo porque los pasos de
+  // arriba no tiraron una excepción. Recuenta las tablas personales
+  // (incluida push_tokens) y, si se pudo confirmar un auth_id puntual,
+  // reconfirma que ya no responde. La búsqueda por email (cuando no hubo
+  // auth_id) no se repite acá -- resolverYBorrarAuth ya la corrió con
+  // cuidado, y volver a pedir 50 páginas por cada purga sería carísimo sin
+  // sumar certeza real.
+  let datosPersonalesEnCero = true;
+  for (const tabla of TABLAS_PERSONALES_A_BORRAR) {
+    const cr = await fetch(`${supabaseUrl}/rest/v1/${tabla}?select=id&usuario_id=eq.${encodeURIComponent(usuarioId)}`, { headers: { ...headers, Prefer: 'count=exact' } })
+      .catch(() => null);
+    const total = cr ? Number((cr.headers.get('content-range') || '/0').split('/')[1] || 0) : null;
+    if (total === null || total > 0) { datosPersonalesEnCero = false; break; }
+  }
+
+  let authConfirmadoInexistente = resultadoAuth.ok;
+  if (resultadoAuth.ok && resultadoAuth.authIdVerificado && resultadoAuth.estado === 'borrado') {
+    const headersAuth = { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` };
+    const reRes = await fetch(`${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(resultadoAuth.authIdVerificado)}`, { headers: headersAuth }).catch(() => null);
+    authConfirmadoInexistente = !reRes || reRes.status === 404;
+  }
+
+  const purgaCompleta = authConfirmadoInexistente && datosPersonalesEnCero;
+  if (!purgaCompleta) {
+    await registrarErrorSilencioso({
+      contexto: 'cron/diagnostico-diario: purga incompleta',
+      error: new Error(`authMetodo=${resultadoAuth.metodo} authEstado=${resultadoAuth.estado} datosPersonalesEnCero=${datosPersonalesEnCero}`),
+      meta: { usuarioId }
+    });
+  }
+
+  return {
+    authBorrado: resultadoAuth.ok,
+    authMetodo: resultadoAuth.metodo,
+    authEstado: resultadoAuth.estado,
+    datosPersonalesEnCero,
+    purgaCompleta
+  };
 }
 
 async function purgarCuentasVencidas(supabaseUrl, supabaseKey) {
@@ -147,17 +287,18 @@ async function purgarCuentasVencidas(supabaseUrl, supabaseKey) {
     { headers }
   );
   const pendientes = res.ok ? await res.json() : [];
-  let purgadas = 0, authBorrados = 0;
+  let purgadas = 0, authBorrados = 0, purgasIncompletas = 0;
   for (const u of pendientes) {
     try {
-      const authOk = await purgarUsuario(supabaseUrl, supabaseKey, headers, u.id);
+      const resultado = await purgarUsuario(supabaseUrl, supabaseKey, headers, u.id);
       purgadas += 1;
-      if (authOk) authBorrados += 1;
+      if (resultado.authBorrado) authBorrados += 1;
+      if (!resultado.purgaCompleta) purgasIncompletas += 1;
     } catch (e) {
       await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e, meta: { usuarioId: u.id } });
     }
   }
-  return { candidatas: pendientes.length, purgadas, authBorrados, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY };
+  return { candidatas: pendientes.length, purgadas, authBorrados, purgasIncompletas, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY };
 }
 
 // Purga por antiguedad (Decision 6, propuesta-retencion.md) -- a diferencia
@@ -359,7 +500,7 @@ export default async function handler(req, res) {
     const purgado = await purgarCuentasVencidas(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
       .catch(async (e) => {
         await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: purgarCuentasVencidas', error: e });
-        return { candidatas: 0, purgadas: 0, authBorrados: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
+        return { candidatas: 0, purgadas: 0, authBorrados: 0, purgasIncompletas: 0, serviceKeyConfigurada: !!process.env.SUPABASE_SERVICE_ROLE_KEY, error: true };
       });
 
     // Purga por antiguedad (Decision 6) -- independiente de si alguien pidio
@@ -456,6 +597,9 @@ export default async function handler(req, res) {
       lineas.push('<p>⚠ Falta SUPABASE_SERVICE_ROLE_KEY -- los datos de la app se borraron pero el usuario sigue existiendo en Supabase Auth (todavía podría loguearse con ese email/contraseña).</p>');
     } else if (purgado.purgadas > 0) {
       lineas.push(`<p>Auth borrado de verdad en ${purgado.authBorrados} de ${purgado.purgadas}.</p>`);
+    }
+    if (purgado.purgasIncompletas > 0) {
+      lineas.push(`<p>⚠ ${purgado.purgasIncompletas} purga(s) no se pudieron confirmar como 100% completas (Auth y/o datos personales) -- ver errores_silenciosos para el detalle de cada una.</p>`);
     }
 
     lineas.push(`<h3>Purga por antigüedad (Decisión 6)</h3>`);
