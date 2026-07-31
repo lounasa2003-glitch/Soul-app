@@ -67,6 +67,18 @@ export default async function handler(req, res) {
       return res.status(response.status).json(data);
     }
 
+    // 'plan' en la base es el valor crudo (lo que cambia el panel admin) --
+    // pero lo que de verdad gatea comportamiento (chat.js, extraccionPerfil.js,
+    // calcularMatches.js) es el plan EFECTIVO que ya resolvio verificarUsuario
+    // (usuario.plan, que pisa a 'pro' via TODOS_PRO_TEMPORAL salvo para
+    // CUENTA_PRUEBA_FREE_EMAIL). Sin este pisado, la interfaz podia mostrar
+    // "Free" a alguien al que el resto del sistema ya trata como Pro. Solo
+    // aplica sobre la propia fila (filtroDeLecturaValido ya garantiza que
+    // 'usuarios' nunca devuelve la fila de otra persona).
+    if (tabla === 'usuarios' && Array.isArray(data)) {
+      data.forEach((fila) => { fila.plan = usuario.plan; });
+    }
+
     return res.status(200).json(data);
 
   } catch (error) {

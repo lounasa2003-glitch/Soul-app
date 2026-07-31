@@ -7,6 +7,7 @@ import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCompatibles } from '../lib/matchCompatible.js';
 import { enviarPushAUsuario } from '../lib/push.js';
+import { construirSnapshotConclusion, conclusionesIguales } from '../lib/conclusionSoul.js';
 
 const LIMITE_MATCHES = 5;
 const VENTANA_MATCHES_SEGUNDOS = 3600;
@@ -78,6 +79,35 @@ export default async function handler(req, res) {
       return res.status(200).json({ matchEncontrado: false, matchData: null });
     }
     const miPerfil = misPer[0];
+
+    // No habilitar matching hasta que la persona confirmó la conclusión de
+    // Soul tal como está ahora -- mismo criterio que conclusionEstaConfirmada()
+    // en soul.html (DEBEN quedar sincronizadas -- ver construirSnapshotConclusion
+    // y conclusionesIguales ahi), pero este es el gate real del lado del
+    // servidor (el cliente ya evita llamar a este endpoint sin confirmar,
+    // pero eso es UX, no el limite real). Cuentas de antes de este cambio
+    // tienen perfil_validado_snapshot en null, que nunca va a coincidir --
+    // se les pide confirmar una vez, sin inventar una aceptacion retroactiva
+    // (ver docs/plan-free-pro/migracion_conclusion_soul.sql).
+    //
+    // Campos incluidos -- los unicos que calcularMatches manda a Claude como
+    // señal real de compatibilidad (ver mas abajo y lib/comparePrompt.js):
+    // grupo1-4 (la sintesis interpretativa) e indice_disponibilidad (viven
+    // en esta misma fila de 'perfiles'), mas no_negociables/negociables
+    // (texto declarado directamente por la persona, viven en 'usuarios' --
+    // por eso se leen aparte). Nunca timestamps, plan, estado online, ni
+    // ninguna otra columna ajena a lo que realmente compara el matching.
+    const miUsuarioTextosRes = await fetch(
+      `${supabaseUrl}/rest/v1/usuarios?select=no_negociables,negociables&id=eq.${encodeURIComponent(usuarioId)}`,
+      { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
+    );
+    const miUsuarioTextosRows = miUsuarioTextosRes.ok ? await miUsuarioTextosRes.json() : [];
+    const miUsuarioTextos = miUsuarioTextosRows[0] || {};
+
+    const conclusionActual = construirSnapshotConclusion(miPerfil, miUsuarioTextos);
+    if (miPerfil.perfil_validado !== true || !conclusionesIguales(miPerfil.perfil_validado_snapshot, conclusionActual)) {
+      return res.status(200).json({ matchEncontrado: false, matchData: null, conclusionNoConfirmada: true });
+    }
 
     // Comparar contra TODOS los demas perfiles es el corazon del matching --
     // service role key, no el token propio.
