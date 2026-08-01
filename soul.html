@@ -282,15 +282,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 
 <div class="stars" id="stars"></div>
 
-<div class="sound-toggle" id="soundToggle" onclick="toggleSound()">
-  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-    <path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7"/>
-    <path class="wave" d="M18.5 6a9 9 0 0 1 0 12"/>
-    <line class="mute-line" x1="2" y1="2" x2="22" y2="22" style="display:none"/>
-  </svg>
-</div>
-
 <!-- ══ ETAPA 0 — LOGIN / REGISTRO ══ -->
 <div class="etapa activa" id="e0">
   <div class="auth-wrap">
@@ -955,7 +946,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <div><div class="chat-nm">Soul</div><div class="chat-st">conversando con vos</div></div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:.9rem">
         <span onclick="avanzarManualmente()" id="avanzarManualBtn" style="display:none;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">Ya conté bastante, avancemos →</span>
-        <span onclick="pedirPausaChat()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">Dejar por ahora</span>
+        <button class="chat-back-btn" onclick="confirmarSalirChat()">Salir</button>
       </div>
     </div>
     <div id="avisoInicioChat" style="display:none;padding:.5rem 1.2rem;text-align:center;color:#9a8e96;background:rgba(201,168,76,.06);font-family:Georgia,serif;font-style:italic;font-size:.85rem">Esto es una charla para conocerte de verdad, no un formulario — no hay apuro ni respuestas correctas. Podés cortar cuando quieras y seguimos después; solo hace falta que la terminemos en algún momento antes de empezar a buscar posibles vínculos para vos.</div>
@@ -4617,19 +4608,18 @@ function menuPrincipalEstaAbierto(){
 // api/leer.js) -- este código solo lo muestra, nunca lo decide.
 function actualizarBadgePlan(){
   var esPro=window.usuarioPlan==='pro';
-  var label=document.getElementById('menuPrincipalPlanLabel');
-  if(label)label.textContent=esPro?'Pro':'Free';
+  // El botón flotante y el ítem "Soul Pro" del menú quedan fijos (HTML) --
+  // ya no dicen "Plan"/cambian de destino según el plan (eso era lo que
+  // llevaba a Mi Perfil en vez de a la pantalla de Soul Pro). Solo la línea
+  // dentro del panel abierto sigue mostrando el plan real.
   var linea=document.getElementById('menuPrincipalPlanLinea');
   if(linea)linea.textContent=esPro?'Estás en Plan Pro.':'Estás en Plan Free.';
-  var item=document.getElementById('menuItemPlan');
-  if(item){
-    item.textContent=esPro?'Plan Pro':'Plan Free — Conocer Soul Pro';
-    item.onclick=function(){ cerrarMenuPrincipal(); if(esPro)mostrarMiPerfil(); else mostrarInfoPro(); };
-  }
   actualizarVisibilidadMenu();
 }
 
 function mostrarInfoPro(){
+  var linea=document.getElementById('infoProPlanActual');
+  if(linea)linea.textContent='Tu plan actual: '+(window.usuarioPlan==='pro'?'Pro':'Free');
   document.getElementById('modalInfoPro').style.display='flex';
 }
 function cerrarInfoPro(){
@@ -5076,26 +5066,18 @@ async function sendMsg(){
   }finally{document.getElementById('sendBtn').disabled=false;inp.focus();}
 }
 
-// Botón fijo de "Dejar por ahora": manda el mismo mensaje que escribiría
-// alguien directamente, por el mismo camino que un mensaje normal -- es
-// Soul (vía el prompt) quien decide si ya es momento de cerrar o si prefiere
-// acompañar un poco más antes (ver TODAVÍA ES MUY PRONTO PARA PAUSAR).
-// Antes no pedía confirmación (mandaba el mensaje directo a Soul) y, una
-// vez que Soul cerraba con calidez, no había ningún destino real -- la
-// persona quedaba mirando la charla cerrada sin forma de salir (ver
-// pausarChatPrincipal, que es quien de verdad corta la charla). Ahora
-// confirma ANTES de arrancar el cierre, con el estado real de guardado
-// (guardadoTempranoHecho), y el cierre en si (pausarChatPrincipal) navega
-// a Inicio en vez de dejar a la persona ahi.
-function pedirPausaChat(){
+// "Salir" del chat principal (header de e4) -- avisa antes si lo que se
+// habló todavía no se guardó (guardadoTempranoHecho), para no perder una
+// charla recién arrancada sin que la persona lo sepa. Con eso ya guardado,
+// confirma con un tono tranquilo (no hace falta alarmar) y va directo al
+// menú principal -- ya no manda ningún mensaje a Soul ni pausa la charla
+// "narrativamente" como hacía la vieja pedirPausaChat().
+function confirmarSalirChat(){
   var mensajeConfirmar=guardadoTempranoHecho
-    ?'¿Dejar esta charla por ahora? Lo que hablaste hasta acá ya está guardado -- vas a poder seguir cuando quieras.'
-    :'Todavía no se guardó nada de esta charla -- si la dejás ahora, se pierde. ¿Salir igual?';
+    ?'¿Salir de esta charla? Lo que hablaste hasta acá ya está guardado -- vas a poder seguir cuando quieras.'
+    :'Todavía no se guardó nada de esta charla -- si salís ahora, se pierde. ¿Salir igual?';
   if(!confirm(mensajeConfirmar))return;
-  document.getElementById('sendBtn').disabled=true;
-  enviarAlChat('Prefiero dejar esto por ahora.').finally(function(){
-    document.getElementById('sendBtn').disabled=false;
-  });
+  volverAMenuPrincipal();
 }
 
 // Texto de cierre fluido (Decision 2): reemplaza el auto-avance silencioso
@@ -6516,7 +6498,7 @@ if('serviceWorker' in navigator){
      pantalla. actualizarVisibilidadMenu() (llamada desde ir()) decide
      cuándo mostrar/ocultar el botón según la etapa actual. ══ -->
 <div id="menuPrincipalBtn" onclick="abrirMenuPrincipal()" style="display:none;position:fixed;top:.7rem;right:.7rem;z-index:70;align-items:center;gap:.4rem;padding:.4rem .8rem;border-radius:16px;background:rgba(7,5,10,.88);border:1px solid rgba(201,168,76,.35);color:#c9a84c;font-family:'Inter',sans-serif;font-size:.85rem;cursor:pointer">
-  <span id="menuPrincipalPlanLabel">Plan</span><span style="opacity:.6">☰</span>
+  <span style="opacity:.85">☰ Menú</span>
 </div>
 <div id="menuPrincipalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80" onclick="cerrarMenuPrincipal()">
   <div style="position:absolute;top:0;right:0;bottom:0;width:80%;max-width:300px;background:#0f0a12;border-left:1px solid rgba(201,168,76,.2);padding:1.6rem 1.3rem;overflow-y:auto" onclick="event.stopPropagation()">
@@ -6526,7 +6508,7 @@ if('serviceWorker' in navigator){
     <div class="menu-item" onclick="cerrarMenuPrincipal();elegirSesion('soul')">Hablar con Soul</div>
     <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMisMatches()">Matches</div>
     <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMiPerfil()">Mi perfil</div>
-    <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMiPerfil()" id="menuItemPlan">Plan Free/Pro</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarInfoPro()" id="menuItemPlan">Soul Pro</div>
     <div class="menu-item" onclick="cerrarMenuPrincipal();irATerminosCompletos()">Términos y privacidad</div>
     <div style="border-top:1px solid rgba(255,255,255,.08);margin:1.2rem 0"></div>
     <div class="menu-item" onclick="cerrarMenuPrincipal();cerrarSesion()" style="color:#d98a9e;border-bottom:none">Cerrar sesión</div>
@@ -6537,11 +6519,12 @@ if('serviceWorker' in navigator){
      una falsa posibilidad de compra. Ver mostrarInfoPro(). ══ -->
 <div id="modalInfoPro" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem" onclick="if(event.target===this)cerrarInfoPro()">
   <div style="max-width:360px;text-align:center">
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.8rem">Soul Pro</p>
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.3rem">Soul Pro</p>
+    <p id="infoProPlanActual" style="font-family:'Inter',sans-serif;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:#9a8e96;margin-bottom:1rem"></p>
     <p style="font-family:'Inter',sans-serif;font-size:.95rem;color:#d8cdd2;line-height:1.6;margin-bottom:.8rem;text-align:left">Con Pro vas a poder:</p>
     <ul style="text-align:left;font-family:'Inter',sans-serif;font-size:.9rem;color:#d8cdd2;line-height:1.7;margin-bottom:1.2rem;padding-left:1.2rem">
       <li>Recalcular tus matches con más frecuencia.</li>
-      <li>Acceder a los módulos de profundización completos.</li>
+      <li>Acceder a los módulos de profundización -- charlas guiadas con Soul sobre lo que más te conviene trabajar (apertura al compromiso, autonomía emocional, poder personal, coherencia interna, entre otros), más allá del módulo obligatorio que ya incluye el piloto.</li>
       <li>Un análisis de compatibilidad más detallado.</li>
     </ul>
     <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">Todavía no tenemos el pago conectado en la app -- <strong style="color:#c9a84c">Próximamente</strong>. Por ahora, todo el piloto tiene acceso completo sin costo.</p>
