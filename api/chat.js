@@ -189,7 +189,7 @@ export default async function handler(req, res) {
       // y cache_read_input_tokens nunca se guardaban, asi que el costo que
       // mostraba el panel quedaba mas bajo que el que Anthropic cobra de
       // verdad.
-      let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0, buffer = '';
+      let inputTokens = 0, outputTokens = 0, cacheCreationTokens = 0, cacheReadTokens = 0, buffer = '', stopReason = null;
       const reader = anthropicRes.body.getReader();
       const decoder = new TextDecoder();
       while (true) {
@@ -212,9 +212,18 @@ export default async function handler(req, res) {
             res.write(evt.delta.text);
           } else if (evt.type === 'message_delta' && evt.usage) {
             outputTokens = evt.usage.output_tokens || 0;
+            if (evt.delta && evt.delta.stop_reason) stopReason = evt.delta.stop_reason;
           }
         }
       }
+      // Marca invisible al final del cuerpo (nunca aparece caracter por
+      // caracter durante el streaming -- se escribe recien aca, ya
+      // terminado el texto real) para que el cliente sepa si la respuesta
+      // se cortó por max_tokens sin tener que abrir un canal aparte
+      // (headers ya se mandaron al arrancar el stream, y este endpoint no
+      // usa HTTP trailers). El cliente la separa del texto visible antes de
+      // mostrar nada -- ver llamarChatStreaming en soul.html.
+      res.write('\u0000SOULSTOP:' + (stopReason || 'end_turn'));
       res.end();
 
       registrarUsoTokens({

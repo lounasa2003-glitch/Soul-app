@@ -59,6 +59,9 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 .sesion-opt{display:block;width:100%;padding:1.2rem;background:rgba(36,26,32,.4);border:1px solid #2a1f28;border-radius:8px;margin-bottom:1rem;cursor:pointer;text-align:left;transition:all .2s}
 .sesion-opt:hover{border-color:rgba(201,168,76,.5);background:rgba(201,168,76,.05)}
 .sesion-opt-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;color:#f2ece4;margin-bottom:.3rem}
+/* ── Menú principal persistente (ver punto 6) ── */
+.menu-item{padding:.9rem .3rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.05rem;color:#d8cdd2;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06)}
+.menu-item:hover{color:#c9a84c}
 .sesion-opt-desc{font-family:'Inter',sans-serif;font-size:.88rem;color:#7a6e78;line-height:1.4}
 
 /* ══════════════════════════════════
@@ -133,7 +136,12 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 .carta-title{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.05rem;color:#c9a84c;margin-bottom:.6rem}
 .btn-full{width:100%;padding:.9rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:'Inter',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;margin-bottom:.6rem}
 .btn-full:disabled{opacity:.35;cursor:default}
-.btn-back{width:100%;padding:.5rem;background:none;border:none;color:#5a5058;font-family:'Cormorant Garamond',serif;font-size:.85rem;font-style:italic;cursor:pointer}
+/* Componente único de "Volver" en toda la app (Decision 6): alto mínimo
+   44px de área táctil, texto "Volver" siempre visible (nunca solo un
+   ícono), y separado del borde de la pantalla por el padding/margin de
+   quien lo usa -- nunca pegado al límite exacto del viewport. */
+.btn-back{width:100%;min-height:44px;padding:.7rem;margin:.6rem 0;background:none;border:none;color:#5a5058;font-family:'Cormorant Garamond',serif;font-size:.9rem;font-style:italic;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:.4rem}
+.chat-back-btn{min-width:44px;min-height:44px;padding:.4rem .7rem;background:none;border:none;color:#7a6e78;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;cursor:pointer;display:inline-flex;align-items:center;gap:.3rem;flex-shrink:0}
 
 /* ══════════════════════════════════
    ETAPA 3 — CONSTELACIÓN
@@ -455,8 +463,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <span class="photo-icon">+</span>
             <input type="file" id="inCaraPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,'upCaraPerfil',true)">
           </div>
-          <span class="photo-cam-btn" onclick="document.getElementById('inCaraPerfilCam').click()">📷 Tomar foto</span>
-          <input type="file" id="inCaraPerfilCam" accept="image/*" capture="user" style="display:none" onchange="loadPhotoPerfil(this,'upCaraPerfil',true)">
+          <span class="photo-cam-btn" onclick="elegirFotoCamara('perfil',true)">📷 Tomar foto</span>
           <p class="photo-slot-lbl">Tu cara</p>
           <label style="display:flex;align-items:flex-start;gap:.4rem;margin-top:.5rem;cursor:pointer;text-align:left">
             <input type="checkbox" id="mpFotoAprobada" style="margin-top:.2rem;flex-shrink:0">
@@ -468,8 +475,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
             <span class="photo-icon">+</span>
             <input type="file" id="inCuerpoPerfil" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,'upCuerpoPerfil',false)">
           </div>
-          <span class="photo-cam-btn" onclick="document.getElementById('inCuerpoPerfilCam').click()">📷 Tomar foto</span>
-          <input type="file" id="inCuerpoPerfilCam" accept="image/*" capture="environment" style="display:none" onchange="loadPhotoPerfil(this,'upCuerpoPerfil',false)">
+          <span class="photo-cam-btn" onclick="elegirFotoCamara('perfil',false)">📷 Tomar foto</span>
           <p class="photo-slot-lbl">Tu cuerpo</p>
         </div>
       </div>
@@ -553,20 +559,35 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p class="auth-loading" id="miPerfilExito" style="display:none;color:#4ecb71">✓ Guardado.</p>
 
       <button class="btn-gold" id="miPerfilGuardarBtn" onclick="guardarMiPerfil()" style="width:100%;margin-top:.5rem">Guardar cambios →</button>
-      <button class="btn-back" id="miPerfilVolverBtn" onclick="volverAMenuPrincipal()">← Volver</button>
 
-      <p id="miPerfilNoAcuerdoLink" onclick="toggleSolicitudRevision()" style="text-align:center;margin-top:1.8rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;text-decoration:underline">No estoy de acuerdo con una parte de mi perfil</p>
-      <div id="solicitudRevisionForm" style="display:none;margin-top:.8rem;padding:1rem;border:1px solid #2a1f28;border-radius:8px;text-align:left">
-        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;margin-bottom:.6rem">Pedir revisión de tu perfil</p>
-        <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;margin-bottom:.8rem;line-height:1.5">Soul genera inferencias, no diagnósticos, y pueden ser incompletas o equivocadas. Contanos qué parte de tu perfil no te representa y por qué -- la administradora lo revisa a mano, no se corrige automáticamente.</p>
-        <p class="step-sub">¿Qué parte de tu perfil querés cuestionar?</p>
-        <textarea class="step-ta" id="srTexto" placeholder="Ej: el modo de conflicto que aparece en mi perfil..." style="min-height:70px"></textarea>
-        <p class="step-sub">¿Por qué no te representa?</p>
-        <textarea class="step-ta" id="srExplicacion" placeholder="Contanos brevemente" style="min-height:70px"></textarea>
-        <div class="auth-err" id="srErr"></div>
-        <p class="auth-loading" id="srExito" style="display:none;color:#4ecb71">✓ Recibimos tu pedido. La administradora lo va a revisar.</p>
-        <button class="btn-gold" id="srBtn" onclick="enviarSolicitudRevision()" style="width:100%;margin-top:.5rem">Enviar pedido →</button>
+      <!-- B. La conclusión de Soul (Decision 3) -->
+      <div id="miPerfilConclusionSeccion" style="margin-top:2.2rem;padding-top:1.5rem;border-top:1px solid #2a1f28;display:none">
+        <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;color:#c9a84c;margin-bottom:.3rem;text-align:center">La conclusión de Soul</p>
+        <p id="miPerfilConclusionEstado" style="text-align:center;font-family:'Inter',sans-serif;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;margin-bottom:.2rem"></p>
+        <p id="miPerfilConclusionFecha" style="text-align:center;font-family:'Inter',sans-serif;font-size:.75rem;color:#7a6e78;margin-bottom:1rem"></p>
+        <p class="cargando" id="miPerfilConclusionCargando">Cargando tu conclusión...</p>
+        <p id="miPerfilConclusionTexto" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.02rem;color:#e8dfe4;line-height:1.6;margin-bottom:1.2rem;display:none"></p>
+
+        <div id="miPerfilConclusionBotones" style="display:none;gap:.6rem;flex-wrap:wrap">
+          <button class="btn-gold" id="miPerfilBtnRepresenta" onclick="confirmarConclusionDesdeMiPerfil()" style="flex:1;min-width:150px">Esto me representa</button>
+          <button class="btn-back" onclick="toggleSolicitudRevision()" style="flex:1;min-width:150px;margin-top:0">Quiero ajustar algo</button>
+        </div>
+        <div class="auth-err" id="miPerfilConclusionErr" style="display:none"></div>
+
+        <div id="solicitudRevisionForm" style="display:none;margin-top:.8rem;padding:1rem;border:1px solid #2a1f28;border-radius:8px;text-align:left">
+          <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:#c9a84c;margin-bottom:.6rem">Contanos qué ajustar</p>
+          <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;margin-bottom:.8rem;line-height:1.5">Soul genera inferencias, no diagnósticos, y pueden ser incompletas o equivocadas. Contanos qué parte de tu perfil no te representa y por qué -- la administradora lo revisa a mano, no se corrige automáticamente.</p>
+          <p class="step-sub">¿Qué parte de tu perfil querés cuestionar?</p>
+          <textarea class="step-ta" id="srTexto" placeholder="Ej: el modo de conflicto que aparece en mi perfil..." style="min-height:70px"></textarea>
+          <p class="step-sub">¿Por qué no te representa?</p>
+          <textarea class="step-ta" id="srExplicacion" placeholder="Contanos brevemente" style="min-height:70px"></textarea>
+          <div class="auth-err" id="srErr"></div>
+          <p class="auth-loading" id="srExito" style="display:none;color:#4ecb71">✓ Recibimos tu pedido. La administradora lo va a revisar.</p>
+          <button class="btn-gold" id="srBtn" onclick="enviarSolicitudRevision()" style="width:100%;margin-top:.5rem">Enviar pedido →</button>
+        </div>
       </div>
+
+      <button class="btn-back" id="miPerfilVolverBtn" onclick="volverAMenuPrincipal()" style="margin-top:2rem">← Volver</button>
 
       <p onclick="solicitarBorrarCuenta()" style="text-align:center;margin-top:1.8rem;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;opacity:.7">Eliminar mi cuenta</p>
     </div>
@@ -586,7 +607,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="eReflexionCita">
   <div class="chat-wrap">
     <div class="chat-header">
-      <span onclick="volverDeReflexion()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.9rem;cursor:pointer">←</span>
+      <button class="chat-back-btn" onclick="volverDeReflexion()">← Volver</button>
       <div><div class="chat-nm" id="reflexionTitulo">Pensando en tu encuentro</div><div class="chat-st">privado, solo para vos</div></div>
     </div>
     <div class="chat-area" id="reflexionArea"></div>
@@ -647,7 +668,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <p style="font-family:'Inter',sans-serif;font-size:.95rem;color:#7a6e78;text-align:center;line-height:1.5">Recordá: esto es probabilístico y basado en información parcial. La decisión siempre es tuya.</p>
     </div>
 
-    <button style="width:100%;padding:.6rem;background:none;border:none;color:#5a5058;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-top:1.2rem" onclick="volverAEleccion()">← Volver</button>
+    <button class="btn-back" onclick="volverAEleccion()">← Volver</button>
   </div>
 </div>
 <div class="etapa" id="e1">
@@ -677,52 +698,16 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
         <p>Todo lo que hagamos con esa información depende de vos.</p>
         <p>Tomáte un momento para leer lo que sigue.</p>
       </div>
-      <button class="btn-full" onclick="document.getElementById('con-c1').style.display='none';document.getElementById('con-c2').style.display='block'">Continuar →</button>
+      <button class="btn-full" onclick="document.getElementById('con-c1').style.display='none';document.getElementById('con-c2').style.display='block';chkScroll()">Continuar →</button>
     </div>
     <div id="con-c2" style="display:none">
       <p class="con-title" style="text-align:center;margin-bottom:.8rem">Términos y condiciones</p>
-      <p style="font-family:'Inter',sans-serif;font-size:.92rem;color:#7a6e78;text-align:center;margin-bottom:.7rem">Este es el texto completo de Privacidad y Términos. También podés abrirlo en una página aparte para guardarlo o compartirlo: <a href="legal.html" target="_blank" rel="noopener" style="color:#c9a84c">Privacidad y Términos</a>.</p>
       <div class="legal-box" id="legalBox" onscroll="chkScroll()">
-        <h3>1. Qué analiza Soul</h3>
-        <p>Soul funciona con inteligencia artificial (IA): analiza el contenido de tus respuestas, la forma en que te expresás y los patrones conversacionales que emergen durante la interacción, para construir un perfil vincular.</p>
-        <div class="legal-hl"><p><strong>Soul genera inferencias, no diagnósticos.</strong> Sus análisis son probabilísticos y pueden ser incompletos o equivocados. Siempre podés cuestionar sus conclusiones.</p></div>
-        <hr>
-        <h3>2. Datos sensibles</h3>
-        <div class="legal-hl"><p>Parte de lo que compartís con Soul puede revelar información sobre tu orientación o tu vida íntima. La ley considera esto un dato sensible, con más protección que el resto de tu información. Soul lo trata con ese cuidado extra: nunca se muestra a un match ni a nadie fuera de la administración de la plataforma.</p></div>
-        <hr>
-        <h3>3. Funciones indispensables</h3>
-        <p>Sin estas funciones Soul no puede operar. Al aceptar, autorizás:</p>
-        <ul><li>Que Soul analice tu conversación para construir un perfil vincular.</li><li>Que use inferencias para el proceso de matching.</li><li>Que guarde tu perfil mientras uses la plataforma.</li><li>El tratamiento de datos personales necesarios, de acuerdo con nuestra Política de Privacidad.</li></ul>
-        <hr>
-        <h3>4. Funciones opcionales</h3>
-        <ul><li>Recibir comunicaciones fuera de la plataforma.</li></ul>
-        <hr>
-        <h3>5. Qué ve un match de vos</h3>
-        <ul><li><strong>Sí:</strong> compatibilidad actual y potencial, dos fortalezas, un desafío posible.</li><li><strong>No:</strong> perfil psicológico, módulos, puntajes individuales.</li></ul>
-        <hr>
-        <h3>6. Acceso administrativo a tu conversación</h3>
-        <p>El equipo que administra Soul no revisa tus conversaciones de forma rutinaria. El análisis con inteligencia artificial (perfil, compatibilidad, y el resumen de una cita cuando ambas personas dieron su consentimiento) es un proceso automático, distinto de que una persona lo lea directamente.</p>
-        <p>El acceso humano directo a tu conversación o a los mensajes de una cita solo puede ocurrir: ante un reporte o una situación de seguridad; cuando una función administrativa concreta lo requiere (por ejemplo, dar soporte a una consulta tuya o revisar una solicitud de corrección de perfil); o para el análisis de una cita con el consentimiento de ambas personas. Nadie más que este equipo tiene este tipo de acceso.</p>
-        <hr>
-        <h3>7. Tus datos</h3>
-        <p><strong>Responsable del tratamiento:</strong> Lourdes Satragno, Ciudad Autónoma de Buenos Aires, Argentina. Contacto: <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</p>
-        <p><strong>Transferencias internacionales:</strong> los proveedores que usa Soul (base de datos, IA y notificaciones push) pueden procesar datos fuera de Argentina, incluido Estados Unidos.</p>
-        <p><strong>Edad mínima:</strong> Soul es exclusivamente para personas mayores de 18 años. Validamos la fecha de nacimiento que declarás, tanto en tu dispositivo como en nuestro servidor, al registrarla y cada vez que la modificás. Este control se basa en la fecha que vos declarás — no reemplaza una verificación de identidad con documento.</p>
-        <p>Tus datos se borran dentro de los 30 días posteriores a eliminar tu cuenta. Soul puede modificar sus modelos de análisis para mejorar el servicio. Soul no usa tus datos para entrenar modelos de inteligencia artificial propios.</p>
-        <hr>
-        <h3>8. Limitaciones</h3>
-        <p>Soul no realiza diagnósticos psicológicos ni reemplaza a un profesional de salud mental. No garantiza compatibilidad ni éxito en ningún vínculo. <strong>No recomendamos basar decisiones importantes exclusivamente en las inferencias de Soul.</strong></p>
-        <hr>
-        <h3>9. Tus derechos</h3>
-        <ul>
-          <li>Podés pedir la eliminación de tu perfil y datos en cualquier momento.</li>
-          <li>Podés cuestionar o solicitar revisión de cualquier inferencia.</li>
-          <li>Podés pedir explicación de cualquier compatibilidad que recibas.</li>
-          <li>Podés revocar cualquier consentimiento opcional en cualquier momento.</li>
-          <li>Podés pedir una copia de tus datos en un formato reutilizable, escribiendo a <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</li>
-          <li>Podés hacer un reclamo ante la Agencia de Acceso a la Información Pública (AAIP) si considerás que no se respetaron tus derechos.</li>
-        </ul>
-        <div class="legal-end">— Fin del documento —</div>
+        <p>Soul usa inteligencia artificial para analizar lo que compartís en tus conversaciones y construir un perfil que ayuda a encontrar compatibilidades reales — nunca diagnósticos, solo inferencias que siempre podés cuestionar.</p>
+        <p>Parte de esa información puede ser un dato sensible (tu orientación, tu vida íntima) y la tratamos con protección extra: nunca se muestra a un match ni a nadie fuera de la administración de la plataforma.</p>
+        <p>A un match solo le mostramos tu compatibilidad y un par de fortalezas — nunca tu perfil psicológico completo ni tus respuestas tal cual las escribiste.</p>
+        <p>Es exclusivamente para mayores de 18 años, y podés pedir la eliminación de tu cuenta y tus datos cuando quieras.</p>
+        <div class="legal-end" style="margin-top:.5rem"><span onclick="event.stopPropagation();irATerminosCompletos()" style="color:#c9a84c;cursor:pointer;text-decoration:underline">Leer términos completos →</span></div>
       </div>
       <p class="scroll-notice" id="scrollNotice">↓ Scrolleá hasta el final para aceptar</p>
       <div class="check-row locked" id="chkMain" onclick="toggleChk()">
@@ -745,6 +730,63 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <button class="btn-full" id="btnAceptar" disabled onclick="aceptarConsentimiento()">Entiendo cómo funciona Soul y elijo comenzar →</button>
       <button class="btn-back" onclick="document.getElementById('con-c2').style.display='none';document.getElementById('con-c1').style.display='block'">← Volver</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ TÉRMINOS COMPLETOS -- pantalla propia dentro de la SPA, nunca una
+     navegación real fuera de soul.html (ver irATerminosCompletos). Mismo
+     texto que legal.html (uso externo, ej. revisión de tiendas o compartir
+     el link), pero vivir tambien aca adentro es lo que evita perder la
+     sesion al volver: nunca se abandona soul.html para leerlos. ══ -->
+<div class="etapa" id="eTerminosCompletos">
+  <div class="scroll" style="max-width:520px;margin:0 auto;padding:2rem 1.5rem 4rem;position:relative;z-index:1">
+    <p class="con-title" style="text-align:center;margin-bottom:1.2rem">Privacidad y Términos</p>
+    <div class="legal-box" style="max-height:none">
+      <h3>1. Qué analiza Soul</h3>
+      <p>Soul funciona con inteligencia artificial (IA): analiza el contenido de tus respuestas, la forma en que te expresás y los patrones conversacionales que emergen durante la interacción, para construir un perfil vincular.</p>
+      <div class="legal-hl"><p><strong>Soul genera inferencias, no diagnósticos.</strong> Sus análisis son probabilísticos y pueden ser incompletos o equivocados. Siempre podés cuestionar sus conclusiones.</p></div>
+      <hr>
+      <h3>2. Datos sensibles</h3>
+      <div class="legal-hl"><p>Parte de lo que compartís con Soul puede revelar información sobre tu orientación o tu vida íntima. La ley considera esto un dato sensible, con más protección que el resto de tu información. Soul lo trata con ese cuidado extra: nunca se muestra a un match ni a nadie fuera de la administración de la plataforma.</p></div>
+      <hr>
+      <h3>3. Funciones indispensables</h3>
+      <p>Sin estas funciones Soul no puede operar. Al aceptar, autorizás:</p>
+      <ul><li>Que Soul analice tu conversación para construir un perfil vincular.</li><li>Que use inferencias para el proceso de matching.</li><li>Que guarde tu perfil mientras uses la plataforma.</li><li>El tratamiento de datos personales necesarios, de acuerdo con nuestra Política de Privacidad.</li></ul>
+      <hr>
+      <h3>4. Funciones opcionales</h3>
+      <ul><li>Recibir comunicaciones fuera de la plataforma.</li></ul>
+      <hr>
+      <h3>5. Qué ve un match de vos</h3>
+      <ul><li><strong>Sí:</strong> compatibilidad actual y potencial, dos fortalezas, un desafío posible.</li><li><strong>No:</strong> perfil psicológico, módulos, puntajes individuales.</li></ul>
+      <hr>
+      <h3>6. Acceso administrativo a tu conversación</h3>
+      <p>El equipo que administra Soul no revisa tus conversaciones de forma rutinaria. El análisis con inteligencia artificial (perfil, compatibilidad, y el resumen de una cita cuando ambas personas dieron su consentimiento) es un proceso automático, distinto de que una persona lo lea directamente.</p>
+      <p>El acceso humano directo a tu conversación o a los mensajes de una cita solo puede ocurrir: ante un reporte o una situación de seguridad; cuando una función administrativa concreta lo requiere (por ejemplo, dar soporte a una consulta tuya o revisar una solicitud de corrección de perfil); o para el análisis de una cita con el consentimiento de ambas personas. Nadie más que este equipo tiene este tipo de acceso.</p>
+      <hr>
+      <h3>7. Tus datos</h3>
+      <p><strong>Responsable del tratamiento:</strong> Lourdes Satragno, Ciudad Autónoma de Buenos Aires, Argentina. Contacto: <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</p>
+      <p><strong>Base legal:</strong> el tratamiento de tus datos se basa en el consentimiento que diste al aceptar este documento, que podés revocar en cualquier momento pidiendo la eliminación de tu cuenta.</p>
+      <p>Tus datos se almacenan de forma segura y no se comparten con terceros con fines comerciales. Mientras tu cuenta esté activa, se conservan para que Soul pueda seguir funcionando para vos. Al eliminar tu cuenta, tus datos se borran dentro de los 30 días posteriores a la solicitud, salvo obligación legal de retención.</p>
+      <p><strong>Transferencias internacionales:</strong> los proveedores que usa Soul (base de datos, IA y notificaciones push) pueden procesar datos fuera de Argentina, incluido Estados Unidos.</p>
+      <p><strong>Edad mínima:</strong> Soul es exclusivamente para personas mayores de 18 años. Validamos la fecha de nacimiento que declarás, tanto en tu dispositivo como en nuestro servidor, al registrarla y cada vez que la modificás. Este control se basa en la fecha que vos declarás — no reemplaza una verificación de identidad con documento.</p>
+      <p><strong>Ante un incidente de seguridad</strong> que pudiera comprometer tus datos, te lo vamos a informar sin demora injustificada, junto con las medidas tomadas.</p>
+      <p>Soul puede modificar sus modelos de análisis para mejorar el servicio. Soul no usa tus datos para entrenar modelos de inteligencia artificial propios.</p>
+      <hr>
+      <h3>8. Limitaciones</h3>
+      <p>Soul no realiza diagnósticos psicológicos ni reemplaza a un profesional de salud mental. No garantiza compatibilidad ni éxito en ningún vínculo. <strong>No recomendamos basar decisiones importantes exclusivamente en las inferencias de Soul.</strong></p>
+      <hr>
+      <h3>9. Tus derechos</h3>
+      <ul>
+        <li>Podés pedir la eliminación de tu perfil y datos en cualquier momento.</li>
+        <li>Podés cuestionar o solicitar revisión de cualquier inferencia.</li>
+        <li>Podés pedir explicación de cualquier compatibilidad que recibas.</li>
+        <li>Podés revocar cualquier consentimiento opcional en cualquier momento.</li>
+        <li>Podés pedir una copia de tus datos en un formato reutilizable, escribiendo a <a href="mailto:contacto@soulapp.love">contacto@soulapp.love</a>.</li>
+        <li>Podés hacer un reclamo ante la Agencia de Acceso a la Información Pública (AAIP) si considerás que no se respetaron tus derechos.</li>
+      </ul>
+      <div class="legal-end">— Fin del documento —</div>
+    </div>
+    <button class="btn-back" onclick="volverEtapaAnterior()" style="margin-top:1rem">← Volver</button>
   </div>
 </div>
 
@@ -866,8 +908,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
               <span class="photo-icon">+</span>
               <input type="file" id="inCara" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCara',true)">
             </div>
-            <span class="photo-cam-btn" onclick="document.getElementById('inCaraCam').click()">📷 Tomar foto</span>
-            <input type="file" id="inCaraCam" accept="image/*" capture="user" style="display:none" onchange="loadPhoto(this,'upCara',true)">
+            <span class="photo-cam-btn" onclick="elegirFotoCamara('onboarding',true)">📷 Tomar foto</span>
             <p class="photo-slot-lbl">Tu cara</p>
             <label style="display:flex;align-items:flex-start;gap:.4rem;margin-top:.5rem;cursor:pointer;text-align:left">
               <input type="checkbox" id="chkFotoAprobada" onchange="window.fotoAprobada=this.checked" style="margin-top:.2rem;flex-shrink:0">
@@ -879,8 +920,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
               <span class="photo-icon">+</span>
               <input type="file" id="inCuerpo" accept="image/*" style="display:none" onchange="loadPhoto(this,'upCuerpo',false)">
             </div>
-            <span class="photo-cam-btn" onclick="document.getElementById('inCuerpoCam').click()">📷 Tomar foto</span>
-            <input type="file" id="inCuerpoCam" accept="image/*" capture="environment" style="display:none" onchange="loadPhoto(this,'upCuerpo',false)">
+            <span class="photo-cam-btn" onclick="elegirFotoCamara('onboarding',false)">📷 Tomar foto</span>
             <p class="photo-slot-lbl">Tu cuerpo</p>
           </div>
         </div>
@@ -933,7 +973,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e4b">
   <div class="chat-wrap">
     <div class="chat-header">
-      <span onclick="volverAMenuPrincipal()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">← Salir</span>
+      <button class="chat-back-btn" onclick="volverAMenuPrincipal()">← Salir</button>
       <div class="chat-orb"></div>
       <div>
         <div class="chat-nm">Soul</div>
@@ -1017,7 +1057,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <div style="width:36px;height:36px;border-radius:50%;background:radial-gradient(circle,#f5d98a,#c9a84c 60%,transparent);box-shadow:0 0 16px 5px rgba(201,168,76,.4);margin:0 auto 1.5rem;animation:pulse 3s ease-in-out infinite"></div>
     <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(1.2rem,3.5vw,1.6rem);color:#c9a84c;line-height:1.6;max-width:400px;margin-bottom:1rem">Ya diste tu respuesta.</p>
     <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:clamp(1.15rem,3.2vw,1.35rem);color:#d8cdd2;line-height:1.6;max-width:400px;margin-bottom:1.5rem">En cuanto la otra persona también decida, Soul te va a avisar.</p>
-    <span onclick="continuarTrasAccionDePendiente()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">← Volver</span>
+    <button class="btn-back" style="width:auto" onclick="continuarTrasAccionDePendiente()">← Volver</button>
   </div>
 </div>
 
@@ -1148,7 +1188,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e7">
   <div class="cita-wrap">
     <div class="cita-header">
-      <span onclick="volverAMenuPrincipal()" style="color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-right:.6rem">← Salir</span>
+      <button class="chat-back-btn" style="margin-right:.6rem" onclick="volverAMenuPrincipal()">← Salir</button>
       <p class="cita-title">El encuentro ✦</p>
       <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.85rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
@@ -1664,6 +1704,31 @@ function mostrarPaywallModulo(){
   var btn=document.getElementById('moduloBtn');if(btn)btn.disabled=true;
   var inp=document.getElementById('moduloIn');
   if(inp){inp.disabled=true;inp.placeholder='Este momento está pausado';}
+  // Ademas del mensaje en el chat, se muestra el upsell especifico de este
+  // modulo (Decision 8) -- con nombre, motivo, que permitiria trabajar, y
+  // tres salidas reales para que la persona nunca quede atrapada ahi (el
+  // modal general de Plan, mostrarInfoPro, es generico y no alcanza para
+  // este momento puntual).
+  mostrarUpsellModulo(nombreModulo);
+}
+
+// Upsell Pro especifico del modulo detectado (Decision 8) -- a diferencia
+// del modal general de Plan (mostrarInfoPro/modalInfoPro), este nombra el
+// modulo puntual, explica por que Soul lo recomendo para esta persona y que
+// le permitiria trabajar, y siempre deja tres salidas reales.
+function mostrarUpsellModulo(nombreModulo){
+  var info=nombreModulo&&MODULOS_INFO[nombreModulo];
+  document.getElementById('upsellModuloNombre').textContent=nombreModulo||'Un módulo de profundización';
+  document.getElementById('upsellModuloPorque').textContent=nombreModulo
+    ?('Lo que noté en vos tiene nombre: '+nombreModulo+'. Profundizar ahí conmigo es parte de Soul Pro.')
+    :'Este momento de profundización es parte de Soul Pro.';
+  document.getElementById('upsellModuloTrabajar').textContent=info
+    ?('Ahí vamos a poder '+info.descripcion+'.')
+    :'';
+  document.getElementById('modalUpsellModulo').style.display='flex';
+}
+function cerrarUpsellModulo(){
+  document.getElementById('modalUpsellModulo').style.display='none';
 }
 
 function iniciarModuloReal(){
@@ -1708,6 +1773,8 @@ async function iniciarModuloObligatorio(){
   try{ await guardarTabla('perfiles',{modulo_fase:'obligatorio'}); }catch(e){}
   addModuloMsg('user','Seguimos.');
   moduloHistory.push({role:'user',content:'Seguimos.'});
+  document.getElementById('moduloBtn').disabled=true;
+  document.getElementById('moduloIn').disabled=true;
   var typing=document.createElement('div');
   typing.className='msg soul typing';typing.id='moduloTyping';
   typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
@@ -1850,6 +1917,8 @@ function continuarModulo(){
   var b=document.getElementById('moduloBtns');if(b)b.remove();
   addModuloMsg('user','Seguimos.');
   moduloHistory.push({role:'user',content:'Seguimos.'});
+  document.getElementById('moduloBtn').disabled=true;
+  document.getElementById('moduloIn').disabled=true;
   sendModuloMsg();
 }
 
@@ -1861,6 +1930,9 @@ function pausarModulo(){
   addModuloMsg('soul',cierre);
   moduloHistory.push({role:'assistant',content:cierre});
   guardarModuloHistorial().catch(function(){});
+  // Mismo motivo que pausarChatPrincipal() -- salir a Inicio en vez de
+  // dejar la charla cerrada sin destino. Nunca cierra sesion.
+  setTimeout(function(){ volverAMenuPrincipal(); },1600);
 }
 
 // Botón fijo de "Dejar por ahora" en el módulo: manda el mismo mensaje que
@@ -1868,15 +1940,100 @@ function pausarModulo(){
 // (Soul es quien decide si ya es momento de cerrar o si prefiere acompañar
 // un poco más antes).
 function pedirPausaModulo(){
+  if(!confirm('¿Dejar este módulo por ahora? Lo que ya hablaste se guarda automáticamente en cada mensaje -- vas a poder seguir cuando quieras.'))return;
   document.getElementById('moduloBtn').disabled=true;
   enviarAlModulo('Prefiero dejar esto por ahora.');
 }
 
+// Deteccion local de texto sin sentido (Decision 1, revision) -- nunca
+// intenta interpretar ni diagnosticar el contenido, solo filtra patrones
+// que claramente no pueden ser una respuesta real: vacío, mayoría de
+// caracteres no alfabéticos ("123456", "!!!!"), tecleo de teclado tipo
+// "asdfghjkl"/"qwerty", o la misma secuencia corta repetida llenando todo
+// el texto ("aaaaa", "ababab"). Una respuesta corta pero real ("Me cuesta
+// confiar", "No sé qué quiero") tiene que aceptarse sin problema -- por
+// eso nunca se usa solo la longitud como criterio.
+var PATRONES_TECLADO=/asdf|sdfg|dfgh|fghj|ghjk|hjkl|qwer|wert|erty|rtyu|tyui|yuio|uiop|zxcv|xcvb|cvbn|vbnm/i;
+function textoEsIncoherente(texto){
+  var t=(texto||'').trim();
+  if(!t)return true;
+
+  var sinEspacios=t.replace(/\s/g,'');
+  var soloLetras=(sinEspacios.match(/[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ]/g)||[]).length;
+
+  // Mayoría de caracteres no alfabéticos.
+  if(soloLetras<sinEspacios.length*0.5)return true;
+
+  // La misma secuencia corta (1 a 4 caracteres) repetida hasta llenar todo
+  // el texto. Solo cuenta si el bloque se repite AL MENOS dos veces
+  // completas (largo acotado a la mitad de la longitud) -- sin ese límite,
+  // palabras reales de 5 letras como "obvio" coinciden por casualidad con
+  // "obvi"+"obvi" truncado y quedaban mal marcadas como incoherentes.
+  if(sinEspacios.length>=5){
+    var maxLargo=Math.min(4,Math.floor(sinEspacios.length/2));
+    for(var largo=1;largo<=maxLargo;largo++){
+      var sec=sinEspacios.slice(0,largo);
+      if(sec.repeat(Math.ceil(sinEspacios.length/largo)).slice(0,sinEspacios.length).toLowerCase()===sinEspacios.toLowerCase()){
+        return true;
+      }
+    }
+  }
+
+  // Una sola "palabra" (sin espacios) con pinta de tecleo de teclado --
+  // pocos caracteres distintos, o contiene una racha típica de fila de
+  // teclado (asdf, qwerty, zxcv, etc.)
+  if(t.indexOf(' ')===-1&&sinEspacios.length>=4){
+    var distintos={};
+    sinEspacios.toLowerCase().split('').forEach(function(c){distintos[c]=true});
+    if(Object.keys(distintos).length<=2)return true;
+    if(PATRONES_TECLADO.test(sinEspacios))return true;
+  }
+
+  return false;
+}
+
+function mostrarAvisoIncoherenteModulo(){
+  var div=document.createElement('div');
+  div.className='msg soul';
+  div.textContent='No llegué a entender bien eso. ¿Querés intentarlo de nuevo con otras palabras?';
+  document.getElementById('moduloArea').appendChild(div);
+  var wrap=document.createElement('div');
+  wrap.style.cssText='text-align:center;padding:.4rem 0';
+  var btn=document.createElement('button');
+  btn.textContent='Intentar de nuevo';
+  btn.style.cssText='padding:.6rem 1.2rem;background:none;border:1px solid rgba(201,168,76,.4);border-radius:3px;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer';
+  btn.onclick=function(){
+    wrap.remove();
+    document.getElementById('moduloIn').focus();
+  };
+  wrap.appendChild(btn);
+  document.getElementById('moduloArea').appendChild(wrap);
+  scrollAlFondo('moduloArea');
+}
+
 async function sendModulo(){
+  var btn=document.getElementById('moduloBtn');
+  // Ademas del boton, tambien guarda contra el Enter del input -- sin este
+  // chequeo, Enter no respetaba el disabled del boton y se podia mandar un
+  // segundo mensaje mientras el anterior todavia estaba en vuelo.
+  if(btn.disabled)return;
   var inp=document.getElementById('moduloIn');
   var txt=inp.value.trim();if(!txt)return;
+
+  // Se corta ACA, antes de gastar una llamada a Soul -- se muestra igual
+  // en el chat (para que quede registro de que se intento mandar algo)
+  // pero nunca se agrega a moduloHistory, así que Claude no llega a verlo
+  // ni a "interpretarlo".
+  if(textoEsIncoherente(txt)){
+    addModuloMsg('user',txt);
+    inp.value='';
+    mostrarAvisoIncoherenteModulo();
+    return;
+  }
+
   inp.value='';
-  document.getElementById('moduloBtn').disabled=true;
+  btn.disabled=true;
+  inp.disabled=true;
   await enviarAlModulo(txt);
 }
 
@@ -1917,6 +2074,7 @@ async function sendModuloMsg(){
     moduloHistory.push({role:'assistant',content:cierreEmergencia});
     guardarModuloHistorial().catch(function(){});
     document.getElementById('moduloBtn').disabled=false;
+    document.getElementById('moduloIn').disabled=false;
     setTimeout(manejarCierreDeModulo,800);
     return;
   }
@@ -1937,6 +2095,28 @@ async function sendModuloMsg(){
     });
     var reply=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
     if(typing)typing.remove();
+
+    // Respuesta truncada -- se cortó por max_tokens antes de terminar. No
+    // se muestra como si fuera un mensaje completo, no se agrega a
+    // moduloHistory (así Claude no la ve como "ya dicho" en el próximo
+    // turno) y no pasa por addModuloMsg, que es donde se detecta la frase
+    // de cierre de fase ("Vamos a lo que sigue.") -- así nunca se avanza de
+    // fase ni se recomienda un módulo en base a un texto incompleto. Se
+    // ofrece reintentar el mismo turno en vez de dejar a la persona sin
+    // salida. (El texto sin sentido de la PERSONA se filtra aparte, antes
+    // de llegar acá -- ver textoEsIncoherente en sendModulo.) Mismo criterio
+    // que el chat principal (respuestaSoulIncompleta): cualquier stop_reason
+    // que no sea un cierre limpio se trata como incompleto, no solo
+    // max_tokens.
+    if(respuestaSoulIncompleta(data.stop_reason)){
+      var avisoTrunc=document.createElement('div');
+      avisoTrunc.className='msg soul';
+      avisoTrunc.textContent='Soul no pudo terminar este mensaje.';
+      document.getElementById('moduloArea').appendChild(avisoTrunc);
+      agregarBotonReintentarModulo();
+      return;
+    }
+
     addModuloMsg('soul',reply);
     moduloHistory.push({role:'assistant',content:reply});
     guardarModuloHistorial().catch(function(){});
@@ -1958,9 +2138,36 @@ async function sendModuloMsg(){
   }finally{
     if(!paywallActivado){
       document.getElementById('moduloBtn').disabled=false;
+      document.getElementById('moduloIn').disabled=false;
       document.getElementById('moduloIn').focus();
     }
   }
+}
+
+// Botón de reintento para una respuesta truncada/incoherente (Decision 7) --
+// reintenta el MISMO turno (el último mensaje en moduloHistory sigue siendo
+// el de la persona, nunca se le agregó nada nuevo), no hace falta que
+// vuelva a escribir.
+function agregarBotonReintentarModulo(){
+  var div=document.createElement('div');
+  div.style.cssText='text-align:center;padding:.4rem 0';
+  document.getElementById('moduloArea').appendChild(div);
+  var btn=document.createElement('button');
+  btn.textContent='Reintentar →';
+  btn.style.cssText='padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.08em;cursor:pointer';
+  btn.onclick=function(){
+    div.remove();
+    document.getElementById('moduloBtn').disabled=true;
+    document.getElementById('moduloIn').disabled=true;
+    var typing=document.createElement('div');
+    typing.className='msg soul typing';typing.id='moduloTyping';
+    typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    document.getElementById('moduloArea').appendChild(typing);
+    scrollAlFondo('moduloArea');
+    sendModuloMsg();
+  };
+  div.appendChild(btn);
+  scrollAlFondo('moduloArea');
 }
 var usuarioId=null;
 
@@ -2121,7 +2328,18 @@ async function llamarChat(datos,url){
 // Version con streaming de /api/chat -- usada solo por el chat principal
 // (enviarAlChat), para que el texto de Soul aparezca progresivamente en vez
 // de esperar a que termine de generarse entera. onChunk se llama con el
-// texto acumulado hasta el momento cada vez que llega un pedazo nuevo.
+// texto VISIBLE acumulado hasta el momento (nunca incluye la marca de
+// stopReason -- ver mas abajo) cada vez que llega un pedazo nuevo.
+//
+// El servidor (api/chat.js) escribe, ya al final del cuerpo, una marca
+// invisible (caracter NUL + "SOULSTOP:" + stop_reason) -- headers ya se
+// mandaron al arrancar el stream, asi que no hay forma de mandar esto en
+// un header, y
+// este endpoint no usa HTTP trailers. Se corta el texto ahi antes de
+// mostrarlo (nunca llega a pintarse en pantalla) y se devuelve aparte, para
+// que enviarAlChat pueda saber si la respuesta se cortó por max_tokens
+// (Decision 4: no hay que ofrecer "Revisar mi perfil" sobre una respuesta
+// incompleta).
 async function llamarChatStreaming(datos,onChunk){
   var res=await fetchConSesion(function(){
     return fetch('/api/chat',{
@@ -2142,14 +2360,44 @@ async function llamarChatStreaming(datos,onChunk){
   window.limiteChatRestante=parseInt(res.headers.get('X-Limite-Restante'),10);
   var reader=res.body.getReader();
   var decoder=new TextDecoder();
-  var texto='';
+  var crudo='';
+  var MARCA=String.fromCharCode(0)+'SOULSTOP:';
   while(true){
     var paso=await reader.read();
     if(paso.done)break;
-    texto+=decoder.decode(paso.value,{stream:true});
-    onChunk(texto);
+    crudo+=decoder.decode(paso.value,{stream:true});
+    onChunk(textoVisibleSinMarca(crudo,MARCA));
   }
-  return texto;
+  var marcaIdxFinal=crudo.indexOf(MARCA);
+  if(marcaIdxFinal===-1){
+    // Sin marca completa al terminar el stream -- si la conexión se cortó
+    // justo a mitad de la marca, la cola de crudo puede tener un
+    // fragmento parcial (ej. NUL+"SOULS") que nunca hay que tratar como
+    // texto real. textoVisibleSinMarca ya sabe retener esa cola ambigua.
+    return{texto:textoVisibleSinMarca(crudo,MARCA),stopReason:null};
+  }
+  return{texto:crudo.slice(0,marcaIdxFinal),stopReason:crudo.slice(marcaIdxFinal+MARCA.length).trim()};
+}
+
+// La marca puede llegar partida entre dos chunks del stream (ej. un chunk
+// termina justo en NUL+"SOUL" y el siguiente trae "STOP:max_tokens") -- si
+// se buscara la marca completa con indexOf en cada chunk sin más, el
+// fragmento parcial ("SOUL", con el NUL invisible antes) se pintaría en
+// pantalla un instante antes de autocorregirse en el chunk siguiente. Esta
+// función retiene (no muestra todavía) cualquier cola del texto que podría
+// ser el arranque de la marca partida, hasta que el próximo chunk la
+// complete o la descarte. Nunca corta contenido legítimo: el texto real
+// solo se retiene mientras coincide exactamente con un prefijo de MARCA.
+function textoVisibleSinMarca(crudo,MARCA){
+  var idx=crudo.indexOf(MARCA);
+  if(idx!==-1)return crudo.slice(0,idx);
+  var maxCola=Math.min(MARCA.length-1,crudo.length);
+  for(var largo=maxCola;largo>0;largo--){
+    if(MARCA.indexOf(crudo.slice(crudo.length-largo))===0){
+      return crudo.slice(0,crudo.length-largo);
+    }
+  }
+  return crudo;
 }
 
 function extraerJSON(texto){
@@ -2768,6 +3016,12 @@ function manejarBotonVolverAndroid(){
   if(!CapApp)return;
   try{
     CapApp.addListener('backButton',function(){
+      // Con el menu principal abierto, el gesto/boton fisico lo cierra en
+      // vez de navegar -- mismo criterio que tocar afuera del panel.
+      if(typeof menuPrincipalEstaAbierto==='function'&&menuPrincipalEstaAbierto()){
+        cerrarMenuPrincipal();
+        return;
+      }
       if(etapaHistorial.length>0){
         ir(etapaHistorial.pop(),true);
       }else if(confirm('¿Salir de Soul?')){
@@ -2799,6 +3053,7 @@ async function cargarProgreso(email){
       window.userNombre=u.nombre;
       window.userFechaNacimiento=u.fecha_nacimiento;
       window.usuarioPlan=u.plan||'free';
+      actualizarBadgePlan();
       registrarPushTokenSiNativo();
       window.dispatchEvent(new CustomEvent('soul:sesion-lista'));
       if(window.pushDeepLinkPendiente){
@@ -3208,6 +3463,10 @@ async function finalizarReconfirmacion(){
   document.getElementById('validacionCargando').style.display='block';
   document.getElementById('validacionCargando').textContent='Buscando matches...';
   try{ await calcularMatches(); }catch(e){}
+  // Si calcularMatches() detecto el mail sin confirmar, ya navego sola a
+  // ConfirmarEmail (ver calcularMatches) -- no pisar esa pantalla con
+  // Matches, que quedaria mostrando resultados sin haber podido calcularlos.
+  if(window.matchBloqueadoPorEmail)return;
   mostrarMisMatches(false);
 }
 
@@ -3414,9 +3673,89 @@ function preseleccionarChipsMultiPerfil(g,valores){
 
 window.mpFotoCaraB64=null;
 window.mpFotoCuerpoB64=null;
-// Misma compresion que loadPhoto() del onboarding (max 800px, JPEG 75%) --
-// duplicada a proposito, con variables propias, para no tocar el estado
-// del onboarding.
+// Compresion compartida (max 800px por lado, JPEG 75%) -- usada por los 4
+// puntos de entrada de foto (onboarding/perfil x galeria/camara nativa),
+// para que "mantener compresion y guardado actual" sea literal: un solo
+// lugar que decide como se comprime, no cuatro copias que puedan divergir.
+function comprimirFotoDesdeURL(url){
+  return new Promise(function(resolve,reject){
+    var img=new Image();
+    img.onload=function(){
+      var MAX=800;
+      var w=img.width,h=img.height;
+      if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
+      else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
+      var canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(canvas.toDataURL('image/jpeg',0.75));
+    };
+    img.onerror=reject;
+    img.src=url;
+  });
+}
+
+// Toma una foto con la camara NATIVA (plugin @capacitor/camera) en vez de
+// confiar en el atributo capture="user"/"environment" del <input type=file>
+// -- confirmado en la practica que el WebView de Android no lo respeta (el
+// boton "Tomar foto" terminaba abriendo la galeria igual que "+"). El
+// permiso de camara se pide recien aca, al llamar a getPhoto() -- nunca
+// antes. direction (FRONT/REAR) es un pedido best-effort: el plugin en
+// Android delega en la app de camara del sistema via intent (confirmado
+// leyendo su AndroidManifest.xml -- no declara android.permission.CAMERA,
+// solo <queries> de package visibility), y esa app decide que lente usar
+// por default; en iOS si se respeta. Devuelve null si no hay Capacitor
+// Camera disponible (navegador de escritorio, o el plugin no cargo) o si
+// la persona cancelo -- en cualquiera de esos casos, quien llama cae al
+// selector de archivos comun como respaldo.
+async function tomarFotoNativa(isCara){
+  if(!window.Capacitor||!window.Capacitor.isNativePlatform||!window.Capacitor.isNativePlatform())return null;
+  var CameraPlugin=window.Capacitor.Plugins&&window.Capacitor.Plugins.Camera;
+  if(!CameraPlugin)return null;
+  try{
+    var foto=await CameraPlugin.getPhoto({
+      resultType:'dataUrl',
+      source:'CAMERA',
+      direction:isCara?'FRONT':'REAR',
+      quality:85,
+      allowEditing:false,
+      saveToGallery:false,
+      correctOrientation:true
+    });
+    return (foto&&foto.dataUrl)||null;
+  }catch(e){
+    // Cancelo el picker, o el dispositivo no tiene camara -- no es un error
+    // real que haya que mostrar, solo no hay foto.
+    return null;
+  }
+}
+
+// Punto de entrada unico para "Tomar foto" en los 4 recuadros (onboarding
+// cara/cuerpo, perfil cara/cuerpo). contexto decide que globals/ids usar.
+async function elegirFotoCamara(contexto,isCara){
+  var upId = isCara ? (contexto==='perfil'?'upCaraPerfil':'upCara') : (contexto==='perfil'?'upCuerpoPerfil':'upCuerpo');
+  var inputId = isCara ? (contexto==='perfil'?'inCaraPerfil':'inCara') : (contexto==='perfil'?'inCuerpoPerfil':'inCuerpo');
+  var loadFn = contexto==='perfil' ? 'loadPhotoPerfil' : 'loadPhoto';
+  var dataUrl = await tomarFotoNativa(isCara);
+  if(!dataUrl){
+    // Fallback claro: sin camara nativa disponible (o cancelada de forma
+    // que no se pudo ni intentar), se cae al selector de archivos normal
+    // en vez de dejar el boton sin hacer nada.
+    var inputGaleria=document.getElementById(inputId);
+    if(inputGaleria)inputGaleria.click();
+    return;
+  }
+  var b64=await comprimirFotoDesdeURL(dataUrl);
+  if(contexto==='perfil'){
+    if(isCara)window.mpFotoCaraB64=b64;else window.mpFotoCuerpoB64=b64;
+  }else{
+    if(isCara){window.fotoCaraB64=b64;caraOk=true;}else{window.fotoCuerpoB64=b64;cuerpoOk=true;}
+    chkStep(6);
+  }
+  var up=document.getElementById(upId);
+  if(up)up.innerHTML='<img src="'+b64+'" alt="foto"><input type="file" id="'+inputId+'" accept="image/*" style="display:none" onchange="'+loadFn+'(this,\''+upId+'\','+isCara+')">';
+}
+
 function loadPhotoPerfil(inp,upId,isCara){
   var file=inp.files[0];if(!file)return;
   var url=URL.createObjectURL(file);
@@ -3425,18 +3764,9 @@ function loadPhotoPerfil(inp,upId,isCara){
   // vista previa -- sin esto, el recuadro queda sin forma de volver a
   // tocarse para elegir otra foto una vez que ya se cargo una.
   up.innerHTML='<img src="'+url+'" alt="foto"><input type="file" id="'+inp.id+'" accept="image/*" style="display:none" onchange="loadPhotoPerfil(this,\''+upId+'\','+isCara+')">';
-  var img=new Image();
-  img.onload=function(){
-    var MAX=800;
-    var w=img.width,h=img.height;
-    if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
-    else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
-    var canvas=document.createElement('canvas');
-    canvas.width=w;canvas.height=h;
-    canvas.getContext('2d').drawImage(img,0,0,w,h);
-    var b64=canvas.toDataURL('image/jpeg',0.75);
+  comprimirFotoDesdeURL(url).then(function(b64){
     if(isCara)window.mpFotoCaraB64=b64;else window.mpFotoCuerpoB64=b64;
-  };
+  });
   img.src=url;
 }
 
@@ -3493,15 +3823,21 @@ async function mostrarMiPerfil(){
     // mostrarRevisionDatosPreMatching): mismo formulario que Mi Perfil, pero
     // sin lenguaje de "aceptar una interpretación" -- son hechos editables,
     // no la lectura de Soul (esa es la Pantalla B, mostrarConclusionSoul).
-    // Se ocultan Volver y el reclamo de "no estoy de acuerdo" porque no
-    // aplican a mitad de este flujo puntual.
+    // Se ocultan Volver y la seccion "La conclusión de Soul" porque no
+    // aplican a mitad de este flujo puntual (el perfil recien extraido
+    // todavia no se guardo en 'perfiles' en este momento -- ver
+    // cargarConclusionMiPerfil).
     document.getElementById('miPerfilTitulo').textContent=window.revisionPreMatching?'Revisá tus datos':'Mi perfil';
     document.getElementById('miPerfilGuardarBtn').textContent=window.revisionPreMatching?'Continuar →':'Guardar cambios →';
     document.getElementById('miPerfilVolverBtn').style.display=window.revisionPreMatching?'none':'block';
-    document.getElementById('miPerfilNoAcuerdoLink').style.display=window.revisionPreMatching?'none':'block';
 
     cargando.style.display='none';
     document.getElementById('miPerfilForm').style.display='block';
+
+    // Se carga aparte (no bloquea el resto del formulario si tarda o falla)
+    // -- la conclusion editada tiene que verse siempre que se vuelve a Mi
+    // Perfil, no solo en Matches (Decision 3).
+    cargarConclusionMiPerfil();
   }catch(e){
     cargando.innerHTML='No pudimos cargar tus datos. Probá de nuevo.'+htmlBotonReportar('mi_perfil');
   }
@@ -3564,6 +3900,107 @@ async function guardarMiPerfil(){
   }
 }
 
+// Carga y renderiza la sección B "La conclusión de Soul" dentro de Mi
+// Perfil (Decision 3) -- separada de los datos duros de arriba. No aplica
+// durante "Revisá tus datos" (window.revisionPreMatching): en ese momento
+// el perfil recién extraído todavía no se guardó en la tabla 'perfiles'
+// (eso pasa después, en continuarTrasValidacion), así que leerla ahora
+// mostraría una conclusión vieja o vacía.
+async function cargarConclusionMiPerfil(){
+  var sec=document.getElementById('miPerfilConclusionSeccion');
+  if(window.revisionPreMatching){ sec.style.display='none'; return; }
+  sec.style.display='block';
+  document.getElementById('miPerfilConclusionCargando').style.display='block';
+  document.getElementById('miPerfilConclusionCargando').textContent='Cargando tu conclusión...';
+  document.getElementById('miPerfilConclusionTexto').style.display='none';
+  document.getElementById('miPerfilConclusionBotones').style.display='none';
+  document.getElementById('solicitudRevisionForm').style.display='none';
+  document.getElementById('miPerfilConclusionErr').style.display='none';
+  try{
+    var perfiles=await leerTabla('perfiles','usuario_id=eq.'+usuarioId);
+    var p=(perfiles&&perfiles[0])||null;
+    if(!p||(!p.grupo1&&!p.grupo2&&!p.grupo3&&!p.grupo4)){
+      // Todavía no hay conclusión (onboarding sin terminar) -- no hay nada
+      // que mostrar acá.
+      sec.style.display='none';
+      return;
+    }
+    window.miPerfilConclusionPerfil=p;
+    var perfilParaResumen={grupo1:p.grupo1||null,grupo2:p.grupo2||null,grupo3:p.grupo3||null,grupo4:p.grupo4||null,indice_disponibilidad:p.indice_disponibilidad||null};
+    var data=await llamarChat({model:'claude-sonnet-4-6',max_tokens:300,system:RESUMEN_PERFIL_PROMPT,messages:[{role:'user',content:'Perfil: '+JSON.stringify(perfilParaResumen)}]});
+    var resumen=limpiarMarkdown(data.content.map(function(b){return b.text||''}).join(''));
+
+    var confirmada=await conclusionEstaConfirmada();
+    var estadoEl=document.getElementById('miPerfilConclusionEstado');
+    var fechaEl=document.getElementById('miPerfilConclusionFecha');
+    if(confirmada){
+      estadoEl.textContent='Confirmada';
+      estadoEl.style.color='#4ecb71';
+      fechaEl.textContent=p.perfil_validado_en?('Confirmada el '+new Date(p.perfil_validado_en).toLocaleDateString('es-AR')):'';
+    }else{
+      estadoEl.textContent='Pendiente de confirmar';
+      estadoEl.style.color='#c9a84c';
+      fechaEl.textContent='';
+    }
+    document.getElementById('miPerfilConclusionTexto').textContent=resumen;
+    document.getElementById('miPerfilConclusionTexto').style.display='block';
+    document.getElementById('miPerfilConclusionCargando').style.display='none';
+    document.getElementById('miPerfilConclusionBotones').style.display='flex';
+    // "Esto me representa" solo tiene sentido cuando todavía no está
+    // confirmada -- si ya lo está, solo queda visible "Quiero ajustar algo".
+    document.getElementById('miPerfilBtnRepresenta').style.display=confirmada?'none':'block';
+  }catch(e){
+    console.error('Error cargando la conclusión de Soul:',e);
+    document.getElementById('miPerfilConclusionCargando').textContent='No pudimos cargar tu conclusión. Probá de nuevo.';
+  }
+}
+
+// "Esto me representa" desde Mi Perfil (Decision 3/4) -- versión self-
+// contenida de confirmarPerfilOk() para cuando la persona está revisando su
+// perfil ya existente, no en medio del onboarding (acá no hay
+// window.perfilParaValidar ni pipeline de módulos/matches que continuar
+// después). Guarda, ESPERA la respuesta real del servidor y recién ahí
+// vuelve a mostrar la conclusión actualizada en el mismo lugar -- nunca
+// manda a ningún panel central (Decision 4).
+async function confirmarConclusionDesdeMiPerfil(){
+  var btn=document.getElementById('miPerfilBtnRepresenta');
+  var errEl=document.getElementById('miPerfilConclusionErr');
+  if(btn.disabled)return;
+  btn.disabled=true;
+  errEl.style.display='none';
+  var p=window.miPerfilConclusionPerfil||{};
+  var datosUsuario={};
+  try{
+    var usuarios=await leerTabla('usuarios','id=eq.'+usuarioId);
+    datosUsuario=(usuarios&&usuarios[0])||{};
+  }catch(e){}
+  var perfilParaSnapshot={grupo1:p.grupo1||null,grupo2:p.grupo2||null,grupo3:p.grupo3||null,grupo4:p.grupo4||null,indice_disponibilidad:p.indice_disponibilidad||null};
+  var snapshot=construirSnapshotConclusion(perfilParaSnapshot,datosUsuario);
+  try{
+    var guardado=await guardarTabla('perfiles',{
+      usuario_id:usuarioId,
+      perfil_validado:true,
+      perfil_validado_en:new Date().toISOString(),
+      perfil_validado_snapshot:snapshot
+    });
+    if(!guardado||!Array.isArray(guardado)||guardado.length===0||guardado[0].usuario_id!==usuarioId){
+      throw new Error('confirmacion_sin_guardar');
+    }
+  }catch(e){
+    btn.disabled=false;
+    errEl.textContent='No pudimos guardar la confirmación. Probá de nuevo.';
+    errEl.style.display='block';
+    return;
+  }
+  // Recién ahora, con la confirmación ya guardada, se recalculan matches
+  // (Decision 4) -- si esto detecta el mail sin confirmar, ya navega sola a
+  // ConfirmarEmail (ver calcularMatches); si no, se sigue viendo Mi Perfil
+  // con la conclusión recién confirmada, sin mandar a ningún panel central.
+  try{ await calcularMatches(); }catch(e){}
+  if(window.matchBloqueadoPorEmail)return;
+  await cargarConclusionMiPerfil();
+}
+
 // Pedido de revision manual de una parte del perfil (Decision 5) -- nunca
 // reconstruye nada solo/a: solo queda registrado para que la administradora
 // lo revise a mano (ver seccion "Solicitudes de revision de perfil" en
@@ -3589,10 +4026,28 @@ async function enviarSolicitudRevision(){
   btn.textContent='Enviando...';
   try{
     await guardarTabla('solicitudes_revision_perfil',{texto_cuestionado:texto,explicacion:explicacion});
+    // "Quiero ajustar algo" invalida cualquier confirmación previa -- no
+    // solo queda el pedido registrado para la administradora, el estado
+    // visible en Mi Perfil también pasa a "Pendiente de confirmar" (Decision
+    // 3/4). No se recalculan matches acá -- eso queda para cuando la
+    // administradora corrija el perfil a mano y la persona lo vuelva a
+    // confirmar.
+    await guardarTabla('perfiles',{usuario_id:usuarioId,perfil_validado:false,perfil_validado_en:null,perfil_validado_snapshot:null,ajuste_perfil_nota:(texto+' -- '+explicacion)}).catch(function(){});
     document.getElementById('srTexto').value='';
     document.getElementById('srExplicacion').value='';
     btn.style.display='none';
     exito.style.display='block';
+    // Se espera un momento para que se alcance a leer la confirmación y
+    // recién ahí se refresca la conclusión (Pendiente de confirmar) en el
+    // mismo lugar -- nunca se navega a otra pantalla (Decision 4).
+    setTimeout(function(){
+      btn.style.display='block';
+      btn.disabled=false;
+      btn.textContent='Enviar pedido →';
+      exito.style.display='none';
+      document.getElementById('solicitudRevisionForm').style.display='none';
+      cargarConclusionMiPerfil();
+    },1600);
   }catch(e){
     console.error('Error enviando solicitud de revision:',e);
     btn.disabled=false;
@@ -3805,7 +4260,12 @@ async function enviarReflexion(){
 
   try{
     var soulEl=null;
-    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory},function(parcial){
+    // llamarChatStreaming ahora devuelve {texto, stopReason}, no un string
+    // crudo -- este caller se habia quedado sin actualizar (auditoria de
+    // callers, Decision 2) y le pasaba el objeto entero a limpiarMarkdown,
+    // que llama a .replace() sobre el string y hubiera roto con un
+    // TypeError en cada mensaje de esta charla.
+    var resultado=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory},function(parcial){
       if(!soulEl){
         var t3=document.getElementById('reflexionTyping');if(t3)t3.remove();
         soulEl=addReflexionMsg('soul',parcial);
@@ -3813,8 +4273,15 @@ async function enviarReflexion(){
         soulEl.textContent=parcial;scrollAlFondo('reflexionArea');
       }
     });
-    var reply=limpiarMarkdown(crudo);
     var t4=document.getElementById('reflexionTyping');if(t4)t4.remove();
+    if(respuestaSoulIncompleta(resultado.stopReason)){
+      // Misma disciplina que enviarAlChat/sendModuloMsg: una respuesta
+      // cortada no se guarda como si fuera una respuesta real y completa.
+      if(soulEl)soulEl.textContent='Soul no pudo terminar este mensaje. Probá de nuevo.';
+      else addReflexionMsg('soul','Soul no pudo terminar este mensaje. Probá de nuevo.');
+      return;
+    }
+    var reply=limpiarMarkdown(resultado.texto);
     if(soulEl)soulEl.textContent=reply;else addReflexionMsg('soul',reply);
     reflexionHistory.push({role:'assistant',content:reply});
     guardarReflexionHistorial();
@@ -4047,6 +4514,81 @@ function ir(n,sinHistorial){
     document.getElementById('feedbackCargando').style.display='none';
     document.getElementById('feedbackError').style.display='none';
   }
+  actualizarVisibilidadMenu();
+}
+
+// Pantalla de términos completos, dentro de la SPA -- reemplaza el link
+// externo a legal.html que antes tenía el resumen del consentimiento
+// (target="_blank" nunca se comportó como pestaña nueva en el WebView de
+// Android: navegaba el WebView entero fuera de soul.html, perdiendo la
+// sesión en memoria apenas alguien tocaba "Volver" desde ahí). Reusable
+// desde el consentimiento del onboarding y desde el menú principal (ver
+// abrirMenuPrincipal) -- misma pantalla en los dos casos.
+function irATerminosCompletos(){
+  ir('TerminosCompletos');
+}
+
+// Boton "Volver" generico, para pantallas (como Términos completos) que no
+// tienen un destino fijo propio -- usa la MISMA pila que ya usa el botón
+// físico/gesto de Android (manejarBotonVolverAndroid), asi los dos
+// caminos (visible y físico) hacen exactamente lo mismo, nunca dos
+// implementaciones que puedan divergir.
+function volverEtapaAnterior(){
+  if(etapaHistorial.length>0){
+    ir(etapaHistorial.pop(),true);
+  }else{
+    volverAMenuPrincipal();
+  }
+}
+
+// Etapas de onboarding puro (antes de tener algo que mostrar en un menu
+// real: sin matches, sin modulos, sin plan resuelto todavia) -- el resto
+// de las etapas autenticadas muestran el boton/menu principal persistente.
+var ETAPAS_SIN_MENU_PRINCIPAL=[0,1,2,3];
+function actualizarVisibilidadMenu(){
+  var btn=document.getElementById('menuPrincipalBtn');
+  if(!btn)return;
+  var mostrar=!!usuarioId&&ETAPAS_SIN_MENU_PRINCIPAL.indexOf(etapaActual)===-1;
+  btn.style.display=mostrar?'flex':'none';
+}
+
+function abrirMenuPrincipal(){
+  document.getElementById('menuPrincipalOverlay').style.display='block';
+}
+// Tambien la usa manejarBotonVolverAndroid() -- con el menu abierto, el
+// boton/gesto fisico lo cierra en vez de navegar (comportamiento esperado
+// en un panel lateral).
+function cerrarMenuPrincipal(){
+  document.getElementById('menuPrincipalOverlay').style.display='none';
+}
+function menuPrincipalEstaAbierto(){
+  var ov=document.getElementById('menuPrincipalOverlay');
+  return !!ov&&ov.style.display==='block';
+}
+
+// Indicador discreto y persistente del plan (punto 4) -- se llama apenas
+// se resuelve window.usuarioPlan (cargarProgreso), nunca antes. El texto
+// sale siempre del plan que ya resolvió el backend (verificarUsuario via
+// api/leer.js) -- este código solo lo muestra, nunca lo decide.
+function actualizarBadgePlan(){
+  var esPro=window.usuarioPlan==='pro';
+  var label=document.getElementById('menuPrincipalPlanLabel');
+  if(label)label.textContent=esPro?'Pro':'Free';
+  var linea=document.getElementById('menuPrincipalPlanLinea');
+  if(linea)linea.textContent=esPro?'Estás en Plan Pro.':'Estás en Plan Free.';
+  var item=document.getElementById('menuItemPlan');
+  if(item){
+    item.textContent=esPro?'Plan Pro':'Plan Free — Conocer Soul Pro';
+    item.onclick=function(){ cerrarMenuPrincipal(); if(esPro)mostrarMiPerfil(); else mostrarInfoPro(); };
+  }
+  actualizarVisibilidadMenu();
+}
+
+function mostrarInfoPro(){
+  document.getElementById('modalInfoPro').style.display='flex';
+}
+function cerrarInfoPro(){
+  document.getElementById('modalInfoPro').style.display='none';
 }
 
 // Mensaje motivacional fijo, sin generar con Claude -- rota entre variantes
@@ -4214,21 +4756,12 @@ function loadPhoto(inp,upId,isCara){
   // foto antes de terminar el onboarding.
   up.innerHTML='<img src="'+url+'" alt="foto"><input type="file" id="'+inp.id+'" accept="image/*" style="display:none" onchange="loadPhoto(this,\''+upId+'\','+isCara+')">';
 
-  // Redimensiona a max 800px por lado y comprime a JPEG antes de guardar en base64
-  // (una foto de celular sin comprimir puede pesar varios MB).
-  var img=new Image();
-  img.onload=function(){
-    var MAX=800;
-    var w=img.width,h=img.height;
-    if(w>h){if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}}
-    else{if(h>MAX){w=Math.round(w*MAX/h);h=MAX;}}
-    var canvas=document.createElement('canvas');
-    canvas.width=w;canvas.height=h;
-    canvas.getContext('2d').drawImage(img,0,0,w,h);
-    var b64=canvas.toDataURL('image/jpeg',0.75);
+  // Redimensiona a max 800px por lado y comprime a JPEG antes de guardar en
+  // base64 (una foto de celular sin comprimir puede pesar varios MB) --
+  // misma funcion compartida que usa tambien la camara nativa.
+  comprimirFotoDesdeURL(url).then(function(b64){
     if(isCara)window.fotoCaraB64=b64;else window.fotoCuerpoB64=b64;
-  };
-  img.src=url;
+  });
 
   if(isCara)caraOk=true;else cuerpoOk=true;
   chkStep(6);
@@ -4502,11 +5035,75 @@ async function sendMsg(){
 // alguien directamente, por el mismo camino que un mensaje normal -- es
 // Soul (vía el prompt) quien decide si ya es momento de cerrar o si prefiere
 // acompañar un poco más antes (ver TODAVÍA ES MUY PRONTO PARA PAUSAR).
+// Antes no pedía confirmación (mandaba el mensaje directo a Soul) y, una
+// vez que Soul cerraba con calidez, no había ningún destino real -- la
+// persona quedaba mirando la charla cerrada sin forma de salir (ver
+// pausarChatPrincipal, que es quien de verdad corta la charla). Ahora
+// confirma ANTES de arrancar el cierre, con el estado real de guardado
+// (guardadoTempranoHecho), y el cierre en si (pausarChatPrincipal) navega
+// a Inicio en vez de dejar a la persona ahi.
 function pedirPausaChat(){
+  var mensajeConfirmar=guardadoTempranoHecho
+    ?'¿Dejar esta charla por ahora? Lo que hablaste hasta acá ya está guardado -- vas a poder seguir cuando quieras.'
+    :'Todavía no se guardó nada de esta charla -- si la dejás ahora, se pierde. ¿Salir igual?';
+  if(!confirm(mensajeConfirmar))return;
   document.getElementById('sendBtn').disabled=true;
   enviarAlChat('Prefiero dejar esto por ahora.').finally(function(){
     document.getElementById('sendBtn').disabled=false;
   });
+}
+
+// Texto de cierre fluido (Decision 2): reemplaza el auto-avance silencioso
+// de antes -- ahora SIEMPRE se le muestra este mensaje a la persona y un
+// boton explicito para seguir, nunca se la manda sola al pipeline de
+// matching con un setTimeout.
+var TEXTO_CIERRE_FLUIDO='Gracias por compartir todo esto conmigo. Con lo que me contaste ya puedo construir una primera lectura sobre vos. No es una definición cerrada: vas a poder revisarla, cuestionarla y ajustarla. Cuando quieras, seguimos con tu perfil.';
+
+// true cuando se decidio cerrar (sola, manual o forzada) pero el ultimo
+// mensaje de Soul en ese momento terminaba en una pregunta sin responder --
+// en vez de cerrar encima de esa pregunta, se espera la proxima respuesta
+// real de la persona y recien ahi se dispara el cierre fluido.
+var cierrePendienteTrasRespuesta=false;
+
+// true cuando la ULTIMA respuesta real de Soul (la que se acaba de guardar
+// en chatHistory) llegó cortada por max_tokens -- ver enviarAlChat, que la
+// actualiza en cada turno. Ninguna decisión de cierre puede apoyarse en un
+// texto incompleto (Decision 4).
+var ultimaRespuestaSoulTruncada=false;
+
+// Heuristica simple: mira solo el ULTIMO mensaje de Soul (no toda la
+// charla) y si termina en "?" se lo trata como pregunta abierta sin
+// responder todavia.
+function ultimoMensajeSoulTienePregunta(){
+  for(var i=chatHistory.length-1;i>=0;i--){
+    if(chatHistory[i].role==='assistant')return /\?\s*$/.test((chatHistory[i].content||'').trim());
+  }
+  return false;
+}
+
+function mostrarBotonRevisarPerfil(){
+  var viejo=document.getElementById('revisarPerfilBtnWrap');if(viejo)viejo.remove();
+  var div=document.createElement('div');
+  div.id='revisarPerfilBtnWrap';
+  div.style.cssText='text-align:center;padding:.6rem 0';
+  div.innerHTML='<button id="revisarPerfilBtn" style="padding:.7rem 1.6rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.06em;cursor:pointer">Revisar mi perfil →</button>';
+  document.getElementById('chatArea').appendChild(div);
+  document.getElementById('revisarPerfilBtn').onclick=function(){
+    div.remove();
+    avanzarAlMatch();
+  };
+  scrollAlFondo('chatArea');
+}
+
+// Cierre fluido real: muestra el texto acordado y un boton explicito para
+// seguir -- nunca navega sola con un setTimeout, para que la persona pueda
+// leer con calma y decidir cuando avanzar.
+function dispararCierreFluido(){
+  document.getElementById('avanzarManualBtn').style.display='none';
+  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
+  addMsg('soul',TEXTO_CIERRE_FLUIDO);
+  chatHistory.push({role:'assistant',content:TEXTO_CIERRE_FLUIDO});
+  mostrarBotonRevisarPerfil();
 }
 
 // Salida manual (boton en el header a partir de UMBRAL_MOSTRAR_BOTON_AVANZAR,
@@ -4518,10 +5115,30 @@ function pedirPausaChat(){
 function avanzarManualmente(){
   document.getElementById('avanzarManualBtn').style.display='none';
   var b=document.getElementById('pausarChatBtns');if(b)b.remove();
-  var cierre='Dale, con todo lo que charlamos ya tengo una buena base para vos.';
-  addMsg('soul',cierre);
-  chatHistory.push({role:'assistant',content:cierre});
-  avanzarAlMatch();
+  if(ultimaRespuestaSoulTruncada){
+    // La ultima respuesta de Soul quedó cortada por max_tokens -- no hay
+    // una base real para cerrar todavia (Decision 4). Se deja el botón
+    // visible de nuevo: la próxima respuesta completa vuelve a evaluar
+    // todo desde cero.
+    document.getElementById('avanzarManualBtn').style.display='inline';
+    return;
+  }
+  if(ultimoMensajeSoulTienePregunta()){
+    // No cerramos encima de una pregunta de Soul sin responder -- se espera
+    // la proxima respuesta real (ver el chequeo de cierrePendienteTrasRespuesta
+    // en enviarAlChat) y recien ahi se dispara el cierre fluido.
+    cierrePendienteTrasRespuesta=true;
+    return;
+  }
+  dispararCierreFluido();
+}
+
+// stop_reason "seguro" para guardar/actuar sobre una respuesta -- cualquier
+// otra cosa (max_tokens, null por conexión cortada, o cualquier valor
+// inesperado) se trata igual de incompleta. Nunca se confía en una señal
+// ambigua para tratar algo como "la respuesta final" (Decision 3, revisión).
+function respuestaSoulIncompleta(stopReason){
+  return stopReason!=='end_turn'&&stopReason!=='stop_sequence';
 }
 
 async function enviarAlChat(txt){
@@ -4529,6 +5146,32 @@ async function enviarAlChat(txt){
   var avisoInicio=document.getElementById('avisoInicioChat');
   if(avisoInicio)avisoInicio.style.display='none';
   chequearGuardadoTemprano();
+  await pedirRespuestaSoul();
+}
+
+function agregarBotonReintentarChat(){
+  var viejo=document.getElementById('chatReintentarWrap');if(viejo)viejo.remove();
+  var div=document.createElement('div');
+  div.id='chatReintentarWrap';
+  div.style.cssText='text-align:center;padding:.4rem 0';
+  var btn=document.createElement('button');
+  btn.textContent='Reintentar →';
+  btn.style.cssText='padding:.6rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.8rem;font-weight:600;letter-spacing:.08em;cursor:pointer';
+  btn.onclick=function(){
+    div.remove();
+    pedirRespuestaSoul();
+  };
+  div.appendChild(btn);
+  document.getElementById('chatArea').appendChild(div);
+  scrollAlFondo('chatArea');
+}
+
+// Separado de enviarAlChat (Decision 5, revisión) para que reintentar tras
+// una respuesta truncada pueda volver a pedir la respuesta SIN empujar de
+// nuevo el mensaje de la persona -- chatHistory ya termina en su turno tal
+// cual quedó, así que un reintento nunca duplica nada en lo que se manda a
+// la IA.
+async function pedirRespuestaSoul(){
   showTyping();
   try{
     // Streaming: el texto de Soul se va mostrando a medida que llega, en vez
@@ -4537,12 +5180,28 @@ async function enviarAlChat(txt){
     // mensaje de golpe). El primer pedazo que llega saca los puntitos y crea
     // la burbuja; despues solo se actualiza su texto.
     var soulEl=null;
-    var crudo=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory,rapido:true},function(parcial){
+    var resultado=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:300,system:buildSoulPrompt(),messages:chatHistory,rapido:true},function(parcial){
       if(!soulEl){hideTyping();soulEl=addMsg('soul',parcial);}
       else{soulEl.textContent=parcial;scrollAlFondo('chatArea');}
     });
-    var reply=limpiarMarkdown(crudo);
     hideTyping();
+
+    // Respuesta incompleta (truncada por max_tokens, o el stream terminó sin
+    // un cierre limpio -- ver respuestaSoulIncompleta) -- no se guarda en
+    // chatHistory como si fuera una respuesta real y definitiva, no se
+    // evalúa ningún camino de cierre, y se ofrece reintentar el MISMO turno
+    // (el mensaje de la persona ya está en chatHistory, no se toca de
+    // nuevo -- así el reintento nunca duplica nada).
+    if(respuestaSoulIncompleta(resultado.stopReason)){
+      ultimaRespuestaSoulTruncada=true;
+      if(soulEl)soulEl.remove();
+      addMsg('soul','Soul no pudo terminar este mensaje.');
+      agregarBotonReintentarChat();
+      return;
+    }
+
+    var reply=limpiarMarkdown(resultado.texto);
+    ultimaRespuestaSoulTruncada=false;
     if(soulEl)soulEl.textContent=reply;else addMsg('soul',reply);
     chatHistory.push({role:'assistant',content:reply});
     chequearGuardadoTemprano();
@@ -4554,37 +5213,50 @@ async function enviarAlChat(txt){
       guardarConversacion(false).catch(function(){});
     }
 
-    // Detectar frase de cierre de Soul -- ahora ella decide sola cuándo
-    // avanzar (no se le pregunta al usuario con dos botones "avanzar" vs
-    // "seguir charlando", que generaban confusión). El delay es solo para
-    // que se alcance a leer el mensaje antes de que arranque el pipeline.
-    var cerroSola=reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1;
-    if(cerroSola){
-      setTimeout(function(){
-        avanzarAlMatch();
-      },1800);
-    }
+    // Si un cierre (sola, manual o forzado) habia quedado esperando porque
+    // el mensaje anterior de Soul terminaba en una pregunta sin responder,
+    // esta es esa respuesta real -- se dispara el cierre fluido ahora, sin
+    // importar que diga reply (nunca se cierra con la respuesta libre de
+    // Soul a esa pregunta, que podria seguir charlando de largo).
+    if(cierrePendienteTrasRespuesta){
+      cierrePendienteTrasRespuesta=false;
+      dispararCierreFluido();
+    }else{
+      var terminaConPregunta=ultimoMensajeSoulTienePregunta();
 
-    // Red de seguridad: el cierre dependia 100% de que Soul decidiera sola
-    // (sin ningun limite) que ya cubrio los 9 temas del checklist, y de que
-    // repitiera una frase exacta -- personas reales llegaron a 60-90+
-    // mensajes sin que eso pasara nunca, charlando indefinidamente sin
-    // avanzar ni tener perfil armado. A partir de UMBRAL_MOSTRAR_BOTON_AVANZAR
-    // se le da a la persona una salida manual visible; a partir de
-    // UMBRAL_FORZAR_CIERRE se fuerza el cierre igual (mejor un perfil armado
-    // con lo que hay que dejarla sin avanzar nunca).
-    if(!cerroSola&&chatHistory.length>=UMBRAL_MOSTRAR_BOTON_AVANZAR){
-      document.getElementById('avanzarManualBtn').style.display='inline';
-    }
-    // El guard cierreForzadoDisparado evita reprogramar esto en cada mensaje
-    // siguiente una vez cruzado el umbral (sin eso, cada mensaje nuevo
-    // volvia a programar otro avanzarManualmente(), duplicando el mensaje
-    // de cierre una vez por cada uno que llegara a disparar).
-    if(!cerroSola&&!cierreForzadoDisparado&&chatHistory.length>=UMBRAL_FORZAR_CIERRE){
-      cierreForzadoDisparado=true;
-      setTimeout(function(){
-        avanzarManualmente();
-      },1800);
+      // Detectar frase de cierre de Soul -- ahora ella decide sola cuándo
+      // avanzar (no se le pregunta al usuario con dos botones "avanzar" vs
+      // "seguir charlando", que generaban confusión).
+      var cerroSola=reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1;
+      if(cerroSola){
+        // El prompt le pide a Soul que esta frase nunca sea una pregunta,
+        // pero si el mensaje completo igual termina en una (por ej. una
+        // pregunta suelta antes de la frase de cierre), no cerramos encima
+        // -- se espera la proxima respuesta real.
+        if(terminaConPregunta)cierrePendienteTrasRespuesta=true;
+        else dispararCierreFluido();
+      }
+
+      // Red de seguridad: el cierre dependia 100% de que Soul decidiera sola
+      // (sin ningun limite) que ya cubrio los 9 temas del checklist, y de que
+      // repitiera una frase exacta -- personas reales llegaron a 60-90+
+      // mensajes sin que eso pasara nunca, charlando indefinidamente sin
+      // avanzar ni tener perfil armado. A partir de UMBRAL_MOSTRAR_BOTON_AVANZAR
+      // se le da a la persona una salida manual visible; a partir de
+      // UMBRAL_FORZAR_CIERRE se fuerza el cierre igual (mejor un perfil armado
+      // con lo que hay que dejarla sin avanzar nunca).
+      if(!cerroSola&&chatHistory.length>=UMBRAL_MOSTRAR_BOTON_AVANZAR){
+        document.getElementById('avanzarManualBtn').style.display='inline';
+      }
+      // El guard cierreForzadoDisparado evita reprogramar esto en cada mensaje
+      // siguiente una vez cruzado el umbral (sin eso, cada mensaje nuevo
+      // volvia a programar otro avanzarManualmente(), duplicando el mensaje
+      // de cierre una vez por cada uno que llegara a disparar).
+      if(!cerroSola&&!cierreForzadoDisparado&&chatHistory.length>=UMBRAL_FORZAR_CIERRE){
+        cierreForzadoDisparado=true;
+        if(terminaConPregunta)cierrePendienteTrasRespuesta=true;
+        else dispararCierreFluido();
+      }
     }
     // Detectar si Soul propone pausar por contención emocional
     if(reply.indexOf('preferís dejarlo acá')>-1||reply.indexOf('mañana continuamos')>-1){
@@ -4627,6 +5299,12 @@ function pausarChatPrincipal(){
   addMsg('soul',cierre);
   chatHistory.push({role:'assistant',content:cierre});
   guardarProgresoAlPausar();
+  // Antes esto dejaba a la persona mirando la charla ya cerrada, sin ningun
+  // destino -- ahora sale a Inicio (nunca cierra sesion). Un respiro breve
+  // para que llegue a leer el cierre de Soul antes de navegar. Al volver a
+  // "Hablar con Soul" desde Inicio, elegirSesion('soul') retoma esta misma
+  // charla (initChat ya la recupera desde 'conversaciones').
+  setTimeout(function(){ volverAMenuPrincipal(); },1600);
 }
 
 // Free usa una version comprimida de la charla antes de extraer el perfil
@@ -5071,7 +5749,14 @@ async function continuarTrasValidacion(confirmado){
   // confirmó la conclusión ("Esto me representa"). Si pidió ajustar algo,
   // no se habilita matching todavia -- ver mostrarMisMatches, que vuelve a
   // pedir la confirmacion la proxima vez que la persona quiera ver matches.
-  if(confirmado)calcularMatches();
+  // Se espera calcularMatches() de verdad antes de decidir que pantalla
+  // mostrar (Decision 5). Antes corria en paralelo contra un setTimeout de
+  // 300ms fijo: si la respuesta (con o sin mail confirmado) llegaba
+  // despues de esos 300ms, la persona ya estaba viendo Eleccion de Sesion y
+  // la pantalla saltaba sola a ConfirmarEmail unos segundos mas tarde, sin
+  // ningun aviso. Ahora no hay ninguna pantalla temporizada: se conoce el
+  // resultado real antes de mostrar nada.
+  if(confirmado)await calcularMatches();
 
   // 6. Mostrar elección de sesión (o seguir completando perfil) según el % alcanzado
   var uActual=null;
@@ -5080,14 +5765,8 @@ async function continuarTrasValidacion(confirmado){
     if(usuariosActual&&usuariosActual.length>0)uActual=usuariosActual[0];
   }catch(e){}
   var pctActual=calcularPorcentajePerfil(uActual,perfil);
-  setTimeout(function(){
-    // calcularMatches() corre en paralelo (linea de arriba) y puede haber
-    // detectado mail sin confirmar antes de que este timeout dispare -- en
-    // ese caso no hay que pisar la pantalla de ConfirmarEmail con la de
-    // Eleccion de Sesion.
-    if(window.matchBloqueadoPorEmail){ requiereConfirmarEmail(); return; }
-    mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
-  },300);
+  if(window.matchBloqueadoPorEmail){ requiereConfirmarEmail(); return; }
+  mostrarEleccionSesion(uActual||{nombre:window.userNombre},pctActual,'Perfecto'+(window.userNombre?', '+window.userNombre:'')+'. Ya tenemos tu perfil base.');
 }
 
 function addBotonReintentarMatch(){
@@ -5784,6 +6463,58 @@ if('serviceWorker' in navigator){
       <button onclick="confirmarEliminarConMotivo('no_es_lo_que_buscaba')" style="padding:.65rem 1rem;background:none;border:1px solid #2a1f28;border-radius:3px;color:#f2ece4;font-family:Inter,sans-serif;font-size:.85rem;cursor:pointer">Simplemente no es lo que buscaba</button>
       <button onclick="confirmarEliminarConMotivo(null)" style="padding:.6rem 1rem;background:none;border:none;color:#7a6e78;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer;margin-top:.3rem">Omitir</button>
     </div>
+  </div>
+</div>
+
+<!-- ══ MENÚ PRINCIPAL -- persistente, fuera de las etapas a propósito (ver
+     punto 6): un solo componente compartido, nunca un header distinto por
+     pantalla. actualizarVisibilidadMenu() (llamada desde ir()) decide
+     cuándo mostrar/ocultar el botón según la etapa actual. ══ -->
+<div id="menuPrincipalBtn" onclick="abrirMenuPrincipal()" style="display:none;position:fixed;top:.7rem;right:.7rem;z-index:70;align-items:center;gap:.4rem;padding:.4rem .8rem;border-radius:16px;background:rgba(7,5,10,.88);border:1px solid rgba(201,168,76,.35);color:#c9a84c;font-family:'Inter',sans-serif;font-size:.85rem;cursor:pointer">
+  <span id="menuPrincipalPlanLabel">Plan</span><span style="opacity:.6">☰</span>
+</div>
+<div id="menuPrincipalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80" onclick="cerrarMenuPrincipal()">
+  <div style="position:absolute;top:0;right:0;bottom:0;width:80%;max-width:300px;background:#0f0a12;border-left:1px solid rgba(201,168,76,.2);padding:1.6rem 1.3rem;overflow-y:auto" onclick="event.stopPropagation()">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.3rem">Soul</p>
+    <p id="menuPrincipalPlanLinea" style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;margin-bottom:1.3rem"></p>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();volverAMenuPrincipal()">Inicio</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();elegirSesion('soul')">Hablar con Soul</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMisMatches()">Matches</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMiPerfil()">Mi perfil</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();mostrarMiPerfil()" id="menuItemPlan">Plan Free/Pro</div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();irATerminosCompletos()">Términos y privacidad</div>
+    <div style="border-top:1px solid rgba(255,255,255,.08);margin:1.2rem 0"></div>
+    <div class="menu-item" onclick="cerrarMenuPrincipal();cerrarSesion()" style="color:#d98a9e;border-bottom:none">Cerrar sesión</div>
+  </div>
+</div>
+
+<!-- ══ INFO SOUL PRO -- estado real (sin pago conectado todavía), nunca
+     una falsa posibilidad de compra. Ver mostrarInfoPro(). ══ -->
+<div id="modalInfoPro" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem" onclick="if(event.target===this)cerrarInfoPro()">
+  <div style="max-width:360px;text-align:center">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.8rem">Soul Pro</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.95rem;color:#d8cdd2;line-height:1.6;margin-bottom:.8rem;text-align:left">Con Pro vas a poder:</p>
+    <ul style="text-align:left;font-family:'Inter',sans-serif;font-size:.9rem;color:#d8cdd2;line-height:1.7;margin-bottom:1.2rem;padding-left:1.2rem">
+      <li>Recalcular tus matches con más frecuencia.</li>
+      <li>Acceder a los módulos de profundización completos.</li>
+      <li>Un análisis de compatibilidad más detallado.</li>
+    </ul>
+    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">Todavía no tenemos el pago conectado en la app -- <strong style="color:#c9a84c">Próximamente</strong>. Por ahora, todo el piloto tiene acceso completo sin costo.</p>
+    <button class="btn-gold" onclick="cerrarInfoPro()" style="width:100%">Entendido</button>
+  </div>
+</div>
+
+<!-- ══ UPSELL PRO ESPECÍFICO DE MÓDULO (Decision 8) ══ -->
+<div id="modalUpsellModulo" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem" onclick="if(event.target===this)cerrarUpsellModulo()">
+  <div style="max-width:380px;text-align:center">
+    <p style="font-family:'Inter',sans-serif;font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:#c9a84c;margin-bottom:.4rem">Soul Pro</p>
+    <p id="upsellModuloNombre" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1rem"></p>
+    <p id="upsellModuloPorque" style="font-family:'Inter',sans-serif;font-size:.92rem;color:#d8cdd2;line-height:1.6;margin-bottom:.9rem;text-align:left"></p>
+    <p id="upsellModuloTrabajar" style="font-family:'Inter',sans-serif;font-size:.9rem;color:#9a8e96;line-height:1.6;margin-bottom:1.2rem;text-align:left"></p>
+    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">Todavía no tenemos el pago conectado en la app -- <strong style="color:#c9a84c">Próximamente</strong>. Por ahora, todo el piloto tiene acceso completo sin costo.</p>
+    <button class="btn-gold" onclick="cerrarUpsellModulo();mostrarInfoPro()" style="width:100%;margin-bottom:.6rem">Conocer Soul Pro →</button>
+    <button class="btn-back" style="width:100%" onclick="cerrarUpsellModulo();volverAMenuPrincipal()">Volver al inicio</button>
+    <button class="btn-back" style="width:100%" onclick="cerrarUpsellModulo()">Seguir más tarde</button>
   </div>
 </div>
 </body>
