@@ -113,7 +113,11 @@ export default async function handler(req, res) {
     // service role key, no el token propio.
     const headersServiceRole = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
     const [otrosRes, cuentasPruebaRes] = await Promise.all([
-      fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}`, { headers: headersServiceRole }),
+      // perfil_validado=eq.true filtra en el SQL a cualquiera que todavia no
+      // confirmo su representacion -- antes esto no se filtraba aca, y una
+      // persona con perfil pendiente podia terminar propuesta como candidata
+      // de otra sin haber confirmado nada.
+      fetch(`${supabaseUrl}/rest/v1/perfiles?select=*&usuario_id=neq.${encodeURIComponent(usuarioId)}&perfil_validado=eq.true`, { headers: headersServiceRole }),
       // Las cuentas de prueba fijas (Vista Previa del panel admin) usan a
       // proposito el dominio @soul-app.test -- nunca deben terminar
       // matcheadas con una persona real por casualidad de compatibilidad.
@@ -159,7 +163,7 @@ export default async function handler(req, res) {
     // el loop de comparacion pueda leerla.
     let generoPorId = {};
     if (idsCandidatos.length > 0) {
-      const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max,hijos,preferencia_hijos,no_negociables,negociables';
+      const SELECT_FILTRO = 'id,genero,preferencia_genero,tipo_vinculo,ciudad,distancia_max,hijos,preferencia_hijos,no_negociables,negociables,eliminacion_solicitada_en';
       // La segunda lectura es sobre TODOS los candidatos (no solo yo) --
       // service role para las dos, mismo criterio que arriba con 'perfiles'.
       const [miUsuarioRes, otrosUsuariosRes] = await Promise.all([
@@ -172,6 +176,18 @@ export default async function handler(req, res) {
       otrosUsuarios.forEach((u) => { generoPorId[u.id] = u; });
       otrosPerfilesCompatibles = otrosPerfilesSinMatch.filter((p) => {
         const candidato = generoPorId[p.usuario_id];
+        if (!candidato) return false;
+        // Cuenta con borrado solicitado -- no debe proponerse aunque el
+        // purgado real (cron diario) todavia no haya corrido.
+        if (candidato.eliminacion_solicitada_en) return false;
+        // Snapshot vigente: el candidato ya tenia perfil_validado=true (filtrado
+        // arriba en la consulta SQL), pero eso solo dice que confirmo ALGUNA
+        // vez -- si no_negociables/negociables (o grupo1-4) cambiaron despues
+        // sin volver a confirmar, ya no es un "si" vigente. Misma comparacion
+        // pura (sin IA) que ya protege a quien ejecuta el calculo, aplicada
+        // ahora tambien a cada candidato.
+        const snapshotActualCandidato = construirSnapshotConclusion(p, candidato);
+        if (!conclusionesIguales(p.perfil_validado_snapshot, snapshotActualCandidato)) return false;
         return generosCompatibles(miGeneroInfo, candidato)
           && tipoVinculoCompatible(miGeneroInfo, candidato)
           && distanciaCompatible(miGeneroInfo, candidato)

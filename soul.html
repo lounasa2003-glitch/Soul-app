@@ -2570,7 +2570,11 @@ async function guardarPerfil(perfil){
     grupo2: perfil.grupo2,
     grupo3: perfil.grupo3,
     grupo4: perfil.grupo4,
-    indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null
+    indice_disponibilidad: perfil.grupo4&&perfil.grupo4.indice_disponibilidad||null,
+    // Ancla para los recordatorios de confirmacion pendiente (24h/72h, ver
+    // lib/recordatorioPerfilPendiente.js) -- se fija cada vez que se genera
+    // la interpretacion, momento en el que todavia no esta confirmada.
+    perfil_pendiente_desde: new Date().toISOString()
   };
   // El servidor resuelve insert-o-actualiza de forma atomica (on_conflict
   // en usuario_id), asi que no hace falta chequear antes si ya existe.
@@ -3791,6 +3795,12 @@ async function mostrarMiPerfil(){
     document.getElementById('mpOcup').value=u.ocupacion||'';
     document.getElementById('mpNoNeg').value=u.no_negociables||'';
     document.getElementById('mpNeg').value=u.negociables||'';
+    // Se guardan los valores tal cual llegan de la base (no lo que ya haya
+    // en el input) para poder detectar en guardarMiPerfil() si de verdad
+    // cambiaron -- son los dos unicos campos editables aca que forman parte
+    // del snapshot confirmable (ver construirSnapshotConclusion).
+    window.mpNoNegOriginal=u.no_negociables||'';
+    window.mpNegOriginal=u.negociables||'';
     document.getElementById('mpFotoAprobada').checked=!!u.foto_aprobada;
     document.getElementById('mpComsProducto').checked=!!u.comunicaciones_producto_aceptadas;
 
@@ -3881,6 +3891,18 @@ async function guardarMiPerfil(){
     guardando.style.display='none';
     if(datos.nombre)window.userNombre=datos.nombre;
     if(datos.fecha_nacimiento)window.userFechaNacimiento=datos.fecha_nacimiento;
+
+    // Invalidar la confirmacion solo si cambio alguno de los dos campos que
+    // SI forman parte del snapshot confirmable (no_negociables/negociables,
+    // ver construirSnapshotConclusion) -- el resto de los datos duros
+    // (nombre, ciudad, genero, distancia, etc.) no lo integran y no
+    // invalidan nada.
+    if((datos.no_negociables||'')!==window.mpNoNegOriginal || (datos.negociables||'')!==window.mpNegOriginal){
+      invalidarConfirmacionPerfil().catch(function(){});
+      window.mpNoNegOriginal=datos.no_negociables||'';
+      window.mpNegOriginal=datos.negociables||'';
+    }
+
     btn.disabled=false;
     if(window.revisionPreMatching){
       window.revisionPreMatching=false;
@@ -4001,6 +4023,28 @@ async function confirmarConclusionDesdeMiPerfil(){
   await cargarConclusionMiPerfil();
 }
 
+// Invalida una confirmacion previa -- se usa cuando cambia algo que SI
+// forma parte del snapshot confirmable (no_negociables/negociables desde
+// Mi Perfil, o un ajuste manual desde "Quiero ajustar algo").
+// perfil_pendiente_desde arranca de nuevo el conteo para los recordatorios
+// de 24h/72h (ver lib/recordatorioPerfilPendiente.js); los dos guards se
+// limpian para permitir un ciclo de recordatorios nuevo. El gate dinamico
+// (conclusionEstaConfirmada/conclusionesIguales) ya protegia el matching
+// aunque esto nunca corriera -- esto solo existe para que el estado quede
+// anclado a un momento concreto (Mi Perfil, recordatorios), no para la
+// seguridad del gate en si.
+async function invalidarConfirmacionPerfil(){
+  await guardarTabla('perfiles',{
+    usuario_id:usuarioId,
+    perfil_validado:false,
+    perfil_validado_en:null,
+    perfil_validado_snapshot:null,
+    perfil_pendiente_desde:new Date().toISOString(),
+    recordatorio_pendiente_24h_enviado:null,
+    recordatorio_pendiente_72h_enviado:null
+  });
+}
+
 // Pedido de revision manual de una parte del perfil (Decision 5) -- nunca
 // reconstruye nada solo/a: solo queda registrado para que la administradora
 // lo revise a mano (ver seccion "Solicitudes de revision de perfil" en
@@ -4032,7 +4076,8 @@ async function enviarSolicitudRevision(){
     // 3/4). No se recalculan matches acá -- eso queda para cuando la
     // administradora corrija el perfil a mano y la persona lo vuelva a
     // confirmar.
-    await guardarTabla('perfiles',{usuario_id:usuarioId,perfil_validado:false,perfil_validado_en:null,perfil_validado_snapshot:null,ajuste_perfil_nota:(texto+' -- '+explicacion)}).catch(function(){});
+    await invalidarConfirmacionPerfil().catch(function(){});
+    await guardarTabla('perfiles',{usuario_id:usuarioId,ajuste_perfil_nota:(texto+' -- '+explicacion)}).catch(function(){});
     document.getElementById('srTexto').value='';
     document.getElementById('srExplicacion').value='';
     btn.style.display='none';
@@ -5057,7 +5102,7 @@ function pedirPausaChat(){
 // de antes -- ahora SIEMPRE se le muestra este mensaje a la persona y un
 // boton explicito para seguir, nunca se la manda sola al pipeline de
 // matching con un setTimeout.
-var TEXTO_CIERRE_FLUIDO='Gracias por compartir todo esto conmigo. Con lo que me contaste ya puedo construir una primera lectura sobre vos. No es una definición cerrada: vas a poder revisarla, cuestionarla y ajustarla. Cuando quieras, seguimos con tu perfil.';
+var TEXTO_CIERRE_FLUIDO='Tu búsqueda inicial ya está preparada. Para que Soul pueda afinarla e incluirte en las búsquedas de compatibilidad, necesitás revisar y confirmar la representación que construimos.';
 
 // true cuando se decidio cerrar (sola, manual o forzada) pero el ultimo
 // mensaje de Soul en ese momento terminaba en una pregunta sin responder --
@@ -5086,7 +5131,7 @@ function mostrarBotonRevisarPerfil(){
   var div=document.createElement('div');
   div.id='revisarPerfilBtnWrap';
   div.style.cssText='text-align:center;padding:.6rem 0';
-  div.innerHTML='<button id="revisarPerfilBtn" style="padding:.7rem 1.6rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.06em;cursor:pointer">Revisar mi perfil →</button>';
+  div.innerHTML='<button id="revisarPerfilBtn" style="padding:.7rem 1.6rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:3px;color:#07050a;font-family:Inter,sans-serif;font-size:.85rem;font-weight:600;letter-spacing:.06em;cursor:pointer">Revisar y confirmar mi perfil →</button>';
   document.getElementById('chatArea').appendChild(div);
   document.getElementById('revisarPerfilBtn').onclick=function(){
     div.remove();
