@@ -945,7 +945,6 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <div class="chat-orb"></div>
       <div><div class="chat-nm">Soul</div><div class="chat-st">conversando con vos</div></div>
       <div style="margin-left:auto;display:flex;align-items:center;gap:.9rem">
-        <span onclick="avanzarManualmente()" id="avanzarManualBtn" style="display:none;color:#c9a84c;font-family:Georgia,serif;font-style:italic;font-size:.85rem;cursor:pointer">Ya conté bastante, avancemos →</span>
         <button class="chat-back-btn" onclick="confirmarSalirChat()">Salir</button>
       </div>
     </div>
@@ -4811,11 +4810,11 @@ var INTERCAMBIOS_AUTOSAVE=2;
 // no hay material real para guardar como perfil parcial, así que Soul
 // prefiere invitar a seguir un poco más en vez de cerrar de una.
 var UMBRAL_VIABLE_PAUSA=6;
-// Mensajes en chatHistory (usuario+Soul) a partir de los cuales aparece el
-// boton manual "Ya conté bastante, avancemos", y a partir de los cuales se
-// fuerza el cierre igual si Soul todavia no decidio cerrar sola -- ver el
-// comentario junto a UMBRAL_FORZAR_CIERRE en enviarAlChat().
-var UMBRAL_MOSTRAR_BOTON_AVANZAR=30;
+// Mensajes en chatHistory (usuario+Soul) a partir de los cuales se fuerza
+// el cierre si Soul todavia no decidio cerrar sola -- unico mecanismo de
+// emergencia que queda (se sacó el botón manual "Ya conté bastante,
+// avancemos", que dejaba avanzar sin ninguna garantía de información
+// mínima). Ver el comentario junto a este uso en pedirRespuestaSoul().
 var UMBRAL_FORZAR_CIERRE=50;
 
 // Mensajes en chatHistory (usuario+Soul) a partir de los cuales se
@@ -4973,9 +4972,21 @@ async function initChat(){
   if(chatHistory.length>0)return;
   if(usuarioId){
     try{
+      // /api/leer no ordena -- el orden que devuelve Postgres/PostgREST no
+      // esta garantizado (no es necesariamente el de insercion). Tomar
+      // ciegamente el ULTIMO elemento del array asumia eso, y con mas de
+      // una fila sin terminar (ej. dos pestañas/sesiones abiertas casi al
+      // mismo tiempo, cada una con su propio conversacionId en memoria)
+      // podia retomar una conversacion vieja en vez de la real -- eso
+      // reportó una usuaria real (aparecía en sus primeros 5 mensajes en
+      // vez de donde había quedado). Se ordena acá mismo por created_at,
+      // de la más reciente a la más vieja, entre las que todavía no se
+      // completaron.
       var convs=await leerTabla('conversaciones','usuario_id=eq.'+usuarioId);
-      var previa=convs&&convs.length>0?convs[convs.length-1]:null;
-      if(previa&&!previa.completada&&previa.historial&&previa.historial.length>0){
+      var sinTerminar=(convs||[]).filter(function(c){return !c.completada&&c.historial&&c.historial.length>0});
+      sinTerminar.sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at)});
+      var previa=sinTerminar.length>0?sinTerminar[0]:null;
+      if(previa){
         conversacionId=previa.id;
         chatHistory=previa.historial.slice();
         chatHistory.forEach(function(m){addMsg(m.role==='assistant'?'soul':'user',m.content)});
@@ -5092,18 +5103,18 @@ var TEXTO_CIERRE_FLUIDO='Tu búsqueda inicial ya está preparada. Para que Soul 
 // real de la persona y recien ahi se dispara el cierre fluido.
 var cierrePendienteTrasRespuesta=false;
 
-// true cuando la ULTIMA respuesta real de Soul (la que se acaba de guardar
-// en chatHistory) llegó cortada por max_tokens -- ver enviarAlChat, que la
-// actualiza en cada turno. Ninguna decisión de cierre puede apoyarse en un
-// texto incompleto (Decision 4).
-var ultimaRespuestaSoulTruncada=false;
-
 // Heuristica simple: mira solo el ULTIMO mensaje de Soul (no toda la
 // charla) y si termina en "?" se lo trata como pregunta abierta sin
 // responder todavia.
+// Antes solo miraba si el mensaje TERMINABA en "?" -- pero el caso real
+// reportado es Soul preguntando algo a mitad de mensaje y, en el mismo
+// turno, agregando la frase exacta de cierre (que nunca termina en "?", ver
+// el prompt) -- terminaConPregunta daba false y el cierre se pegaba encima
+// de esa pregunta sin responder. Ahora alcanza con que haya un "?" en
+// cualquier parte del mensaje.
 function ultimoMensajeSoulTienePregunta(){
   for(var i=chatHistory.length-1;i>=0;i--){
-    if(chatHistory[i].role==='assistant')return /\?\s*$/.test((chatHistory[i].content||'').trim());
+    if(chatHistory[i].role==='assistant')return (chatHistory[i].content||'').indexOf('?')>-1;
   }
   return false;
 }
@@ -5126,38 +5137,10 @@ function mostrarBotonRevisarPerfil(){
 // seguir -- nunca navega sola con un setTimeout, para que la persona pueda
 // leer con calma y decidir cuando avanzar.
 function dispararCierreFluido(){
-  document.getElementById('avanzarManualBtn').style.display='none';
   var b=document.getElementById('pausarChatBtns');if(b)b.remove();
   addMsg('soul',TEXTO_CIERRE_FLUIDO);
   chatHistory.push({role:'assistant',content:TEXTO_CIERRE_FLUIDO});
   mostrarBotonRevisarPerfil();
-}
-
-// Salida manual (boton en el header a partir de UMBRAL_MOSTRAR_BOTON_AVANZAR,
-// o forzada sola a partir de UMBRAL_FORZAR_CIERRE en enviarAlChat) para
-// cuando Soul no decide cerrar por su cuenta. Reutiliza el mismo pipeline
-// que el cierre automatico (avanzarAlMatch/hacerAvanzar, ya protegido
-// contra corridas duplicadas) -- arma el perfil con lo que se hablo hasta
-// ahora en vez de dejar a la persona charlando sin avanzar nunca.
-function avanzarManualmente(){
-  document.getElementById('avanzarManualBtn').style.display='none';
-  var b=document.getElementById('pausarChatBtns');if(b)b.remove();
-  if(ultimaRespuestaSoulTruncada){
-    // La ultima respuesta de Soul quedó cortada por max_tokens -- no hay
-    // una base real para cerrar todavia (Decision 4). Se deja el botón
-    // visible de nuevo: la próxima respuesta completa vuelve a evaluar
-    // todo desde cero.
-    document.getElementById('avanzarManualBtn').style.display='inline';
-    return;
-  }
-  if(ultimoMensajeSoulTienePregunta()){
-    // No cerramos encima de una pregunta de Soul sin responder -- se espera
-    // la proxima respuesta real (ver el chequeo de cierrePendienteTrasRespuesta
-    // en enviarAlChat) y recien ahi se dispara el cierre fluido.
-    cierrePendienteTrasRespuesta=true;
-    return;
-  }
-  dispararCierreFluido();
 }
 
 // stop_reason "seguro" para guardar/actuar sobre una respuesta -- cualquier
@@ -5220,7 +5203,6 @@ async function pedirRespuestaSoul(){
     // (el mensaje de la persona ya está en chatHistory, no se toca de
     // nuevo -- así el reintento nunca duplica nada).
     if(respuestaSoulIncompleta(resultado.stopReason)){
-      ultimaRespuestaSoulTruncada=true;
       if(soulEl)soulEl.remove();
       addMsg('soul','Soul no pudo terminar este mensaje.');
       agregarBotonReintentarChat();
@@ -5228,7 +5210,6 @@ async function pedirRespuestaSoul(){
     }
 
     var reply=limpiarMarkdown(resultado.texto);
-    ultimaRespuestaSoulTruncada=false;
     if(soulEl)soulEl.textContent=reply;else addMsg('soul',reply);
     chatHistory.push({role:'assistant',content:reply});
     chequearGuardadoTemprano();
@@ -5256,10 +5237,11 @@ async function pedirRespuestaSoul(){
       // "seguir charlando", que generaban confusión).
       var cerroSola=reply.indexOf('Dejame preparar algo con todo lo que hablamos.')>-1;
       if(cerroSola){
-        // El prompt le pide a Soul que esta frase nunca sea una pregunta,
-        // pero si el mensaje completo igual termina en una (por ej. una
-        // pregunta suelta antes de la frase de cierre), no cerramos encima
-        // -- se espera la proxima respuesta real.
+        // El prompt le pide a Soul que la frase de cierre en sí nunca sea
+        // una pregunta, pero puede haber preguntado algo A MITAD del mismo
+        // mensaje y recién después, en el mismo turno, agregar la frase de
+        // cierre -- eso también cuenta como pregunta sin responder, no
+        // cerramos encima. Se espera la próxima respuesta real.
         if(terminaConPregunta)cierrePendienteTrasRespuesta=true;
         else dispararCierreFluido();
       }
@@ -5268,17 +5250,15 @@ async function pedirRespuestaSoul(){
       // (sin ningun limite) que ya cubrio los 9 temas del checklist, y de que
       // repitiera una frase exacta -- personas reales llegaron a 60-90+
       // mensajes sin que eso pasara nunca, charlando indefinidamente sin
-      // avanzar ni tener perfil armado. A partir de UMBRAL_MOSTRAR_BOTON_AVANZAR
-      // se le da a la persona una salida manual visible; a partir de
-      // UMBRAL_FORZAR_CIERRE se fuerza el cierre igual (mejor un perfil armado
-      // con lo que hay que dejarla sin avanzar nunca).
-      if(!cerroSola&&chatHistory.length>=UMBRAL_MOSTRAR_BOTON_AVANZAR){
-        document.getElementById('avanzarManualBtn').style.display='inline';
-      }
+      // avanzar ni tener perfil armado. Único mecanismo que queda: a partir
+      // de UMBRAL_FORZAR_CIERRE se fuerza el cierre igual (mejor un perfil
+      // armado con lo que hay que dejarla sin avanzar nunca) -- se sacó el
+      // botón manual "Ya conté bastante, avancemos", que dejaba avanzar sin
+      // ninguna garantía de información mínima.
       // El guard cierreForzadoDisparado evita reprogramar esto en cada mensaje
       // siguiente una vez cruzado el umbral (sin eso, cada mensaje nuevo
-      // volvia a programar otro avanzarManualmente(), duplicando el mensaje
-      // de cierre una vez por cada uno que llegara a disparar).
+      // volvia a disparar otro cierre, duplicando el mensaje de cierre una
+      // vez por cada uno que llegara a disparar).
       if(!cerroSola&&!cierreForzadoDisparado&&chatHistory.length>=UMBRAL_FORZAR_CIERRE){
         cierreForzadoDisparado=true;
         if(terminaConPregunta)cierrePendienteTrasRespuesta=true;
