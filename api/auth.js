@@ -198,18 +198,24 @@ export default async function handler(req, res) {
     // la tabla, no solo este caso puntual.
     if (accion === 'reenviarConfirmacion') {
       const headersService = { apikey: supabaseKey, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` };
-      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,mail_confirmado&email=eq.${encodeURIComponent(email)}`, { headers: headersService });
+      const rowRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id,nombre,email,mail_confirmado,token_confirmacion&email=eq.${encodeURIComponent(email)}`, { headers: headersService });
       const rows = rowRes.ok ? await rowRes.json() : [];
       const fila = rows[0];
       // Misma respuesta exista o no la cuenta, o ya este confirmada -- este
       // endpoint no es un lugar para confirmar si un mail esta registrado.
       if (fila && !fila.mail_confirmado) {
-        const token = crypto.randomBytes(24).toString('hex');
-        await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
-          method: 'PATCH',
-          headers: { ...headersService, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-          body: JSON.stringify({ token_confirmacion: token })
-        });
+        // Si ya habia un token sin usar, se reutiliza en vez de pisarlo por
+        // uno nuevo -- generar uno distinto en cada reenvio invalidaba
+        // cualquier mail anterior que siguiera sin abrirse (el link de un
+        // mail viejo tirando "ya no es valido" apenas se pedia otro).
+        const token = fila.token_confirmacion || crypto.randomBytes(24).toString('hex');
+        if (!fila.token_confirmacion) {
+          await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(fila.id)}`, {
+            method: 'PATCH',
+            headers: { ...headersService, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+            body: JSON.stringify({ token_confirmacion: token })
+          });
+        }
         await notificarConfirmarMail({ nombre: fila.nombre, email: fila.email, token });
       }
       return res.status(200).json({ ok: true });

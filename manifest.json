@@ -2,7 +2,7 @@
   "name": "Soul",
   "short_name": "Soul",
   "description": "Un espacio para conocerte mejor a través de tus vínculos.",
-  "start_url": "/soul.html",
+  "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#07050a",
