@@ -5258,12 +5258,17 @@ async function pedirRespuestaSoul(){
 
     // Si un cierre (sola, manual o forzado) habia quedado esperando porque
     // el mensaje anterior de Soul terminaba en una pregunta sin responder,
-    // esta es esa respuesta real -- se dispara el cierre fluido ahora, sin
-    // importar que diga reply (nunca se cierra con la respuesta libre de
-    // Soul a esa pregunta, que podria seguir charlando de largo).
+    // esta es esa respuesta real -- pero ESTA respuesta tambien puede
+    // terminar en otra pregunta (caso real reportado: Soul contesta lo que
+    // se le respondio y de una vez pregunta algo nuevo, ej. "Dos años. ¿Y
+    // cómo fue eso? ¿Fue una ruptura...?"). Antes se disparaba el cierre
+    // a ciegas apenas se consumia el flag, sin volver a chequear -- ahora se
+    // vuelve a mirar este reply nuevo, y si tambien queda una pregunta sin
+    // responder, se sigue esperando en vez de cerrar encima de ella.
     if(cierrePendienteTrasRespuesta){
       cierrePendienteTrasRespuesta=false;
-      dispararCierreFluido();
+      if(ultimoMensajeSoulTienePregunta())cierrePendienteTrasRespuesta=true;
+      else dispararCierreFluido();
     }else{
       var terminaConPregunta=ultimoMensajeSoulTienePregunta();
 
