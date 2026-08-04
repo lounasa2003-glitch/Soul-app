@@ -233,15 +233,25 @@ export default async function handler(req, res) {
       // effort: si el mail no sale, la cuenta queda creada igual y puede
       // pedir el reenvio desde la pantalla de "Revisá tu email".
       try {
-        const token = crypto.randomBytes(24).toString('hex');
-        // 'usuarios' ya tiene politica RLS real -- token propio, misma
-        // persona que se acaba de insertar en este mismo request.
-        await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(data[0].id)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${usuario.token}`, Prefer: 'return=minimal' },
-          body: JSON.stringify({ token_confirmacion: token })
-        });
-        await notificarConfirmarMail({ nombre: data[0].nombre, email: data[0].email, token });
+        if (!data[0].mail_confirmado) {
+          // guardarUsuarioYContinuar (soul.html) reintenta este mismo
+          // guardado si la primera respuesta se pierde en el camino (ej.
+          // conexion mobile inestable) -- con esto siendo un upsert, ese
+          // reintento vuelve a pasar por aca. Reutilizar el token si ya
+          // habia uno (mismo criterio que api/auth.js reenviarConfirmacion)
+          // evita que la repeticion invalide el mail que ya se mando antes.
+          const token = data[0].token_confirmacion || crypto.randomBytes(24).toString('hex');
+          if (!data[0].token_confirmacion) {
+            // 'usuarios' ya tiene politica RLS real -- token propio, misma
+            // persona que se acaba de insertar en este mismo request.
+            await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(data[0].id)}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${usuario.token}`, Prefer: 'return=minimal' },
+              body: JSON.stringify({ token_confirmacion: token })
+            });
+          }
+          await notificarConfirmarMail({ nombre: data[0].nombre, email: data[0].email, token });
+        }
       } catch (e) {
         console.error('Error generando/enviando confirmacion de mail:', e);
         await registrarErrorSilencioso({ contexto: 'api/guardar: confirmacion de mail', error: e, meta: { usuarioId: data[0].id } });

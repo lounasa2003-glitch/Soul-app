@@ -216,7 +216,13 @@ export default async function handler(req, res) {
             body: JSON.stringify({ token_confirmacion: token })
           });
         }
-        await notificarConfirmarMail({ nombre: fila.nombre, email: fila.email, token });
+        // Antes no se miraba el resultado y siempre se respondia ok:true --
+        // si Resend rechazaba el envio, la pantalla decia "Te lo volvimos a
+        // mandar" igual, sin que nada llegara nunca a la casilla.
+        const enviado = await notificarConfirmarMail({ nombre: fila.nombre, email: fila.email, token });
+        if (!enviado) {
+          return res.status(502).json({ error: 'no_se_pudo_enviar', mensaje: 'No pudimos enviar el mail. Probá de nuevo en un rato.' });
+        }
       }
       return res.status(200).json({ ok: true });
     }

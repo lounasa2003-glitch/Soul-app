@@ -2828,7 +2828,7 @@ async function reenviarConfirmacion(){
     document.getElementById('confirmarEmailReenviando').style.display='none';
     document.getElementById('confirmarEmailReenviarBtn').style.display='block';
     if(!res.ok){
-      errEl.textContent=data.msg||data.error_description||'No pudimos reenviarlo. Probá de nuevo en un rato.';
+      errEl.textContent=data.mensaje||data.error_description||'No pudimos reenviarlo. Probá de nuevo en un rato.';
       errEl.style.display='block';
       return;
     }
