@@ -3050,6 +3050,19 @@ function manejarBotonVolverAndroid(){
       }
       if(etapaHistorial.length>0){
         ir(etapaHistorial.pop(),true);
+      }else if(usuarioId){
+        // Pantalla autenticada sin mas historial para retroceder -- antes
+        // esto salia derecho de la app (mismo "¿Salir de Soul?" de la rama
+        // de abajo, sin sesion). Con sesion activa, ahora pregunta
+        // explicitamente por cerrar sesion en vez de asumirlo: "Sí" cierra
+        // sesion y sale de la app, "No" vuelve al menú principal sin
+        // cerrar sesion.
+        if(confirm('¿Deseás cerrar sesión?')){
+          accessToken=null;refreshToken=null;usuarioId=null;
+          CapApp.exitApp();
+        }else{
+          volverAMenuPrincipal();
+        }
       }else if(confirm('¿Salir de Soul?')){
         CapApp.exitApp();
       }
