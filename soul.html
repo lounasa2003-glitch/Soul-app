@@ -316,12 +316,15 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
-<!-- ══ CONFIRMÁ TU EMAIL (post-registro, antes de poder usar la app) ══ -->
+<!-- ══ CONFIRMÁ TU EMAIL (post-registro; informativa despues de los datos
+     basicos -- no bloquea el chat, ver window.confirmarEmailBloqueante --
+     o bloqueante cuando la pide requiereConfirmarEmail() antes de
+     matches/citas) ══ -->
 <div class="etapa" id="eConfirmarEmail">
   <div class="auth-wrap">
     <div class="auth-orb"></div>
     <p class="auth-title">Revisá tu email</p>
-    <p class="auth-sub">Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar.</p>
+    <p class="auth-sub" id="confirmarEmailSub">Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar.</p>
 
     <div class="auth-err" id="confirmarEmailErr"></div>
     <p class="auth-loading" id="confirmarEmailReenviado" style="display:none;color:#4ecb71">✓ Te lo volvimos a mandar.</p>
@@ -329,7 +332,9 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
     <button class="btn-gold" id="confirmarEmailReenviarBtn" onclick="reenviarConfirmacion()" style="width:100%;opacity:1">Reenviar el mail →</button>
     <p class="auth-loading" id="confirmarEmailReenviando">Reenviando...</p>
 
-    <p class="auth-toggle"><span onclick="ir(0)">← Volver a iniciar sesión</span></p>
+    <button class="btn-back" id="confirmarEmailSeguirBtn" onclick="seguirSinConfirmarEmail()" style="width:100%;margin-top:.8rem;display:none">Seguir por ahora →</button>
+
+    <p class="auth-toggle" id="confirmarEmailVolverLogin"><span onclick="ir(0)">← Volver a iniciar sesión</span></p>
   </div>
 </div>
 
@@ -2479,7 +2484,12 @@ async function guardarUsuarioYContinuar(){
       var data=await guardarTabla('usuarios',datos);
       if(data&&data[0]&&data[0].id){
         usuarioId=data[0].id;
-        ir(4);
+        // El mail de confirmacion se manda server-side en este mismo
+        // guardado (ver api/guardar.js, etapa_actual:'chat') -- antes se
+        // pasaba derecho al chat sin ningun aviso de que eso habia pasado.
+        // No bloquea (ver mostrarConfirmarEmailInformativo): la persona
+        // puede tocar "Seguir por ahora" y arrancar con Soul igual.
+        mostrarConfirmarEmailInformativo();
         return;
       }
     }catch(e){
@@ -3336,9 +3346,35 @@ async function continuarTrasCierreMatch(){
 // reenvio ya armado ahi.
 function requiereConfirmarEmail(){
   window.emailParaConfirmar=userEmail;
+  window.confirmarEmailBloqueante=true;
   document.getElementById('confirmarEmailErr').style.display='none';
   document.getElementById('confirmarEmailReenviado').style.display='none';
+  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar.';
+  document.getElementById('confirmarEmailSeguirBtn').style.display='none';
+  document.getElementById('confirmarEmailVolverLogin').style.display='block';
   ir('ConfirmarEmail');
+}
+
+// Version informativa (no bloqueante) de la misma pantalla -- se muestra
+// apenas se termina la Etapa 1 (datos básicos), justo cuando el mail de
+// confirmación recién salió (ver api/guardar.js), para que la persona sepa
+// que le llegó algo en vez de enterarse recién más adelante o nunca. Con
+// "Confirm email" apagado en Supabase, confirmar no es requisito para
+// hablar con Soul (ver comentario en lib/authUtil.js) -- por eso acá sí
+// puede seguir sin confirmar, a diferencia de requiereConfirmarEmail().
+function mostrarConfirmarEmailInformativo(){
+  window.emailParaConfirmar=userEmail;
+  window.confirmarEmailBloqueante=false;
+  document.getElementById('confirmarEmailErr').style.display='none';
+  document.getElementById('confirmarEmailReenviado').style.display='none';
+  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link para confirmar tu cuenta. Podés tocarlo ahora o más tarde -- mientras tanto ya podés empezar a hablar con Soul.';
+  document.getElementById('confirmarEmailSeguirBtn').style.display='block';
+  document.getElementById('confirmarEmailVolverLogin').style.display='none';
+  ir('ConfirmarEmail');
+}
+
+function seguirSinConfirmarEmail(){
+  ir(4);
 }
 
 async function decidirEnMatch(si){
