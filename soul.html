@@ -3048,21 +3048,26 @@ function manejarBotonVolverAndroid(){
         cerrarMenuPrincipal();
         return;
       }
-      if(etapaHistorial.length>0){
-        ir(etapaHistorial.pop(),true);
-      }else if(usuarioId){
-        // Pantalla autenticada sin mas historial para retroceder -- antes
-        // esto salia derecho de la app (mismo "¿Salir de Soul?" de la rama
-        // de abajo, sin sesion). Con sesion activa, ahora pregunta
-        // explicitamente por cerrar sesion en vez de asumirlo: "Sí" cierra
-        // sesion y sale de la app, "No" vuelve al menú principal sin
-        // cerrar sesion.
+      // El fondo del historial suele ser la etapa 0 (login), pusheada ahi
+      // en el momento de autenticarse -- si se deja hacer pop() hasta
+      // llegar ahi con sesion activa, la persona aterriza en la pantalla
+      // de login todavia logueada (reportado en vivo: "regresar al login
+      // significa haber cerrado sesion de todas formas"). Se intercepta UN
+      // paso antes: si el proximo destino es una etapa pre-autenticacion
+      // (ETAPAS_SIN_MENU_PRINCIPAL), o si ya no queda historial al que
+      // volver, y hay sesion activa, se pregunta por cerrar sesion en vez
+      // de dejar aterrizar en el login o salir directo de la app.
+      var destino=etapaHistorial.length>0?etapaHistorial[etapaHistorial.length-1]:null;
+      var llegariaAlLogin=destino!==null&&ETAPAS_SIN_MENU_PRINCIPAL.indexOf(destino)>-1;
+      if(usuarioId&&(llegariaAlLogin||destino===null)){
         if(confirm('¿Deseás cerrar sesión?')){
           accessToken=null;refreshToken=null;usuarioId=null;
           CapApp.exitApp();
         }else{
           volverAMenuPrincipal();
         }
+      }else if(etapaHistorial.length>0){
+        ir(etapaHistorial.pop(),true);
       }else if(confirm('¿Salir de Soul?')){
         CapApp.exitApp();
       }
