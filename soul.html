@@ -324,7 +324,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   <div class="auth-wrap">
     <div class="auth-orb"></div>
     <p class="auth-title">Revisá tu email</p>
-    <p class="auth-sub" id="confirmarEmailSub">Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar.</p>
+    <p class="auth-sub" id="confirmarEmailSub">Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar. Si no lo ves, revisá también la carpeta de spam.</p>
 
     <div class="auth-err" id="confirmarEmailErr"></div>
     <p class="auth-loading" id="confirmarEmailReenviado" style="display:none;color:#4ecb71">✓ Te lo volvimos a mandar.</p>
@@ -3349,7 +3349,7 @@ function requiereConfirmarEmail(){
   window.confirmarEmailBloqueante=true;
   document.getElementById('confirmarEmailErr').style.display='none';
   document.getElementById('confirmarEmailReenviado').style.display='none';
-  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar.';
+  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link de confirmación. Tocalo para activar tu cuenta -- recién ahí vas a poder entrar. Si no lo ves, revisá también la carpeta de spam.';
   document.getElementById('confirmarEmailSeguirBtn').style.display='none';
   document.getElementById('confirmarEmailVolverLogin').style.display='block';
   ir('ConfirmarEmail');
@@ -3367,7 +3367,7 @@ function mostrarConfirmarEmailInformativo(){
   window.confirmarEmailBloqueante=false;
   document.getElementById('confirmarEmailErr').style.display='none';
   document.getElementById('confirmarEmailReenviado').style.display='none';
-  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link para confirmar tu cuenta. Podés tocarlo ahora o más tarde -- mientras tanto ya podés empezar a hablar con Soul.';
+  document.getElementById('confirmarEmailSub').textContent='Te mandamos un link para confirmar tu cuenta. Podés tocarlo ahora o más tarde -- mientras tanto ya podés empezar a hablar con Soul. Si no lo ves, revisá también la carpeta de spam.';
   document.getElementById('confirmarEmailSeguirBtn').style.display='block';
   document.getElementById('confirmarEmailVolverLogin').style.display='none';
   ir('ConfirmarEmail');
