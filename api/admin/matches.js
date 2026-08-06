@@ -336,20 +336,45 @@ async function loginOCrearAuth(supabaseUrl, supabaseKey, email, password) {
   return data;
 }
 
+// etapa_actual siempre se fuerza a 'chat' (insert o reuso) -- es el estado
+// que asume cargarProgreso() (soul.html) para cualquier cuenta ya conocida
+// que no este a mitad de la Etapa 1, y ademas es el mismo valor que una
+// cuenta real conserva para siempre despues del onboarding (ver comentario
+// en soul.html sobre 'chat' como estado de "en espera" tambien). Sin esto,
+// una cuenta de preview reusada podia quedar con lo que sea que tuviera de
+// una siembra anterior, o (la primera vez) sin ningun etapa_actual --
+// cualquiera de los dos rompe el escenario que se esta por armar.
 async function asegurarUsuario(supabaseUrl, headers, email, nombre) {
   const r = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=eq.${encodeURIComponent(email)}`, { headers });
   const rows = r.ok ? await r.json() : [];
-  if (rows[0]) return rows[0].id;
+  if (rows[0]) {
+    await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(rows[0].id)}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ etapa_actual: 'chat' })
+    });
+    return rows[0].id;
+  }
   const insertRes = await fetch(`${supabaseUrl}/rest/v1/usuarios`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ email, nombre })
+    body: JSON.stringify({ email, nombre, etapa_actual: 'chat' })
   });
   const inserted = await insertRes.json();
   return inserted[0].id;
 }
 
-function perfilPreview() {
+// modulo_fase por defecto 'esencial' (todavia mid-modulo, para el escenario
+// 'modulos'). Los escenarios con segunda persona (match_pendiente, cita,
+// debriefing, sala_encuentros) representan a alguien que YA termino todo
+// esto y esta esperando/en un match -- necesitan 'completo' para que
+// cargarProgreso() (soul.html) no la mande derecho al chat por default (ver
+// el chequeo de u.etapa_actual==='chat' && modulo_fase!=='completo', que
+// intercepta ANTES de llegar a recolectarPendientes()). Sin esto, ninguna
+// cuenta sembrada con segunda persona llegaba nunca a ver el match/cita/
+// debriefing -- siempre caia en la charla con Soul, sin importar el
+// escenario pedido (reportado en vivo el 2026-08-06).
+function perfilPreview(moduloFase) {
   return {
     grupo1: { valores: ['honestidad', 'curiosidad', 'humor'], estilo_comunicacion: 'directa', ritmo_emocional: 'reflexivo', mascara_vs_autentico: 'autentica', momento_evolutivo: 'en crecimiento' },
     grupo2: { tipo_vinculo: 'compañerismo profundo', proyecto_vida: 'construir algo propio y viajar', necesidades_intimidad: 'cercanía con espacio propio', no_puede_faltar: 'humor compartido', no_puede_estar: 'falta de honestidad' },
@@ -358,7 +383,7 @@ function perfilPreview() {
     referencias_culturales: JSON.stringify({ pelicula: 'Película de prueba', cancion: 'Canción de prueba', libro: 'Libro de prueba' }),
     modulo_esencial: 'Capacidad de volver a elegir',
     modulo_recomendado: 'Autonomía emocional',
-    modulo_fase: 'esencial'
+    modulo_fase: moduloFase || 'esencial'
   };
 }
 
@@ -413,7 +438,8 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
   let instrucciones = 'Iniciá sesión en soul.html con este email y contraseña.';
 
   if (escenario === 'modulos' || necesitaSegundaPersona) {
-    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idA, ...perfilPreview() }) });
+    const moduloFaseA = necesitaSegundaPersona ? 'completo' : 'esencial';
+    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idA, ...perfilPreview(moduloFaseA) }) });
   }
 
   if (escenario === 'chat') {
@@ -425,7 +451,7 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
   }
 
   if (necesitaSegundaPersona) {
-    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idB, ...perfilPreview() }) });
+    await fetch(`${supabaseUrl}/rest/v1/perfiles`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ usuario_id: idB, ...perfilPreview('completo') }) });
 
     if (escenario === 'match_pendiente') {
       // Fotos + fecha de nacimiento reales (aunque sea un avatar generado)
