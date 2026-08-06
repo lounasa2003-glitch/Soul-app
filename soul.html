@@ -2669,19 +2669,8 @@ var userEmail=null;
 // abre una carga nueva sin sesion, sea el mismo dispositivo o no -- por
 // eso el resultado siempre termina en "iniciá sesión para seguir", nunca
 // intenta retomar nada de memoria.
-// DIAGNOSTICO TEMPORAL -- cartel fijo (no un alert que se puede perder)
-// mostrando el estado real de Capacitor apenas carga, para ver adonde
-// llega la deteccion sin necesidad de tocar atras. Sacar despues.
-try{
-  var _d=document.createElement('div');
-  _d.textContent='Capacitor:'+(!!window.Capacitor)+' isNative:'+(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())+' App:'+(!!(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App));
-  _d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#c0392b;color:#fff;padding:8px;font-size:13px;white-space:pre-wrap';
-  document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(_d);});
-}catch(e){}
-
 window.addEventListener('DOMContentLoaded',async function(){
   escucharAperturaPush();
-  manejarBotonVolverAndroid();
 
   // Tope de "hace 18 años" en el selector de fecha -- solo UX (el chequeo
   // real que no se puede evitar esta en el servidor, ver EDAD_MINIMA en
@@ -3027,68 +3016,54 @@ function aplicarDeepLinkPush(data){
   }catch(e){}
 }
 
-// Se registra apenas arranca la app (no espera al login) para no perderse
-// el toque a una notificacion que abrio la app desde cerrada del todo --
-// Capacitor guarda esa apertura pendiente y la entrega en cuanto este
-// listener queda enganchado. Si todavia no hay sesion en ese momento, el
-// deep link queda guardado y cargarProgreso lo aplica apenas confirma quien
-// es la persona.
-// El boton/gesto Volver de Android, sin manejo propio, cae en el default de
-// Capacitor: WebView.goBack() si hay historial de navegacion REAL, o cerrar
-// la app si no. Como el WebView carga soul.html directo (ver server.url en
-// capacitor.config.json), en principio no deberia haber "atras" al que
-// volver -- pero cualquier navegacion de documento completo (por ejemplo si
-// en algun momento se llega a index.html) si deja una entrada real, y
-// volver ahi mata la sesion: accessToken/refreshToken viven solo en
-// variables de este script, nunca en localStorage. Este listener toma el
-// control total del boton: retrocede una etapa de la propia SPA
-// (etapaHistorial, ver ir()) en vez de tocar el historial del WebView, y si
-// ya no queda ninguna etapa anterior en esta sesion, pide confirmacion
-// antes de cerrar la app -- igual que solicitarBorrarCuenta() para borrar
-// la cuenta.
-function manejarBotonVolverAndroid(){
-  if(!window.Capacitor||!window.Capacitor.isNativePlatform||!window.Capacitor.isNativePlatform())return;
-  var CapApp=window.Capacitor.Plugins&&window.Capacitor.Plugins.App;
-  if(!CapApp)return;
-  try{
-    CapApp.addListener('backButton',function(){
-      // DIAGNOSTICO TEMPORAL -- sacar apenas se confirme si esto corre o no.
-      alert('JS: back detectado');
-      // Con el menu principal abierto, el gesto/boton fisico lo cierra en
-      // vez de navegar -- mismo criterio que tocar afuera del panel.
-      if(typeof menuPrincipalEstaAbierto==='function'&&menuPrincipalEstaAbierto()){
-        cerrarMenuPrincipal();
-        return;
-      }
-      // El fondo del historial suele ser la etapa 0 (login), pusheada ahi
-      // en el momento de autenticarse -- si se deja hacer pop() hasta
-      // llegar ahi con sesion activa, la persona aterriza en la pantalla
-      // de login todavia logueada (reportado en vivo: "regresar al login
-      // significa haber cerrado sesion de todas formas"). Se intercepta UN
-      // paso antes: si el proximo destino es una etapa pre-autenticacion
-      // (ETAPAS_SIN_MENU_PRINCIPAL), o si ya no queda historial al que
-      // volver, y hay sesion activa, se pregunta por cerrar sesion en vez
-      // de dejar aterrizar en el login o salir directo de la app.
-      var destino=etapaHistorial.length>0?etapaHistorial[etapaHistorial.length-1]:null;
-      var llegariaAlLogin=destino!==null&&ETAPAS_SIN_MENU_PRINCIPAL.indexOf(destino)>-1;
-      if(usuarioId&&(llegariaAlLogin||destino===null)){
-        if(confirm('¿Deseás cerrar sesión?')){
-          accessToken=null;refreshToken=null;usuarioId=null;
-          CapApp.exitApp();
-        }else{
-          volverAMenuPrincipal();
-        }
-      }else if(etapaHistorial.length>0){
-        ir(etapaHistorial.pop(),true);
-      }else if(confirm('¿Salir de Soul?')){
-        CapApp.exitApp();
-      }
-    });
-  }catch(e){
-    // DIAGNOSTICO TEMPORAL -- si addListener tira, esto lo hace visible en
-    // vez de tragarselo en silencio.
-    alert('JS: addListener fallo -- '+(e&&e.message||e));
+// Diagnostico en vivo (2026-08-05): Capacitor.Plugins.App no existe en este
+// WebView -- confirmado con un cartel de estado ("Capacitor:true
+// isNative:false App:false") apenas carga la app instalada. La app carga
+// soul.html por URL remota (ver server.url en capacitor.config.json), y en
+// esa configuracion el plugin nativo App nunca queda registrado del lado
+// JS, asi que CapApp.addListener('backButton',...) jamas se ejecuta -- el
+// boton/gesto Volver caia siempre en el default de Android (cerrar la
+// activity) sin pasar nunca por este script.
+// Reemplazo: en vez de depender del plugin roto, MainActivity.java
+// intercepta el boton/gesto de forma nativa y llama a esta funcion via
+// WebView.evaluateJavascript -- eso no depende de ningun plugin de
+// Capacitor, solo de la API basica de WebView. Esta funcion resuelve todo
+// lo que puede resolverse en JS (cerrar el menu, navegar con
+// etapaHistorial) y devuelve un string cuando hace falta un dialogo nativo
+// real, que MainActivity muestra con un AlertDialog.
+function manejarVolverNativo(){
+  // Con el menu principal abierto, el boton/gesto lo cierra en vez de
+  // navegar -- mismo criterio que tocar afuera del panel.
+  if(typeof menuPrincipalEstaAbierto==='function'&&menuPrincipalEstaAbierto()){
+    cerrarMenuPrincipal();
+    return 'manejado';
   }
+  // El fondo del historial suele ser la etapa 0 (login), pusheada ahi en el
+  // momento de autenticarse -- si se deja hacer pop() hasta llegar ahi con
+  // sesion activa, la persona aterriza en la pantalla de login todavia
+  // logueada (reportado en vivo: "regresar al login significa haber
+  // cerrado sesion de todas formas"). Se intercepta UN paso antes: si el
+  // proximo destino es una etapa pre-autenticacion
+  // (ETAPAS_SIN_MENU_PRINCIPAL), o si ya no queda historial al que volver,
+  // y hay sesion activa, se le pide al nativo el dialogo de cerrar sesion
+  // en vez de dejar aterrizar en el login o salir directo de la app.
+  var destino=etapaHistorial.length>0?etapaHistorial[etapaHistorial.length-1]:null;
+  var llegariaAlLogin=destino!==null&&ETAPAS_SIN_MENU_PRINCIPAL.indexOf(destino)>-1;
+  if(usuarioId&&(llegariaAlLogin||destino===null)){
+    return 'confirmar_cierre_sesion';
+  }else if(etapaHistorial.length>0){
+    ir(etapaHistorial.pop(),true);
+    return 'manejado';
+  }else{
+    return 'confirmar_salir';
+  }
+}
+
+// Llamada desde MainActivity.java cuando la persona confirma "No" en el
+// dialogo nativo de cerrar sesion -- vuelve al menu principal sin tocar la
+// sesion.
+function volverNativoSinCerrarSesion(){
+  volverAMenuPrincipal();
 }
 
 function escucharAperturaPush(){
@@ -4618,10 +4593,10 @@ async function analizarConversacionExterna(){
 // ── NAVEGACIÓN ──
 var etapaActual=0;
 // Pila de etapas visitadas dentro de esta misma carga -- la usa el boton
-// fisico/gesto "Volver" de Android (ver manejarBotonVolverAndroid) para
+// fisico/gesto "Volver" de Android (ver manejarVolverNativo) para
 // retroceder una pantalla DENTRO de la SPA en vez de dejar que Capacitor
 // navegue el WebView entero hacia atras (eso es lo que rompia la sesion,
-// ver comentario en manejarBotonVolverAndroid).
+// ver comentario en manejarVolverNativo).
 var etapaHistorial=[];
 function ir(n,sinHistorial){
   var idActual='e'+etapaActual;
@@ -4657,7 +4632,7 @@ function irATerminosCompletos(){
 
 // Boton "Volver" generico, para pantallas (como Términos completos) que no
 // tienen un destino fijo propio -- usa la MISMA pila que ya usa el botón
-// físico/gesto de Android (manejarBotonVolverAndroid), asi los dos
+// físico/gesto de Android (manejarVolverNativo), asi los dos
 // caminos (visible y físico) hacen exactamente lo mismo, nunca dos
 // implementaciones que puedan divergir.
 function volverEtapaAnterior(){
@@ -4682,7 +4657,7 @@ function actualizarVisibilidadMenu(){
 function abrirMenuPrincipal(){
   document.getElementById('menuPrincipalOverlay').style.display='block';
 }
-// Tambien la usa manejarBotonVolverAndroid() -- con el menu abierto, el
+// Tambien la usa manejarVolverNativo() -- con el menu abierto, el
 // boton/gesto fisico lo cierra en vez de navegar (comportamiento esperado
 // en un panel lateral).
 function cerrarMenuPrincipal(){
