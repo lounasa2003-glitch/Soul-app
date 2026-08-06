@@ -3042,6 +3042,8 @@ function manejarBotonVolverAndroid(){
   if(!CapApp)return;
   try{
     CapApp.addListener('backButton',function(){
+      // DIAGNOSTICO TEMPORAL -- sacar apenas se confirme si esto corre o no.
+      alert('JS: back detectado');
       // Con el menu principal abierto, el gesto/boton fisico lo cierra en
       // vez de navegar -- mismo criterio que tocar afuera del panel.
       if(typeof menuPrincipalEstaAbierto==='function'&&menuPrincipalEstaAbierto()){
@@ -3072,7 +3074,11 @@ function manejarBotonVolverAndroid(){
         CapApp.exitApp();
       }
     });
-  }catch(e){}
+  }catch(e){
+    // DIAGNOSTICO TEMPORAL -- si addListener tira, esto lo hace visible en
+    // vez de tragarselo en silencio.
+    alert('JS: addListener fallo -- '+(e&&e.message||e));
+  }
 }
 
 function escucharAperturaPush(){
