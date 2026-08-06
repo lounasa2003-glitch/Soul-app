@@ -344,6 +344,12 @@ async function loginOCrearAuth(supabaseUrl, supabaseKey, email, password) {
 // una cuenta de preview reusada podia quedar con lo que sea que tuviera de
 // una siembra anterior, o (la primera vez) sin ningun etapa_actual --
 // cualquiera de los dos rompe el escenario que se esta por armar.
+// mail_confirmado tambien se fuerza a true -- estas cuentas se crean
+// directo por API, nunca pasan por el flujo real de confirmacion de mail,
+// asi que sin esto cualquier accion gateada por emailConfirmado (escribir
+// en una cita, ver api/citas.js) corta a mitad del escenario sembrado
+// mandando a "confirmá tu email", algo que no tiene sentido pedirle a una
+// cuenta sintetica de prueba (reportado en vivo el 2026-08-06).
 async function asegurarUsuario(supabaseUrl, headers, email, nombre) {
   const r = await fetch(`${supabaseUrl}/rest/v1/usuarios?select=id&email=eq.${encodeURIComponent(email)}`, { headers });
   const rows = r.ok ? await r.json() : [];
@@ -351,14 +357,14 @@ async function asegurarUsuario(supabaseUrl, headers, email, nombre) {
     await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(rows[0].id)}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
-      body: JSON.stringify({ etapa_actual: 'chat' })
+      body: JSON.stringify({ etapa_actual: 'chat', mail_confirmado: true })
     });
     return rows[0].id;
   }
   const insertRes = await fetch(`${supabaseUrl}/rest/v1/usuarios`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-    body: JSON.stringify({ email, nombre, etapa_actual: 'chat' })
+    body: JSON.stringify({ email, nombre, etapa_actual: 'chat', mail_confirmado: true })
   });
   const inserted = await insertRes.json();
   return inserted[0].id;
