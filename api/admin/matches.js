@@ -541,7 +541,7 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
         // nueva desde Matches.
         await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
         await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authB.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
-        instrucciones = 'Las dos personas ya eligieron seguir en Soul, asi que el login te manda directo al encuentro NUEVO (activo, vacio) -- esto es lo que realmente pasa despues de esa decision. Tocá "← Salir" y andá a "Ver mis matches": vas a ver los dos encuentros anidados bajo el mismo match -- abrí el más viejo (cerrado) y tocá "Ver debriefing →" para entrar a la reflexión privada post-cita.';
+        instrucciones = 'Las dos personas ya eligieron seguir en Soul, asi que el login te manda directo al encuentro NUEVO (activo, vacio) -- esto es lo que realmente pasa despues de esa decision. Tocá ☰ y elegí "Matches": vas a ver los dos encuentros anidados bajo el mismo match -- abrí el más viejo (cerrado) y tocá "Ver debriefing →" para entrar a la reflexión privada post-cita.';
       } else {
         instrucciones = 'Vas a caer directo en la Sala de Encuentros (seguir en Soul / intercambiar datos / cerrar el vínculo) para el encuentro con Alex (preview).';
       }
