@@ -971,7 +971,7 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
       <div class="chat-orb"></div>
       <div>
         <div class="chat-nm">Soul</div>
-        <div class="chat-st" id="moduloLabel">preparándote para el encuentro</div>
+        <div class="chat-st" id="moduloLabel">preparándote</div>
       </div>
     </div>
     <div class="chat-area" id="moduloArea"></div>
@@ -1534,7 +1534,7 @@ async function initModulo(perfilExtraido, moduloEsencial, moduloRecomendado, mod
     fase: moduloFaseGuardada || (moduloEsencial==='Capacidad de volver a elegir'?'obligatorio':'esencial')
   };
   document.getElementById('moduloArea').innerHTML='';
-  document.getElementById('moduloLabel').textContent='preparándote para el encuentro';
+  document.getElementById('moduloLabel').textContent='preparándote';
 
   document.getElementById('moduloIn').addEventListener('keydown',function(e){
     if(e.key==='Enter')sendModulo();
