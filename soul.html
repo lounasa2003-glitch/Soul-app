@@ -1181,9 +1181,8 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
 <div class="etapa" id="e7">
   <div class="cita-wrap">
     <div class="cita-header">
-      <button class="chat-back-btn" style="margin-right:.6rem" onclick="volverAMenuPrincipal()">← Salir</button>
       <p class="cita-title">El encuentro ✦</p>
-      <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 3.2rem 0 0;padding:.4rem .7rem;font-size:.85rem">✦ Ayuda</button>
+      <button class="ritmo-btn" id="citaAyudaBtn" onclick="toggleAyuda()" style="margin:0 2.4rem 0 0;padding:.4rem .7rem;font-size:.85rem">✦ Ayuda</button>
       <div class="ritmo-opts" id="ayudaOpts" style="position:absolute;right:1rem;top:3rem;z-index:5">
         <div class="ritmo-opt" id="ayudaOptGenerarTema" onclick="pedirAyudaPrivada('generar_tema')">Generar un tema</div>
         <div class="ritmo-opt" id="ayudaOptSalirIncomodidad" onclick="pedirAyudaPrivada('salir_incomodidad')">Salir de una situación incómoda</div>
@@ -6565,7 +6564,7 @@ if('serviceWorker' in navigator){
      encima de cualquier modal (9999) para que quede alcanzable incluso con
      un modal abierto encima (ver modalUpsellModulo). ══ -->
 <div id="menuPrincipalBtn" onclick="abrirMenuPrincipal()" style="display:none;position:fixed;top:.7rem;right:.7rem;z-index:10000;align-items:center;gap:.4rem;padding:.4rem .8rem;border-radius:16px;background:rgba(7,5,10,.88);border:1px solid rgba(201,168,76,.35);color:#c9a84c;font-family:'Inter',sans-serif;font-size:.85rem;cursor:pointer">
-  <span style="opacity:.85">☰ Menú</span>
+  <span style="opacity:.85">☰</span>
 </div>
 <div id="menuPrincipalOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10001" onclick="cerrarMenuPrincipal()">
   <div style="position:absolute;top:0;right:0;bottom:0;width:80%;max-width:300px;background:#0f0a12;border-left:1px solid rgba(201,168,76,.2);padding:1.6rem 1.3rem;overflow-y:auto" onclick="event.stopPropagation()">
