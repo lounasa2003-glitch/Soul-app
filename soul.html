@@ -2669,6 +2669,16 @@ var userEmail=null;
 // abre una carga nueva sin sesion, sea el mismo dispositivo o no -- por
 // eso el resultado siempre termina en "iniciá sesión para seguir", nunca
 // intenta retomar nada de memoria.
+// DIAGNOSTICO TEMPORAL -- cartel fijo (no un alert que se puede perder)
+// mostrando el estado real de Capacitor apenas carga, para ver adonde
+// llega la deteccion sin necesidad de tocar atras. Sacar despues.
+try{
+  var _d=document.createElement('div');
+  _d.textContent='Capacitor:'+(!!window.Capacitor)+' isNative:'+(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())+' App:'+(!!(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.App));
+  _d.style.cssText='position:fixed;top:0;left:0;right:0;z-index:999999;background:#c0392b;color:#fff;padding:8px;font-size:13px;white-space:pre-wrap';
+  document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(_d);});
+}catch(e){}
+
 window.addEventListener('DOMContentLoaded',async function(){
   escucharAperturaPush();
   manejarBotonVolverAndroid();
