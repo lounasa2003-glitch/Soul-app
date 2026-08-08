@@ -530,18 +530,18 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
       await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'responderCierre', citaId: cita.id, respuesta: 'para' }) });
 
       if (escenario === 'debriefing') {
-        // Se resuelve la Sala de Encuentros de verdad, via la API real y
-        // por las dos personas (nunca escribiendo decision_a/b a mano en la
-        // base) -- eso es lo unico que efectivamente crea el proximo
-        // encuentro y reinicia decision_a/b como pasaria en un caso real.
-        // Antes esto se resolvia con un UPDATE directo a la base, que dejaba
-        // el match en un estado que nunca ocurre en la app real (decision
-        // "resuelta" pero sin el encuentro nuevo que ese resultado deberia
-        // haber generado) -- por eso no aparecia forma de agendar una charla
-        // nueva desde Matches.
-        await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authA.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
-        await fetch(`${base}/api/citas`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authB.access_token }, body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' }) });
-        instrucciones = 'Las dos personas ya eligieron seguir en Soul, asi que el login te manda directo al encuentro NUEVO (activo, vacio) -- esto es lo que realmente pasa despues de esa decision. Tocá ☰ y elegí "Matches": vas a ver los dos encuentros anidados bajo el mismo match -- abrí el más viejo (cerrado) y tocá "Ver debriefing →" para entrar a la reflexión privada post-cita.';
+        // Antes esto tambien resolvia la Sala de Encuentros (decidirSalaEncuentros
+        // para las dos personas), pero eso simula a alguien que YA paso por
+        // el debriefing y ya eligio como seguir -- no a alguien que recien
+        // termina la cita. recolectarPendientes() (soul.html) detecta un
+        // debriefing pendiente con solo esto: cita cerrada + todavia sin
+        // refinamiento_a propio -- ninguna de las dos cosas necesita tocar
+        // la Sala de Encuentros para nada. Dejando la cita asi (cerrada, sin
+        // decision de como seguir), el login entra derecho a la reflexion
+        // con Soul (abrirReflexionDesdeCita), igual que a una persona real
+        // que recien termino su cita (reportado en vivo el 2026-08-08: el
+        // escenario dejaba en un encuentro nuevo vacio en vez de esto).
+        instrucciones = 'El login te manda directo a la reflexión privada con Soul sobre el encuentro con Alex (preview) -- es lo que le pasa a alguien que recién terminó su cita.';
       } else {
         instrucciones = 'Vas a caer directo en la Sala de Encuentros (seguir en Soul / intercambiar datos / cerrar el vínculo) para el encuentro con Alex (preview).';
       }
