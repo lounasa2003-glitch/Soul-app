@@ -4197,9 +4197,21 @@ var reflexionCerrada=false;
 // (reflexionIntercambios llega a 2), se dispara el cierre en vez de seguir
 // la charla.
 var TOPE_MENSAJES_REFLEXION=2;
+// Un monosilabo ("bien", "sí", "ok") en la respuesta que dispararia el
+// cierre no alcanza para dar por terminado el debriefing -- se le pide que
+// elabore un poco antes de cerrar de verdad. Tope de 2 pedidos extra para
+// que igual cierre en algun momento si sigue contestando cortito
+// (reportado en vivo el 2026-08-08).
+var EXTENSIONES_MAX_REFLEXION=2;
+var reflexionExtensionesUsadas=0;
+function respuestaReflexionEsSuperficial(texto){
+  var palabras=texto.trim().split(/\s+/).filter(function(p){return p.length>0});
+  return palabras.length<3;
+}
 
 function abrirReflexionDesdeCita(citaId){
   reflexionCitaIdActual=citaId;
+  reflexionExtensionesUsadas=0;
   reflexionHistory=[];
   reflexionIntercambios=0;
   reflexionCerrada=false;
@@ -4342,6 +4354,21 @@ async function enviarReflexion(){
   // cierra la charla (extrae afinado + posible creencia limitante y devuelve
   // el mensaje de cierre) -- asi esto nunca queda abierto para siempre.
   if(reflexionIntercambios>=TOPE_MENSAJES_REFLEXION){
+    // La respuesta que dispararia el cierre es un monosilabo/frase suelta
+    // ("bien", "sí", "ok") -- no alcanza para dar por terminado el
+    // debriefing. Se le pide que elabore un poco y esta respuesta no cuenta
+    // para el tope, en vez de cerrar igual con casi nada dicho.
+    if(respuestaReflexionEsSuperficial(txt)&&reflexionExtensionesUsadas<EXTENSIONES_MAX_REFLEXION){
+      reflexionExtensionesUsadas++;
+      reflexionIntercambios--;
+      var tSuperficial=document.getElementById('reflexionTyping');if(tSuperficial)tSuperficial.remove();
+      var nudge='Contame un poco más -- ¿qué fue lo que más te quedó de esto?';
+      addReflexionMsg('soul',nudge);
+      reflexionHistory.push({role:'assistant',content:nudge});
+      guardarReflexionHistorial();
+      document.getElementById('reflexionSendBtn').disabled=false;
+      return;
+    }
     try{
       var resCierre=await fetchConSesion(function(){
         return fetch('/api/citas',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({accion:'cerrarReflexion',citaId:reflexionCitaIdActual,historial:reflexionHistory})});

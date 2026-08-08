@@ -894,15 +894,30 @@ async function extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, 
 // un array vacio -- el cliente ya tiene su propio saludo generico de
 // respaldo si el historial llega vacío.
 async function generarDevolucionInicial(supabaseUrl, headers, usuario, match, cita, soyA, otraPersonaNombre) {
-  await extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita, usuario);
-  await extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita, usuario);
+  // Las dos extracciones de fondo corren en PARALELO con la generacion del
+  // mensaje de apertura, no antes -- estaban encadenadas con await una
+  // detras de la otra (tres llamadas a Claude en secuencia), lo que hacia
+  // que entrar al debriefing tardara ~20s en mostrar el primer mensaje.
+  // Siguen esperandose las tres antes de responder (nada corre de verdad en
+  // segundo plano en un entorno serverless sin un mecanismo tipo waitUntil,
+  // asi que no alcanza con sacarles el await sin mas -- eso las dejaria a
+  // mitad de camino si el runtime corta la ejecucion apenas se manda la
+  // respuesta) -- pero ahora el tiempo total es el de la mas lenta de las
+  // tres, no la suma de las tres (reportado en vivo el 2026-08-08).
+  const extraccionesPromise = Promise.all([
+    extraerDinamicaRelacionalEnSegundoPlano(supabaseUrl, headers, match, cita, usuario),
+    extraerPerfilYCompatibilidadEnSegundoPlano(supabaseUrl, headers, match, cita, usuario)
+  ]);
   try {
-    const data = await llamarClaude({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      system: debriefingAperturaPrompt(otraPersonaNombre),
-      messages: [{ role: 'user', content: 'Arrancá la conversación.' }]
-    });
+    const [data] = await Promise.all([
+      llamarClaude({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 200,
+        system: debriefingAperturaPrompt(otraPersonaNombre),
+        messages: [{ role: 'user', content: 'Arrancá la conversación.' }]
+      }),
+      extraccionesPromise
+    ]);
     await registrarUsoTokens({ usuarioId: usuario.usuarioId, endpoint: 'debriefingApertura', usage: data.usage });
     const texto = (data.content || []).map(b => b.text || '').join('').trim();
     if (!texto) return [];
