@@ -551,6 +551,45 @@ async function sembrarPreview(req, res, supabaseUrl, supabaseKey, headers) {
   return res.status(200).json({ ok: true, email: PREVIEW_EMAIL_A, password: PREVIEW_PASSWORD, instrucciones });
 }
 
+// Alex (preview) elige "Seguir en Soul" del lado de ella -- para probar el
+// camino completo (las DOS personas de acuerdo) sin depender de una segunda
+// persona real detras de esa cuenta sintetica. Reusa la API real
+// (decidirSalaEncuentros en api/citas.js) con el token propio de Alex, asi
+// que si Vista Previa (la cuenta A) ya eligio lo mismo antes desde la app,
+// esto termina de resolver la decision mutua y crea el segundo encuentro
+// exactamente como pasaria con dos personas reales.
+async function simularAlexSeguirSoul(req, res, supabaseUrl, supabaseKey, headers) {
+  const base = baseUrlDesdeRequest(req);
+  const idA = await asegurarUsuario(supabaseUrl, headers, PREVIEW_EMAIL_A, PREVIEW_NOMBRE_A);
+  const idB = await asegurarUsuario(supabaseUrl, headers, PREVIEW_EMAIL_B, PREVIEW_NOMBRE_B);
+
+  const condiciones = `and(usuario_a.eq.${idA},usuario_b.eq.${idB}),and(usuario_a.eq.${idB},usuario_b.eq.${idA})`;
+  const matchesRes = await fetch(`${supabaseUrl}/rest/v1/matches?select=id,decision_a,decision_b,usuario_a&or=(${condiciones})&order=created_at.desc&limit=1`, { headers });
+  const matches = matchesRes.ok ? await matchesRes.json() : [];
+  const match = matches[0];
+  if (!match) {
+    return res.status(400).json({ error: 'No hay ningún match de preview todavía -- sembrá el escenario "Cita en curso" o "Debriefing" primero.' });
+  }
+
+  const authB = await loginOCrearAuth(supabaseUrl, supabaseKey, PREVIEW_EMAIL_B, PREVIEW_PASSWORD);
+  const r = await fetch(`${base}/api/citas`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + authB.access_token },
+    body: JSON.stringify({ accion: 'decidirSalaEncuentros', matchId: match.id, decision: 'seguir_soul' })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    return res.status(r.status).json({ error: data.error || 'No se pudo simular la decisión de Alex', detalle: data });
+  }
+
+  const decisionPropiaYaEstaba = match.usuario_a === idA ? match.decision_a : match.decision_b;
+  const instrucciones = decisionPropiaYaEstaba
+    ? 'Alex (preview) también eligió "Seguir en Soul" -- como vos ya habías elegido lo mismo desde la app, el segundo encuentro ya se creó. Volvé a entrar (o andá a Matches / Sala de Encuentros) para verlo.'
+    : 'Alex (preview) ya eligió "Seguir en Soul" de su lado. Ahora entrá a la app con tu cuenta y elegí "Seguir en Soul" vos también (Matches → Elegir cómo seguir) -- ahí se crea el segundo encuentro.';
+
+  return res.status(200).json({ ok: true, instrucciones });
+}
+
 // ── Forzar cierre del chat inicial sin depender de que Soul cierre sola ──
 // El cierre normal (soul.html, enviarAlChat) dependia 100% de que Soul
 // decidiera que ya cubrio los 9 temas del checklist y repitiera una frase
@@ -689,6 +728,9 @@ export default async function handler(req, res) {
     }
     if (accion === 'sembrarPreview') {
       return await sembrarPreview(req, res, supabaseUrl, supabaseKey, headers);
+    }
+    if (accion === 'simularAlexSeguirSoul') {
+      return await simularAlexSeguirSoul(req, res, supabaseUrl, supabaseKey, headers);
     }
     if (accion === 'forzarCierrePerfil') {
       return await forzarCierrePerfil(req, res, supabaseUrl, headers);

@@ -126,6 +126,10 @@ a{color:inherit}
           <button class="btn-secundario" onclick="sembrarPreview('debriefing')">Debriefing</button>
           <button class="btn-secundario" onclick="sembrarPreview('sala_encuentros')">Sala de Encuentros</button>
         </div>
+        <p style="font-size:.78rem;color:#7a6e78;margin-bottom:.5rem">Después de elegir "Seguir en Soul" con tu cuenta de Vista Previa (Matches → Elegir cómo seguir), tocá esto para que Alex (preview) elija lo mismo del otro lado y se cree el segundo encuentro:</p>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.8rem">
+          <button class="btn-secundario" onclick="simularAlexSeguirSoul()">Alex también elige "Seguir en Soul"</button>
+        </div>
         <div id="previewResultado" class="oculto" style="background:rgba(201,168,76,.08);border-radius:6px;padding:.8rem"></div>
       </div>
       <div style="border:1px solid #2a1f28;border-radius:8px;padding:1rem;margin-bottom:1.2rem">
@@ -238,6 +242,26 @@ async function sembrarPreview(escenario){
     div.innerHTML='<p style="font-size:.85rem;margin-bottom:.4rem"><strong>Email:</strong> '+esc(data.email)+' &nbsp; <strong>Contraseña:</strong> '+esc(data.password)+'</p><p style="font-size:.8rem;color:#d8cdd2">'+esc(data.instrucciones)+'</p>';
   }catch(e){
     div.innerHTML='<p class="error-msg">Error de conexión al preparar el escenario.</p>';
+  }
+}
+
+// Completa del lado de Alex (preview) la decision de "como seguir" -- para
+// probar el camino de las DOS personas de acuerdo sin depender de una
+// segunda persona real detras de esa cuenta sintetica.
+async function simularAlexSeguirSoul(){
+  var div=document.getElementById('previewResultado');
+  div.className='';
+  div.innerHTML='<p class="cargando">Simulando la decisión de Alex...</p>';
+  try{
+    var res=await llamarAdmin('/api/admin/matches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'simularAlexSeguirSoul'})});
+    var data=await res.json();
+    if(!res.ok){
+      div.innerHTML='<p class="error-msg">'+esc(data.error||'No se pudo simular la decisión')+'</p>';
+      return;
+    }
+    div.innerHTML='<p style="font-size:.8rem;color:#d8cdd2">'+esc(data.instrucciones)+'</p>';
+  }catch(e){
+    div.innerHTML='<p class="error-msg">Error de conexión al simular la decisión.</p>';
   }
 }
 
