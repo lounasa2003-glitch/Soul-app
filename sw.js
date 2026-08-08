@@ -4,8 +4,15 @@
 // conexion", nunca "cache primero". Nunca toca /api/* -- cachear eso
 // mostraria datos viejos como si fueran actuales (un match que ya no esta,
 // un mensaje que ya se respondio).
-const CACHE_NAME = 'soul-shell-v1';
-const APP_SHELL = ['/soul.html', '/manifest.json'];
+// v2: se agrega index.html -- desde que start_url (manifest.json y
+// capacitor.config.json) pasaron a apuntar ahi en vez de a soul.html
+// directo, esta lista se habia quedado vieja: si la red fallaba o tardaba
+// justo en el arranque, no habia nada cacheado como respaldo para
+// index.html y la app quedaba en blanco (reportado en vivo el 2026-08-08).
+// El nombre de cache nuevo fuerza que activate() reemplace el cache viejo
+// (que nunca tuvo index.html) en vez de reusarlo tal cual.
+const CACHE_NAME = 'soul-shell-v2';
+const APP_SHELL = ['/soul.html', '/index.html', '/manifest.json'];
 
 // Push en el navegador (gente que usa Soul desde Chrome sin instalar la
 // app) -- mismo proyecto de Firebase que la app Android, mismo endpoint de
