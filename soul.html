@@ -4230,6 +4230,15 @@ async function initReflexionCita(){
   document.getElementById('reflexionIn').onkeydown=function(e){if(e.key==='Enter')enviarReflexion()};
   document.getElementById('reflexionIn').style.display='';
   document.getElementById('reflexionSendBtn').style.display='';
+  // Deshabilitado hasta que se termine de cargar el historial guardado (el
+  // fetch de mas abajo tarda unos segundos) -- si se podia escribir antes de
+  // eso, un mensaje mandado en ese momento (ver enviarReflexion) corria en
+  // paralelo con esta carga y las dos terminaban pisandose el historial y el
+  // contador de intercambios entre si: se vio en vivo como el saludo inicial
+  // apareciendo tarde y duplicado, y el cierre disparandose antes de tiempo
+  // (reportado el 2026-08-08).
+  document.getElementById('reflexionIn').disabled=true;
+  document.getElementById('reflexionSendBtn').disabled=true;
   document.getElementById('reflexionTitulo').textContent='Pensando en tu encuentro';
   // Esta llamada tarda unos segundos (verificacion de sesion) y antes no
   // mostraba ningun indicador mientras tanto -- el area de mensajes se veia
@@ -4250,6 +4259,8 @@ async function initReflexionCita(){
     if(puntitosEl)puntitosEl.remove();
     if(!res.ok){
       document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.'+htmlBotonReportar('reflexion_abrir')+'</p>';
+      document.getElementById('reflexionIn').disabled=false;
+      document.getElementById('reflexionSendBtn').disabled=false;
       return;
     }
     window.reflexionContexto=data;
@@ -4273,9 +4284,15 @@ async function initReflexionCita(){
       guardarReflexionHistorial();
     }
     if(reflexionCerrada)cerrarConversacionReflexion();
+    else{
+      document.getElementById('reflexionIn').disabled=false;
+      document.getElementById('reflexionSendBtn').disabled=false;
+    }
     scrollAlFondo('reflexionArea');
   }catch(e){
     document.getElementById('reflexionArea').innerHTML='<p class="auth-err" style="display:block">No pudimos abrir esta conversación.</p>';
+    document.getElementById('reflexionIn').disabled=false;
+    document.getElementById('reflexionSendBtn').disabled=false;
   }
 }
 function cerrarConversacionReflexion(){
