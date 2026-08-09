@@ -36,9 +36,13 @@ export default async function handler(req, res) {
   // Archivar/desarchivar una persona -- no borra nada, solo la saca de la
   // vista principal del panel (ver "archivada" en la query de listado).
   // Reversible en cualquier momento desde la sección "Archivadas". El mismo
-  // PATCH tambien cambia 'plan' (free/pro) -- no hay pago conectado todavia
-  // (StoreKit/IAP pendiente para iOS), asi que esto es el interruptor manual
-  // que usa Lu mientras tanto para dar Pro a alguien a mano.
+  // PATCH tambien cambia 'plan' (free/pro) -- este es el interruptor manual
+  // que usa Lu para dar Pro a alguien a mano (cortesia), aparte del Pro
+  // pagado real via Google Play Billing (ver api/billing.js). Todo cambio
+  // manual de plan queda marcado plan_origen='manual' y desvincula
+  // cualquier suscripcion que hubiera (ver mas abajo) -- eso es lo que evita
+  // que el respaldo diario o un aviso de Google le pisen el plan a alguien
+  // a quien Lu le dio Pro por cortesia.
   if (req.method === 'PATCH' && modo === 'probarPush') {
     // ── Debug puntual para confirmar que el envio de verdad funciona,
     // sin esperar a que se dispare un evento real (match/mensaje/cierre).
@@ -119,7 +123,23 @@ export default async function handler(req, res) {
     }
     const cambios = {};
     if (typeof archivada === 'boolean') cambios.archivada = archivada;
-    if (plan !== undefined) cambios.plan = plan;
+    if (plan !== undefined) {
+      cambios.plan = plan;
+      // Todo cambio de plan desde el panel es, por definicion, manual --
+      // aunque la persona tenga (o haya tenido) una suscripcion real, este
+      // interruptor la desvincula a proposito: se limpian los campos de
+      // suscripcion para que ni el respaldo diario ni una notificacion de
+      // Google (que buscan por plan_purchase_token, ver
+      // lib/suscripciones.js) encuentren esta fila y le pisen el plan que
+      // Lu acaba de poner a mano.
+      cambios.plan_origen = 'manual';
+      cambios.plan_purchase_token = null;
+      cambios.plan_producto_id = null;
+      cambios.plan_vencimiento = null;
+      cambios.plan_auto_renueva = null;
+      cambios.plan_estado_suscripcion = null;
+      cambios.plan_actualizado_en = new Date().toISOString();
+    }
     const patchRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { ...headers, 'Content-Type': 'application/json', Prefer: 'return=minimal' },

@@ -4756,11 +4756,151 @@ function actualizarBadgePlan(){
 
 function mostrarInfoPro(){
   var linea=document.getElementById('infoProPlanActual');
-  if(linea)linea.textContent='Tu plan actual: '+(window.usuarioPlan==='pro'?'Pro':'Free');
+  var esPro=window.usuarioPlan==='pro';
+  if(linea)linea.textContent='Tu plan actual: '+(esPro?'Pro':'Free');
+  var msgEl=document.getElementById('infoProMensaje');
+  if(msgEl){msgEl.style.display='none';msgEl.textContent='';}
+  var disponibleNativo=billingNativoDisponible();
+  var comprarBtn=document.getElementById('infoProComprarBtn');
+  var restaurarBtn=document.getElementById('infoProRestaurarBtn');
+  var gestionarBtn=document.getElementById('infoProGestionarBtn');
+  var soloWebAviso=document.getElementById('infoProSoloWebAviso');
+  if(comprarBtn)comprarBtn.style.display=(!esPro&&disponibleNativo)?'block':'none';
+  if(restaurarBtn)restaurarBtn.style.display=(!esPro&&disponibleNativo)?'block':'none';
+  if(gestionarBtn)gestionarBtn.style.display=(esPro&&disponibleNativo)?'block':'none';
+  if(soloWebAviso)soloWebAviso.style.display=disponibleNativo?'none':'block';
+  if(disponibleNativo)inicializarBillingNativo();
   document.getElementById('modalInfoPro').style.display='flex';
 }
 function cerrarInfoPro(){
   document.getElementById('modalInfoPro').style.display='none';
+}
+
+// ══ Google Play Billing -- Soul Pro (suscripcion mensual) ══
+// El product id tiene que ser EXACTO al que se cree en Play Console
+// (Monetize -> Products -> Subscriptions) -- si no coincide letra por
+// letra, Google nunca lo va a reconocer. Ajustar aca si se elige otro id.
+var SOUL_PRO_PRODUCT_ID='soul_pro_mensual';
+
+// La compra real solo existe dentro de la app nativa de Android -- esta
+// misma pantalla tambien se ve en el navegador/PWA (ver el resto de
+// isNativePlatform() en este archivo), donde Play Billing no existe.
+function billingNativoDisponible(){
+  return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()&&window.Capacitor.Plugins&&window.Capacitor.Plugins.PurchasePlugin);
+}
+
+var billingInicializado=false;
+var billingRestaurando=false;
+
+function mostrarMensajeInfoPro(texto){
+  var el=document.getElementById('infoProMensaje');
+  if(el){el.textContent=texto;el.style.display='block';}
+}
+
+// Conecta el BillingClient y registra los listeners UNA sola vez por sesion
+// de la app. 'purchasesUpdated' llega apenas se completa una compra nueva;
+// 'setPurchases' llega tanto al pedir restaurar a mano (getPurchases()) como
+// al chequeo automatico que hace el plugin nativo al abrir la app (throttleado
+// a una vez cada 24hs del lado nativo) -- las dos rutas terminan en el mismo
+// verificarCompraEnBackend, asi que una compra que Google ya reconoce pero
+// que nunca llego a confirmarse con el backend (ej. la app se cerro justo
+// despues de pagar) se termina de resolver sola la proxima vez que se abre
+// la app, sin que la persona tenga que tocar "restaurar".
+async function inicializarBillingNativo(){
+  if(!billingNativoDisponible()||billingInicializado)return;
+  var Purchase=window.Capacitor.Plugins.PurchasePlugin;
+  try{
+    await Purchase.init();
+    await Purchase.getAvailableProducts({inAppSkus:[],subsSkus:[SOUL_PRO_PRODUCT_ID]});
+    Purchase.addListener('purchasesUpdated',function(data){procesarComprasDetectadas(data&&data.purchases);});
+    Purchase.addListener('setPurchases',function(data){procesarComprasDetectadas(data&&data.purchases);});
+    billingInicializado=true;
+    Purchase.getPurchases().catch(function(){});
+  }catch(e){
+    // Sin Play Store disponible (bloqueado, sin cuenta de Google, etc) --
+    // el boton de comprar simplemente va a fallar mas claro cuando la
+    // persona lo toque, no hace falta bloquear nada aca.
+  }
+}
+
+async function procesarComprasDetectadas(purchases){
+  if(!purchases||!purchases.length)return;
+  var compra=purchases.find(function(p){return (p.productIds||[]).indexOf(SOUL_PRO_PRODUCT_ID)>-1;});
+  if(!compra||!compra.purchaseToken){
+    if(billingRestaurando){
+      billingRestaurando=false;
+      mostrarMensajeInfoPro('No encontramos ninguna compra de Soul Pro asociada a esta cuenta de Google Play.');
+    }
+    return;
+  }
+  await verificarCompraEnBackend(compra.purchaseToken);
+}
+
+async function verificarCompraEnBackend(purchaseToken){
+  try{
+    var res=await fetchConSesion(function(){
+      return fetch('/api/billing',{
+        method:'POST',
+        headers:authHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({accion:'verificar',purchaseToken:purchaseToken})
+      });
+    });
+    var data=await res.json();
+    billingRestaurando=false;
+    if(!res.ok){
+      mostrarMensajeInfoPro(data.mensaje||'No pudimos confirmar la compra. Probá de nuevo en un rato.');
+      return;
+    }
+    window.usuarioPlan=data.plan||window.usuarioPlan;
+    actualizarBadgePlan();
+    if(data.plan==='pro'){
+      mostrarMensajeInfoPro('¡Listo! Ya sos Pro.');
+    }else{
+      mostrarMensajeInfoPro('Recibimos tu compra, pero todavía no está activa (estado: '+(data.estado||'desconocido')+'). Si el pago se completó, esto se actualiza solo en unos minutos.');
+    }
+  }catch(e){
+    billingRestaurando=false;
+    mostrarMensajeInfoPro('No pudimos confirmar la compra. Probá de nuevo en un rato.');
+  }
+}
+
+async function comprarSoulPro(){
+  if(!billingNativoDisponible()){
+    mostrarMensajeInfoPro('La compra de Soul Pro está disponible desde la app de Android.');
+    return;
+  }
+  await inicializarBillingNativo();
+  try{
+    await window.Capacitor.Plugins.PurchasePlugin.subscribe({productId:SOUL_PRO_PRODUCT_ID});
+    // El resultado real llega por el listener 'purchasesUpdated' de arriba --
+    // subscribe() solo confirma que el flujo de compra de Google se abrio.
+  }catch(e){
+    if(e&&e.message==='USER_CANCELED')return;
+    mostrarMensajeInfoPro('No pudimos iniciar la compra. Probá de nuevo en un rato.');
+  }
+}
+
+async function restaurarCompraSoulPro(){
+  if(!billingNativoDisponible()){
+    mostrarMensajeInfoPro('Restaurar compra está disponible desde la app de Android.');
+    return;
+  }
+  await inicializarBillingNativo();
+  billingRestaurando=true;
+  mostrarMensajeInfoPro('Buscando compras anteriores...');
+  try{
+    await window.Capacitor.Plugins.PurchasePlugin.getPurchases();
+  }catch(e){
+    billingRestaurando=false;
+    mostrarMensajeInfoPro('No pudimos revisar tus compras. Probá de nuevo en un rato.');
+  }
+}
+
+async function gestionarSuscripcionSoulPro(){
+  if(!billingNativoDisponible())return;
+  try{
+    await window.Capacitor.Plugins.PurchasePlugin.manageSubscriptions();
+  }catch(e){}
 }
 
 // Mensaje motivacional fijo, sin generar con Claude -- rota entre variantes
@@ -6582,6 +6722,14 @@ document.addEventListener('DOMContentLoaded',function(){
 
 window.addEventListener('soul:sesion-lista',mostrarBannerPushSiCorresponde);
 
+// Deja el BillingClient conectado y los listeners de compra escuchando
+// desde que arranca la sesion (no recien cuando se abre el modal de Soul
+// Pro) -- asi una compra que Google ya reconoce pero que quedo sin
+// confirmar con el backend (ver el comentario en inicializarBillingNativo)
+// se resuelve en segundo plano, sin que la persona tenga que entrar a
+// "Soul Pro" para que se note.
+window.addEventListener('soul:sesion-lista',function(){ inicializarBillingNativo(); });
+
 // Click en la notificacion en segundo plano -- sw.js enfoca/abre la
 // pestaña y manda el "data" por postMessage; acá se recibe y rutea con la
 // misma funcion que usa la app Android.
@@ -6641,8 +6789,8 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
-<!-- ══ INFO SOUL PRO -- estado real (sin pago conectado todavía), nunca
-     una falsa posibilidad de compra. Ver mostrarInfoPro(). ══ -->
+<!-- ══ INFO SOUL PRO -- estado real del plan + compra real via Google Play
+     Billing (suscripcion mensual). Ver mostrarInfoPro(). ══ -->
 <div id="modalInfoPro" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem" onclick="if(event.target===this)cerrarInfoPro()">
   <div style="max-width:360px;text-align:center">
     <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.3rem">Soul Pro</p>
@@ -6653,7 +6801,11 @@ if('serviceWorker' in navigator){
       <li>Acceder a los módulos de profundización -- charlas guiadas con Soul sobre lo que más te conviene trabajar (apertura al compromiso, autonomía emocional, poder personal, coherencia interna, entre otros), más allá del módulo obligatorio que ya incluye el piloto.</li>
       <li>Un análisis de compatibilidad más detallado.</li>
     </ul>
-    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">Todavía no tenemos el pago conectado en la app -- <strong style="color:#c9a84c">Próximamente</strong>. Por ahora, todo el piloto tiene acceso completo sin costo.</p>
+    <p id="infoProMensaje" style="display:none;font-family:'Inter',sans-serif;font-size:.85rem;color:#c9a84c;line-height:1.5;margin-bottom:1rem"></p>
+    <p id="infoProSoloWebAviso" style="display:none;font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">La compra de Soul Pro está disponible desde la app de Android.</p>
+    <button id="infoProComprarBtn" class="btn-gold" onclick="comprarSoulPro()" style="display:none;width:100%;margin-bottom:.6rem">Hacerme Pro -- USD 9,99/mes</button>
+    <button id="infoProGestionarBtn" class="btn-gold" onclick="gestionarSuscripcionSoulPro()" style="display:none;width:100%;margin-bottom:.6rem">Gestionar mi suscripción</button>
+    <button id="infoProRestaurarBtn" onclick="restaurarCompraSoulPro()" style="display:none;width:100%;margin-bottom:.6rem;background:none;border:1px solid #c9a84c;color:#c9a84c;border-radius:8px;padding:.7rem;font-family:'Inter',sans-serif;font-size:.85rem">Restaurar compra</button>
     <button class="btn-gold" onclick="cerrarInfoPro()" style="width:100%">Entendido</button>
   </div>
 </div>
@@ -6665,7 +6817,6 @@ if('serviceWorker' in navigator){
     <p id="upsellModuloNombre" style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.3rem;color:#c9a84c;margin-bottom:1rem"></p>
     <p id="upsellModuloPorque" style="font-family:'Inter',sans-serif;font-size:.92rem;color:#d8cdd2;line-height:1.6;margin-bottom:.9rem;text-align:left"></p>
     <p id="upsellModuloTrabajar" style="font-family:'Inter',sans-serif;font-size:.9rem;color:#9a8e96;line-height:1.6;margin-bottom:1.2rem;text-align:left"></p>
-    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">Todavía no tenemos el pago conectado en la app -- <strong style="color:#c9a84c">Próximamente</strong>. Por ahora, todo el piloto tiene acceso completo sin costo.</p>
     <button class="btn-gold" onclick="cerrarUpsellModulo();mostrarInfoPro()" style="width:100%">Conocer Soul Pro →</button>
   </div>
 </div>

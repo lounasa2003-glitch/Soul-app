@@ -1,6 +1,8 @@
 import { notificarDiagnosticoDiario } from '../../lib/email.js';
 import { finalizarCita } from '../../lib/cierreCita.js';
 import { registrarErrorSilencioso } from '../../lib/logErrorSilencioso.js';
+import { consultarSuscripcion } from '../../lib/googlePlay.js';
+import { aplicarSuscripcionAUsuario } from '../../lib/suscripciones.js';
 
 // Corre una vez por dia (ver vercel.json) y junta en un solo lugar lo que
 // hoy solo se ve revisando a mano Resend/Supabase por separado -- tanto los
@@ -449,6 +451,49 @@ async function leerSupabase(tabla, params) {
   return res.json();
 }
 
+// Respaldo diario de Google Play Billing (Ajuste de alcance: RTDN es el
+// mecanismo PRINCIPAL para reflejar renovacion/cancelacion/gracia/
+// suspension/vencimiento en 'usuarios' -- esto es la red de seguridad para
+// cuando una notificacion de Pub/Sub se pierde, llega mientras la funcion
+// estaba caida, o el push nunca se entrega por lo que sea. Re-consulta
+// TODAS las suscripciones activas contra Google (misma fuente de verdad
+// que usa api/billing.js y api/billing-rtdn.js, ver lib/googlePlay.js) y
+// aplica el mismo mapeo de siempre (lib/suscripciones.js) -- nunca decide
+// nada distinto por venir del cron. Solo mira plan_origen='suscripcion' --
+// un Pro manual/cortesia (ver api/admin/personas.js) no tiene
+// plan_purchase_token, asi que ni siquiera entra en esta consulta.
+async function respaldarSuscripciones(supabaseUrl, supabaseKey) {
+  const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` };
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/usuarios?select=id,plan_purchase_token,plan_estado_suscripcion&plan_origen=eq.suscripcion&plan_purchase_token=not.is.null`,
+    { headers }
+  );
+  const filas = res.ok ? await res.json() : [];
+  let revisadas = 0, aPro = 0, aFree = 0, sinReconocer = 0, errores = 0;
+  for (const fila of filas) {
+    try {
+      const datosGoogle = await consultarSuscripcion(fila.plan_purchase_token);
+      if (!datosGoogle) {
+        // Google ya no reconoce este token -- no se toca a ciegas (podria
+        // ser un problema temporal del lado de Google), queda para revisar
+        // a mano si se repite dia tras dia.
+        sinReconocer += 1;
+        continue;
+      }
+      const estadoAntes = fila.plan_estado_suscripcion;
+      const campos = await aplicarSuscripcionAUsuario(fila.id, fila.plan_purchase_token, datosGoogle);
+      revisadas += 1;
+      if (campos.plan && campos.plan_estado_suscripcion !== estadoAntes) {
+        if (campos.plan === 'pro') aPro += 1; else aFree += 1;
+      }
+    } catch (e) {
+      errores += 1;
+      await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: respaldarSuscripciones', error: e, meta: { usuarioId: fila.id } });
+    }
+  }
+  return { candidatas: filas.length, revisadas, aPro, aFree, sinReconocer, errores };
+}
+
 async function chequearResend(desde) {
   const rkey = process.env.RESEND_API_KEY;
   if (!rkey) return { disponible: false, problematicos: [], totalEnviados: 0 };
@@ -521,6 +566,15 @@ export default async function handler(req, res) {
         return { citasVencidas: 0, citasPurgadas: 0, citasFrenadasPorReporte: 0, error: true };
       });
 
+    // Respaldo de suscripciones de Google Play (ver respaldarSuscripciones
+    // arriba) -- mismo motivo de orden que el resto de este bloque
+    // (escritura antes que lectura).
+    const respaldoSuscripciones = await respaldarSuscripciones(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+      .catch(async (e) => {
+        await registrarErrorSilencioso({ contexto: 'cron/diagnostico-diario: respaldarSuscripciones', error: e });
+        return { candidatas: 0, revisadas: 0, aPro: 0, aFree: 0, sinReconocer: 0, errores: 0, error: true };
+      });
+
     const [errores, reportes, fugas, tokens, resend, sinConfirmar, reportesTecnicos] = await Promise.all([
       leerSupabase('errores_silenciosos', `select=contexto,mensaje,creado_en&creado_en=gte.${encodeURIComponent(desde)}&order=creado_en.desc&limit=500`),
       leerSupabase('reportes', `select=id,usuario_reporta,usuario_reportado,motivo,created_at&created_at=gte.${encodeURIComponent(desde)}`),
@@ -560,6 +614,7 @@ export default async function handler(req, res) {
       borradoDeCuentas: purgado,
       purgaPorAntiguedad: purgadoAntiguedad,
       purgaCitaMensajes: purgadoCitaMensajes,
+      respaldoSuscripciones,
       tokens: { totalInput, totalOutput, totalCacheCreation, totalCacheRead, costoEstimadoUsd: Number(costoEstimado.toFixed(2)) }
     };
 
@@ -610,6 +665,17 @@ export default async function handler(req, res) {
     lineas.push(`<h3>Retención de cita_mensajes a 12 meses (Decisión 6): ${purgadoCitaMensajes.citasPurgadas} de ${purgadoCitaMensajes.citasVencidas} citas vencidas</h3>`);
     if (purgadoCitaMensajes.citasFrenadasPorReporte > 0) {
       lineas.push(`<p>${purgadoCitaMensajes.citasFrenadasPorReporte} citas frenadas por tener un reporte abierto en su match.</p>`);
+    }
+
+    lineas.push(`<h3>Respaldo de suscripciones Soul Pro (Google Play): ${respaldoSuscripciones.revisadas} de ${respaldoSuscripciones.candidatas} revisadas</h3>`);
+    if (respaldoSuscripciones.aPro > 0 || respaldoSuscripciones.aFree > 0) {
+      lineas.push(`<p>Cambios de estado detectados que RTDN no habia aplicado todavia: ${respaldoSuscripciones.aPro} a Pro, ${respaldoSuscripciones.aFree} a Free.</p>`);
+    }
+    if (respaldoSuscripciones.sinReconocer > 0) {
+      lineas.push(`<p>⚠ ${respaldoSuscripciones.sinReconocer} token(s) que Google ya no reconoce -- revisar a mano.</p>`);
+    }
+    if (respaldoSuscripciones.errores > 0) {
+      lineas.push(`<p>⚠ ${respaldoSuscripciones.errores} error(es) revisando suscripciones -- ver errores_silenciosos.</p>`);
     }
 
     lineas.push(`<h3>Uso de tokens (24hs)</h3>`);
