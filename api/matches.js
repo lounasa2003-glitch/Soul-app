@@ -143,8 +143,11 @@ const PRESENTACION_PERFIL_PROMPT = `Sos Soul. Vas a presentar a una persona a al
 // Introduccion humana de la otra persona (nombre, edad, bio breve, foto)
 // antes de decidir si avanzar con el match -- info parcial e introductoria
 // a proposito, nunca el perfil psicologico completo (eso ya tiene su
-// momento mas adelante en el flujo). Se genera en el momento, sin cachear
-// -- es un llamado unico por decision de match, volumen bajo.
+// momento mas adelante en el flujo). La bio (texto de Claude) se cachea en
+// perfiles.bio_presentacion y se reutiliza en cada apertura de pantalla;
+// solo se regenera si el perfil se revalido despues de la ultima bio
+// generada (ver mas abajo). El resto de estos datos (nombre, foto, ciudad,
+// etc.) no pasa por Claude y siempre se lee fresco.
 async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   const { presentacionMatchId } = req.query;
   const matchRes = await fetch(
@@ -168,7 +171,7 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   // que 'perfiles' arriba, service role key para leer a la otra persona.
   const [otraRes, perfilRes] = await Promise.all([
     fetch(`${supabaseUrl}/rest/v1/usuarios?select=nombre,fecha_nacimiento,foto_cara,foto_aprobada,ciudad,ocupacion,tipo_vinculo,hijos,estado_civil,no_negociables,negociables&id=eq.${encodeURIComponent(otraId)}`, { headers: headersService }),
-    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers: headersService })
+    fetch(`${supabaseUrl}/rest/v1/perfiles?select=grupo1,grupo2,bio_presentacion,bio_generada_en,perfil_validado_en&usuario_id=eq.${encodeURIComponent(otraId)}`, { headers: headersService })
   ]);
   const otras = otraRes.ok ? await otraRes.json() : [];
   const otra = otras[0];
@@ -176,8 +179,19 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
   const perfiles = perfilRes.ok ? await perfilRes.json() : [];
   const perfil = perfiles[0];
 
-  let bio = null;
-  if (perfil && (perfil.grupo1 || perfil.grupo2)) {
+  // Bio cacheada por PERSONA (no por match): depende solo de grupo1/grupo2
+  // del perfil de "otraId", asi que un mismo llamado a Claude sirve para
+  // cualquier match en el que esa persona aparezca -- se reutiliza mientras
+  // el perfil no haya cambiado despues de generada. "Cambio relevante" usa
+  // la misma señal que ya gatea el matching (perfil_validado_en, ver
+  // lib/conclusionSoul.js): si el perfil se revalido despues de la ultima
+  // bio generada, se regenera; si no, cero llamada a Claude aunque se
+  // reabra la pantalla mil veces.
+  const bioCacheVigente = perfil && perfil.bio_presentacion && perfil.bio_generada_en &&
+    (!perfil.perfil_validado_en || new Date(perfil.perfil_validado_en) <= new Date(perfil.bio_generada_en));
+
+  let bio = bioCacheVigente ? perfil.bio_presentacion : null;
+  if (!bioCacheVigente && perfil && (perfil.grupo1 || perfil.grupo2)) {
     try {
       const data = await llamarClaude({
         model: 'claude-sonnet-4-6',
@@ -186,6 +200,13 @@ async function obtenerPresentacion(req, res, supabaseUrl, headers, usuario) {
         messages: [{ role: 'user', content: 'Perfil: ' + JSON.stringify({ grupo1: perfil.grupo1, grupo2: perfil.grupo2 }) }]
       });
       bio = (data.content || []).map(b => b.text || '').join('').trim() || null;
+      if (bio) {
+        await fetch(`${supabaseUrl}/rest/v1/perfiles?usuario_id=eq.${encodeURIComponent(otraId)}`, {
+          method: 'PATCH',
+          headers: { ...headersService, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ bio_presentacion: bio, bio_generada_en: new Date().toISOString() })
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error('Error generando bio de presentación:', e);
       await registrarErrorSilencioso({ contexto: 'api/matches: bio de presentacion', error: e });

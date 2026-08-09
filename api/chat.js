@@ -15,14 +15,49 @@ const MODELO_RAPIDO = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS_TOPE = 1500;
 const LIMITE_CHAT = 30;
 const VENTANA_CHAT_SEGUNDOS = 300;
-// Tope diario aparte del anti-rafaga de arriba -- ese frena mandar mensajes
-// muy rapido, este frena una conversacion anormalmente larga sostenida
-// durante horas. 80/dia no lo toca una conversacion reflexiva real (el uso
-// del piloto nunca se acerco a eso), pero corta un loop de abuso o un bug de
-// reintento. Aplica a free Y pro por igual -- es seguridad tecnica, no un
-// limite de producto, asi que no depende del plan.
-const LIMITE_CHAT_DIARIO = 80;
+// Tope diario del chat libre -- contador propio ('chat-diario'), separado
+// del de modulos ('modulo'/'modulo-semanal' mas abajo). Hasta ahora los dos
+// compartian este mismo contador (ver historial de este archivo); quedaban
+// mezclados un chat casual con una charla de profundizacion, que tienen
+// perfiles de costo muy distintos (Haiku vs Sonnet). 40/dia es el limite de
+// producto para Soul Pro (ver propuesta de limites aprobada). Aplica a free
+// y pro por igual -- sigue siendo ante todo un freno anti-abuso, no algo que
+// dependa del plan.
+const LIMITE_CHAT_DIARIO = 40;
 const VENTANA_CHAT_DIARIO_SEGUNDOS = 86400;
+// Reflexion post-cita (contexto:'reflexion', ver enviarReflexion en
+// soul.html): contador diario propio, separado del de chat casual --
+// comparte modelo (Sonnet) y volumen con el resto del bundle de debriefing,
+// no con el chat libre de Haiku, asi que no debe competir por el mismo
+// cupo de 40/dia. 80 es el valor que ya tenia el limite compartido antes de
+// separar chat/modulos/reflexion en contadores propios -- no se reduce ni
+// se ajusta la logica de la reflexion en si, solo se le da su propio cupo
+// para que dejar de compartir con chat no le reste volumen.
+const LIMITE_REFLEXION_DIARIO = 80;
+// Modulos: contador de rafaga propio (mismos numeros que el chat libre, pero
+// bucket separado -- 'modulo' en vez de 'chat', para no compartir cupo).
+const LIMITE_MODULO_RAFAGA = 30;
+const VENTANA_MODULO_RAFAGA_SEGUNDOS = 300;
+// 3 sesiones de modulo por semana (limite de producto aprobado). Se
+// consume UNA vez por sesion, no por mensaje -- se detecta "arranca una
+// sesion nueva" cuando el array de mensajes que llega trae un solo turno
+// 'user' (el primer mensaje de iniciarModuloReal/iniciarModuloObligatorio en
+// soul.html), asi que no hace falta ninguna tabla nueva para contar
+// sesiones: se reutiliza rate_limits con chequearLimite() igual que el
+// resto de los limites de este archivo. "obligatorio" (Capacidad de volver
+// a elegir) queda afuera: es requisito para todos antes de un encuentro,
+// nunca compite por este cupo (mismo criterio que el gate de plan mas abajo).
+const LIMITE_MODULO_SEMANAL = 3;
+const VENTANA_MODULO_SEMANAL_SEGUNDOS = 604800;
+// Tope de intercambios POR SESION de modulo (15, limite de producto
+// aprobado). Server-side es un respaldo -- el cliente ya se autolimita en
+// soul.html (TOPE_MENSAJES_POR_MODULO) y corta con un cierre pregrabado
+// antes de llegar aca, pero un cliente desactualizado o modificado no debe
+// poder superar esto. Se cuenta sobre el array "messages" que llega en el
+// body (moduloHistory completo, se manda entero en cada turno) -- no hace
+// falta persistir un contador aparte, el numero de turnos 'user' presentes
+// ES el numero de intercambios de esta sesion.
+const TOPE_INTERCAMBIOS_MODULO = 15;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -47,7 +82,21 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'intake_incompleto', mensaje: 'Todavía no completaste tus datos básicos para poder hablar con Soul.' });
     }
 
-    const limiteInfo = await chequearLimite(usuario.email, 'chat', LIMITE_CHAT, VENTANA_CHAT_SEGUNDOS);
+    const { max_tokens, system, messages, contexto, moduloFase } = req.body;
+    // Unico indicador de origen que ya viaja en el body -- modulos siempre
+    // manda contexto:'modulo' (ver enviarAlModulo/iniciarModuloReal/
+    // iniciarModuloObligatorio en soul.html). Se usa para separar los
+    // contadores de rate-limit de chat libre y modulos, que hasta ahora
+    // compartian el mismo cupo diario.
+    const esModulo = contexto === 'modulo';
+    const esReflexion = contexto === 'reflexion';
+
+    const limiteInfo = await chequearLimite(
+      usuario.email,
+      esModulo ? 'modulo' : 'chat',
+      esModulo ? LIMITE_MODULO_RAFAGA : LIMITE_CHAT,
+      esModulo ? VENTANA_MODULO_RAFAGA_SEGUNDOS : VENTANA_CHAT_SEGUNDOS
+    );
     if (!limiteInfo.permitido) {
       return res.status(429).json({
         error: 'limite_alcanzado',
@@ -55,21 +104,64 @@ export default async function handler(req, res) {
         segundosParaReset: limiteInfo.segundosParaReset
       });
     }
-    const limiteDiarioInfo = await chequearLimite(usuario.email, 'chat-diario', LIMITE_CHAT_DIARIO, VENTANA_CHAT_DIARIO_SEGUNDOS);
-    if (!limiteDiarioInfo.permitido) {
-      return res.status(429).json({
-        error: 'limite_diario_alcanzado',
-        mensaje: 'Llegaste al límite de mensajes por hoy. Volvé mañana.',
-        segundosParaReset: limiteDiarioInfo.segundosParaReset
-      });
+
+    if (esModulo) {
+      // Tope de intercambios por sesion -- respaldo server-side (el cliente
+      // ya se autolimita antes de llegar aca, ver TOPE_MENSAJES_POR_MODULO
+      // en soul.html). Se cuenta sobre los turnos 'user' del historial que
+      // llega en el body: es exactamente el numero de intercambios de esta
+      // sesion, sin necesidad de persistir un contador aparte.
+      const intercambiosEnSesion = Array.isArray(messages) ? messages.filter((m) => m.role === 'user').length : 0;
+      if (intercambiosEnSesion > TOPE_INTERCAMBIOS_MODULO) {
+        return res.status(429).json({
+          error: 'tope_intercambios_modulo',
+          mensaje: 'Esta sesión ya llegó a su límite de intercambios.'
+        });
+      }
+      // El cupo semanal se consume UNA sola vez, al arrancar la sesion (un
+      // unico turno 'user' en el historial que llega). "obligatorio"
+      // (Capacidad de volver a elegir) nunca lo consume -- es requisito para
+      // todos antes de un encuentro, sin importar el plan, mismo criterio
+      // que el gate de Pro un poco mas abajo.
+      if (moduloFase !== 'obligatorio' && intercambiosEnSesion === 1) {
+        const limiteSemanalInfo = await chequearLimite(usuario.email, 'modulo-semanal', LIMITE_MODULO_SEMANAL, VENTANA_MODULO_SEMANAL_SEGUNDOS);
+        if (!limiteSemanalInfo.permitido) {
+          return res.status(429).json({
+            error: 'tope_modulo_semanal',
+            mensaje: 'Ya usaste tus sesiones de profundización de esta semana. Volvé la semana que viene.',
+            segundosParaReset: limiteSemanalInfo.segundosParaReset
+          });
+        }
+      }
+    } else if (esReflexion) {
+      // Cupo propio ('reflexion-diario') -- no debe consumir el cupo de
+      // chat casual (ver LIMITE_REFLEXION_DIARIO). El resto de la logica de
+      // la reflexion (TOPE_MENSAJES_REFLEXION, extensiones, cierre, etc. en
+      // soul.html/api/citas.js) no se toca.
+      const limiteReflexionDiarioInfo = await chequearLimite(usuario.email, 'reflexion-diario', LIMITE_REFLEXION_DIARIO, VENTANA_CHAT_DIARIO_SEGUNDOS);
+      if (!limiteReflexionDiarioInfo.permitido) {
+        return res.status(429).json({
+          error: 'limite_diario_alcanzado',
+          mensaje: 'Llegaste al límite de mensajes por hoy. Volvé mañana.',
+          segundosParaReset: limiteReflexionDiarioInfo.segundosParaReset
+        });
+      }
+    } else {
+      const limiteDiarioInfo = await chequearLimite(usuario.email, 'chat-diario', LIMITE_CHAT_DIARIO, VENTANA_CHAT_DIARIO_SEGUNDOS);
+      if (!limiteDiarioInfo.permitido) {
+        return res.status(429).json({
+          error: 'limite_diario_alcanzado',
+          mensaje: 'Llegaste al límite de mensajes por hoy. Volvé mañana.',
+          segundosParaReset: limiteDiarioInfo.segundosParaReset
+        });
+      }
     }
+
     // Se manda como header (no como parte del body) porque el chat principal
     // usa streaming -- el body en ese caso es texto plano progresivo, no JSON,
     // asi que no hay forma de sumarle un campo ahi. El header lo pueden leer
     // los dos caminos (streaming y no-streaming) de la misma forma.
     res.setHeader('X-Limite-Restante', String(limiteInfo.restantes));
-
-    const { max_tokens, system, messages, contexto, moduloFase } = req.body;
 
     // Los mensajes de un modulo declaran en que fase creen estar -- se valida
     // contra lo que quedo guardado en la base antes de dejarlos pasar, para

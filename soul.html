@@ -1331,14 +1331,15 @@ setTimeout(function(){
 // ── MÓDULOS ──
 var moduloHistory=[];
 var moduloData=null;
-// Hoy no hay ningun tope al largo de una charla de modulo -- si Soul nunca
-// decide cerrar, podria seguir indefinidamente (costo real sin control).
-// Se agrega un presupuesto por modulo: a partir de UMBRAL_MODO_CIERRE se le
+// Presupuesto por sesion de modulo -- a partir de UMBRAL_MODO_CIERRE se le
 // pide a Soul que empiece a orientar hacia una sintesis (sin decirlo), y en
 // TOPE_MENSAJES_POR_MODULO se corta con un cierre pregrabado, sin llamar a
-// la IA, para que el limite nunca quede sin resolucion.
-var TOPE_MENSAJES_POR_MODULO=25;
-var UMBRAL_MODO_CIERRE=20;
+// la IA, para que el limite nunca quede sin resolucion. 15 intercambios es
+// el limite de producto aprobado (antes 25) -- api/chat.js aplica el mismo
+// tope del lado del servidor como respaldo (ver TOPE_INTERCAMBIOS_MODULO
+// ahi), asi que hay que mantener estos dos numeros sincronizados.
+var TOPE_MENSAJES_POR_MODULO=15;
+var UMBRAL_MODO_CIERRE=12;
 var moduloIntercambios=0;
 var moduloEnCierre=false;
 // true mientras se espera la respuesta de Soul a "Prefiero dejar esto por
@@ -1749,6 +1750,10 @@ function iniciarModuloReal(){
       mostrarPaywallModulo();
       return;
     }
+    if(e.data&&e.data.error==='tope_modulo_semanal'){
+      addModuloMsg('soul','Ya usaste tus sesiones de profundización de esta semana. Volvé la semana que viene para seguir.');
+      return;
+    }
     addModuloMsg('soul','Hay algo que me gustaría explorar con vos antes de seguir. ¿Estás?');
   });
 }
@@ -2136,6 +2141,16 @@ async function sendModuloMsg(){
     if(e.data&&e.data.error==='requiere_pro'){
       mostrarPaywallModulo();
       paywallActivado=true;
+      return;
+    }
+    // Tope de producto (semanal o de intercambios), no una falla real --
+    // se avisa con un mensaje claro en vez del fallback generico de "algo se
+    // desconectó", y se corta la sesion (no tiene sentido reintentar).
+    if(e.data&&(e.data.error==='tope_modulo_semanal'||e.data.error==='tope_intercambios_modulo')){
+      var mensajeTope=e.data.error==='tope_modulo_semanal'
+        ?'Ya usaste tus sesiones de profundización de esta semana. Volvé la semana que viene para seguir.'
+        :'Esta sesión ya llegó a su límite de intercambios por hoy.';
+      addModuloMsg('soul',mensajeTope);
       return;
     }
     // No se redirige sola encima de un error -- si esto pasó justo
@@ -4410,7 +4425,7 @@ async function enviarReflexion(){
     // callers, Decision 2) y le pasaba el objeto entero a limpiarMarkdown,
     // que llama a .replace() sobre el string y hubiera roto con un
     // TypeError en cada mensaje de esta charla.
-    var resultado=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory},function(parcial){
+    var resultado=await llamarChatStreaming({model:"claude-sonnet-4-6",max_tokens:400,system:buildReflexionPrompt(window.reflexionContexto||{}),messages:reflexionHistory,contexto:'reflexion'},function(parcial){
       if(!soulEl){
         var t3=document.getElementById('reflexionTyping');if(t3)t3.remove();
         soulEl=addReflexionMsg('soul',parcial);

@@ -3,7 +3,7 @@ import { llamarClaudeJSON } from '../lib/anthropicClient.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarUsoTokens } from '../lib/logUso.js';
 import { registrarEvento } from '../lib/logEvento.js';
-import { COMPARE_PROMPT } from '../lib/comparePrompt.js';
+import { COMPARE_PROMPT, FILTRO_BARATO_PROMPT } from '../lib/comparePrompt.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
 import { generosCompatibles, tipoVinculoCompatible, distanciaCompatible, hijosCompatibles } from '../lib/matchCompatible.js';
 import { enviarPushAUsuario } from '../lib/push.js';
@@ -18,6 +18,17 @@ const VENTANA_MATCHES_SEGUNDOS = 3600;
 // (5/hora) sin tope de producto adicional.
 const LIMITE_MATCHES_FREE = 1;
 const VENTANA_MATCHES_FREE_SEGUNDOS = 259200;
+
+// Rediseño del motor de matching para controlar costo de IA (propuesta de
+// limites aprobada): filtro duro sin IA (ya existia, ver lib/matchCompatible.js
+// y el snapshot vigente mas abajo) -> filtro barato con Haiku (hasta 100
+// candidatos/mes) -> analisis profundo con Sonnet SOLO para los finalistas
+// (hasta 20/mes). Los dos topes son mensuales y por persona -- se consumen
+// con chequearLimite() igual que el resto de los limites de este archivo,
+// sin tabla nueva (rate_limits ya soporta cualquier endpoint nuevo).
+const LIMITE_FILTRO_BARATO_MENSUAL = 100;
+const LIMITE_MATCHING_PROFUNDO_MENSUAL = 20;
+const VENTANA_MENSUAL_SEGUNDOS = 2592000; // 30 dias
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -130,22 +141,28 @@ export default async function handler(req, res) {
       otrosPerfiles = otrosPerfiles.filter((p) => !idsCuentasPrueba.has(p.usuario_id));
     }
 
-    // Evita generar un match duplicado con alguien con quien ya existe uno
-    // (en cualquier estado) -- sin este chequeo, reintentar el pipeline
-    // (ej. el boton "Reintentar" tras un error en un paso posterior) podia
-    // volver a correr calcularMatches() y crear una fila nueva con la misma
-    // persona, gastando Claude de nuevo y ensuciando el listado de matches.
+    // Trae cualquier match ya existente con esta persona (en cualquier
+    // estado) para decidir mas abajo, POR PAR, si hace falta volver a
+    // analizar con IA o si se puede reusar el resultado guardado --
+    // reemplaza la exclusion en bloque de antes (que nunca reconsideraba un
+    // par ya comparado, ni aunque el perfil de alguno cambiara despues).
     // 'matches' ya tiene politica RLS real (ver migracion_rls_matches.sql) --
     // token propio, no el anon key.
     const yaMatcheadosRes = await fetch(
-      `${supabaseUrl}/rest/v1/matches?select=usuario_a,usuario_b&or=(usuario_a.eq.${encodeURIComponent(usuarioId)},usuario_b.eq.${encodeURIComponent(usuarioId)})`,
+      `${supabaseUrl}/rest/v1/matches?select=id,usuario_a,usuario_b,estado,compatibilidad_hoy,potencial_construccion,mensaje_dupla,matching_analizado_en&or=(usuario_a.eq.${encodeURIComponent(usuarioId)},usuario_b.eq.${encodeURIComponent(usuarioId)})`,
       { headers: { ...headers, Authorization: `Bearer ${usuario.token}` } }
     );
     const yaMatcheados = yaMatcheadosRes.ok ? await yaMatcheadosRes.json() : [];
-    const idsYaMatcheados = new Set(
-      yaMatcheados.map((m) => (m.usuario_a === usuarioId ? m.usuario_b : m.usuario_a))
-    );
-    const otrosPerfilesSinMatch = otrosPerfiles.filter((p) => !idsYaMatcheados.has(p.usuario_id));
+    const matchExistentePorOtroId = {};
+    yaMatcheados.forEach((m) => {
+      const otroId = m.usuario_a === usuarioId ? m.usuario_b : m.usuario_a;
+      matchExistentePorOtroId[otroId] = m;
+    });
+    // Ya no se excluye en bloque a quien tiene un match existente -- los
+    // filtros duros de abajo (genero, vinculo, distancia, hijos, snapshot
+    // vigente) siguen aplicando igual sobre todos, y el chequeo de "hace
+    // falta reanalizar" pasa a hacerse por par, mas abajo.
+    const otrosPerfilesSinMatch = otrosPerfiles;
 
     // Genero/preferencia, tipo de vinculo, ciudad y distancia viven en
     // 'usuarios', no en 'perfiles' -- hace falta traerlos aparte para
@@ -197,12 +214,85 @@ export default async function handler(req, res) {
 
     let matchEncontrado = false;
     let matchData = null;
-    // Este endpoint puede hacer varias llamadas a Claude (una por cada otro
-    // perfil) -- se acumula el uso total y se loguea una sola vez al final,
-    // en vez de sumar una escritura a Supabase por cada comparacion.
+    // Este endpoint puede hacer varias llamadas a Claude (filtro barato +
+    // analisis profundo, cada uno hasta su propio cupo mensual) -- se
+    // acumula el uso total de cada modelo y se loguea una sola vez al
+    // final, en vez de sumar una escritura a Supabase por cada llamada.
     let totalInputTokens = 0, totalOutputTokens = 0;
+    let totalInputTokensFiltro = 0, totalOutputTokensFiltro = 0;
+    let cantidadAnalizadosProfundo = 0;
 
+    // Por cada candidato que paso los filtros duros, decide si hace falta
+    // (re)analizar con IA o si alcanza con el resultado ya guardado: sin
+    // match previo -> analizar; con match previo pero sin fecha de analisis,
+    // o con el perfil de cualquiera de los dos revalidado DESPUES de esa
+    // fecha -> reanalizar (y actualizar la fila existente en vez de crear
+    // una nueva); en cualquier otro caso -> reusar, cero llamada a IA.
+    const candidatosParaAnalizar = [];
     for (const otro of otrosPerfilesCompatibles) {
+      const existente = matchExistentePorOtroId[otro.usuario_id];
+      if (!existente) {
+        candidatosParaAnalizar.push({ otro, existente: null });
+        continue;
+      }
+      const sinFechaAnalisis = !existente.matching_analizado_en;
+      const miPerfilCambioDespues = !sinFechaAnalisis && miPerfil.perfil_validado_en &&
+        new Date(miPerfil.perfil_validado_en) > new Date(existente.matching_analizado_en);
+      const suPerfilCambioDespues = !sinFechaAnalisis && otro.perfil_validado_en &&
+        new Date(otro.perfil_validado_en) > new Date(existente.matching_analizado_en);
+      if (sinFechaAnalisis || miPerfilCambioDespues || suPerfilCambioDespues) {
+        candidatosParaAnalizar.push({ otro, existente });
+        continue;
+      }
+      // Cache vigente: nada cambio desde el ultimo analisis -- se reusa el
+      // resultado guardado, cero llamada a IA.
+      if (existente.estado === 'pendiente' || existente.estado === 'activo' || existente.estado === 'mutuamente_aceptado') {
+        matchEncontrado = true;
+        matchData = {
+          id: existente.id,
+          compatibilidad_hoy: existente.compatibilidad_hoy,
+          potencial_construccion: existente.potencial_construccion,
+          mensaje_dupla: existente.mensaje_dupla
+        };
+      }
+    }
+
+    // Filtro barato (Haiku): ordena por un puntaje estimado antes de gastar
+    // el cupo de analisis profundo. Se corta apenas se agota el cupo
+    // mensual (100) -- los candidatos que quedan afuera esta vez se
+    // retoman en una proxima corrida, no se pierden.
+    const candidatosConEstimado = [];
+    for (const candidato of candidatosParaAnalizar) {
+      const limiteFiltroInfo = await chequearLimite(usuario.email, 'matching-filtro-barato', LIMITE_FILTRO_BARATO_MENSUAL, VENTANA_MENSUAL_SEGUNDOS);
+      if (!limiteFiltroInfo.permitido) break;
+      try {
+        const { json: filtro, usage: usageFiltro } = await llamarClaudeJSON({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 60,
+          system: FILTRO_BARATO_PROMPT,
+          messages: [{
+            role: 'user',
+            content: 'Perfil A:\n' + JSON.stringify(miPerfil) + '\n\nPerfil B:\n' + JSON.stringify(candidato.otro)
+          }]
+        });
+        if (usageFiltro) {
+          totalInputTokensFiltro += usageFiltro.input_tokens || 0;
+          totalOutputTokensFiltro += usageFiltro.output_tokens || 0;
+        }
+        candidatosConEstimado.push({ ...candidato, estimado: (filtro && typeof filtro.estimado === 'number') ? filtro.estimado : 0 });
+      } catch (e) {
+        // Si el filtro barato falla para este candidato se lo deja pasar
+        // igual al analisis profundo (fail-open) en vez de perderlo en
+        // silencio -- el cupo de Sonnet de abajo sigue siendo el limite real.
+        candidatosConEstimado.push({ ...candidato, estimado: 0 });
+      }
+    }
+    candidatosConEstimado.sort((a, b) => b.estimado - a.estimado);
+
+    for (const { otro, existente } of candidatosConEstimado) {
+      const limiteProfundoInfo = await chequearLimite(usuario.email, 'matching-profundo-mensual', LIMITE_MATCHING_PROFUNDO_MENSUAL, VENTANA_MENSUAL_SEGUNDOS);
+      if (!limiteProfundoInfo.permitido) break; // cupo mensual de analisis profundo agotado
+
       const candidatoUsuario = generoPorId[otro.usuario_id];
       const { json: comp, usage } = await llamarClaudeJSON({
         model: 'claude-sonnet-4-6',
@@ -222,6 +312,7 @@ export default async function handler(req, res) {
         totalInputTokens += usage.input_tokens || 0;
         totalOutputTokens += usage.output_tokens || 0;
       }
+      cantidadAnalizadosProfundo++;
 
       // Umbral acorde a la recalibracion de COMPARE_PROMPT (ver
       // lib/comparePrompt.js): "alineacion real" empieza en 55-70 y
@@ -230,52 +321,72 @@ export default async function handler(req, res) {
       // dejaba pasar casi cualquier par -- una persona real del piloto
       // llego a tener 17 matches simultaneos con eso.
       const supera = comp.compatibilidad_hoy >= 60 || comp.potencial_construccion >= 75;
-      // Se guarda la comparacion aunque no supere el umbral (estado
-      // "descartado") -- mismo motivo que en calcularRanking de
-      // api/admin/matches.js: le permite a la administradora activarlo a
-      // mano desde el panel con su propio criterio, y evita volver a
-      // gastar Claude comparando este mismo par de nuevo (yaMatcheados,
-      // mas arriba en este archivo, ya trata cualquier estado como "ya
-      // comparado"). listarMisMatches excluye "descartado" explicitamente,
-      // asi que la persona real nunca lo ve como si fuera un match.
-      const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
-        method: 'POST',
-        headers: { ...headers, Authorization: `Bearer ${usuario.token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
-        body: JSON.stringify({
-          usuario_a: usuarioId,
-          usuario_b: otro.usuario_id,
-          compatibilidad_hoy: comp.compatibilidad_hoy,
-          potencial_construccion: comp.potencial_construccion,
-          fortalezas: comp.fortalezas,
-          desafio: comp.desafio,
-          mensaje_dupla: comp.mensaje_dupla,
-          // veredicto no tiene columna propia -- va adentro de este jsonb
-          // para no perderse (mismo criterio que calcularRanking en
-          // api/admin/matches.js).
-          analisis_por_variable: { ...(comp.analisis_por_variable || {}), veredicto: comp.veredicto || null },
-          estado: supera ? 'pendiente' : 'descartado',
-          activado_por: 'sistema'
-        })
-      });
-      const matchRows = matchRes.ok ? await matchRes.json() : [];
+      const cuerpoMatch = {
+        compatibilidad_hoy: comp.compatibilidad_hoy,
+        potencial_construccion: comp.potencial_construccion,
+        fortalezas: comp.fortalezas,
+        desafio: comp.desafio,
+        mensaje_dupla: comp.mensaje_dupla,
+        // veredicto no tiene columna propia -- va adentro de este jsonb
+        // para no perderse (mismo criterio que calcularRanking en
+        // api/admin/matches.js).
+        analisis_por_variable: { ...(comp.analisis_por_variable || {}), veredicto: comp.veredicto || null },
+        // Se guarda la comparacion aunque no supere el umbral (estado
+        // "descartado") -- le permite a la administradora activarlo a mano
+        // desde el panel, y evita volver a gastar Claude en este mismo par
+        // mientras nada cambie (matching_analizado_en, mas abajo).
+        estado: supera ? 'pendiente' : 'descartado',
+        matching_analizado_en: new Date().toISOString()
+      };
+
+      let matchId;
+      if (existente) {
+        // Reanalisis de un par ya existente -- se actualiza la misma fila
+        // en vez de crear una nueva (asi 'matches' nunca duplica un par).
+        await fetch(`${supabaseUrl}/rest/v1/matches?id=eq.${encodeURIComponent(existente.id)}`, {
+          method: 'PATCH',
+          headers: { ...headers, Authorization: `Bearer ${usuario.token}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify(cuerpoMatch)
+        });
+        matchId = existente.id;
+      } else {
+        const matchRes = await fetch(`${supabaseUrl}/rest/v1/matches`, {
+          method: 'POST',
+          headers: { ...headers, Authorization: `Bearer ${usuario.token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+          body: JSON.stringify({ usuario_a: usuarioId, usuario_b: otro.usuario_id, activado_por: 'sistema', ...cuerpoMatch })
+        });
+        const matchRows = matchRes.ok ? await matchRes.json() : [];
+        matchId = matchRows[0] ? matchRows[0].id : null;
+      }
+
       if (supera) {
         matchEncontrado = true;
         matchData = {
-          id: matchRows[0] ? matchRows[0].id : null,
+          id: matchId,
           compatibilidad_hoy: comp.compatibilidad_hoy,
           potencial_construccion: comp.potencial_construccion,
           mensaje_dupla: comp.mensaje_dupla
         };
-        // Push a la OTRA persona (usuario_b) -- usuarioId ya esta viendo el
-        // resultado en pantalla en este mismo momento, no necesita aviso.
-        // DE PRODUCTO -- gateado por comunicaciones_producto_aceptadas dentro
-        // de enviarPushAUsuario (ver lib/push.js).
-        enviarPushAUsuario(otro.usuario_id, {
-          titulo: 'Soul encontró un match para vos',
-          cuerpo: 'Los planetas se alinearon con alguien nuevo.',
-          data: { tipo: 'match_nuevo' },
-          esencial: false
-        }).catch(() => {});
+        // Push a la OTRA persona (usuario_b) SOLO cuando el match nace de
+        // verdad por primera vez -- ni cuando se reusa desde cache (mas
+        // arriba, sin llegar aca), ni cuando se REANALIZA un par que ya
+        // estaba pendiente/activo/mutuamente aceptado (ese ya fue
+        // notificado la vez que cruzo el umbral). Si el par no existia, o
+        // existia pero todavia no habia cruzado el umbral (ej.
+        // "descartado"), esta es la primera vez que se le avisa.
+        const yaEstabaNotificado = existente && ['pendiente', 'activo', 'mutuamente_aceptado'].includes(existente.estado);
+        if (!yaEstabaNotificado) {
+          // usuarioId ya esta viendo el resultado en pantalla en este mismo
+          // momento, no necesita aviso. DE PRODUCTO -- gateado por
+          // comunicaciones_producto_aceptadas dentro de enviarPushAUsuario
+          // (ver lib/push.js).
+          enviarPushAUsuario(otro.usuario_id, {
+            titulo: 'Soul encontró un match para vos',
+            cuerpo: 'Los planetas se alinearon con alguien nuevo.',
+            data: { tipo: 'match_nuevo' },
+            esencial: false
+          }).catch(() => {});
+        }
       }
     }
 
@@ -284,10 +395,17 @@ export default async function handler(req, res) {
       endpoint: 'calcularMatches',
       usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens }
     });
+    if (totalInputTokensFiltro > 0 || totalOutputTokensFiltro > 0) {
+      await registrarUsoTokens({
+        usuarioId,
+        endpoint: 'calcularMatches-filtro',
+        usage: { input_tokens: totalInputTokensFiltro, output_tokens: totalOutputTokensFiltro }
+      });
+    }
     await registrarEvento({
       usuarioId,
       tipo: 'calculo_matches',
-      metadata: { matchEncontrado, cantidadComparaciones: otrosPerfilesCompatibles.length }
+      metadata: { matchEncontrado, cantidadComparaciones: cantidadAnalizadosProfundo }
     });
 
     return res.status(200).json({ matchEncontrado, matchData });
