@@ -138,6 +138,12 @@ export default async function handler(req, res) {
       cambios.plan_vencimiento = null;
       cambios.plan_auto_renueva = null;
       cambios.plan_estado_suscripcion = null;
+      // Mismo criterio que los campos de Google Play de arriba, ahora para
+      // Mercado Pago (ver lib/suscripcionesMercadoPago.js) -- un cambio
+      // manual desde el panel desvincula cualquier suscripcion real que
+      // hubiera, de cualquiera de los dos proveedores.
+      cambios.mp_preapproval_id = null;
+      cambios.mp_status = null;
       cambios.plan_actualizado_en = new Date().toISOString();
     }
     const patchRes = await fetch(`${supabaseUrl}/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}`, {

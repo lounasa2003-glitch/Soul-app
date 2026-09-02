@@ -4760,16 +4760,6 @@ function mostrarInfoPro(){
   if(linea)linea.textContent='Tu plan actual: '+(esPro?'Pro':'Free');
   var msgEl=document.getElementById('infoProMensaje');
   if(msgEl){msgEl.style.display='none';msgEl.textContent='';}
-  var disponibleNativo=billingNativoDisponible();
-  var comprarBtn=document.getElementById('infoProComprarBtn');
-  var restaurarBtn=document.getElementById('infoProRestaurarBtn');
-  var gestionarBtn=document.getElementById('infoProGestionarBtn');
-  var soloWebAviso=document.getElementById('infoProSoloWebAviso');
-  if(comprarBtn)comprarBtn.style.display=(!esPro&&disponibleNativo)?'block':'none';
-  if(restaurarBtn)restaurarBtn.style.display=(!esPro&&disponibleNativo)?'block':'none';
-  if(gestionarBtn)gestionarBtn.style.display=(esPro&&disponibleNativo)?'block':'none';
-  if(soloWebAviso)soloWebAviso.style.display=disponibleNativo?'none':'block';
-  if(disponibleNativo)inicializarBillingNativo();
   document.getElementById('modalInfoPro').style.display='flex';
 }
 function cerrarInfoPro(){
@@ -6789,23 +6779,43 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
-<!-- ══ INFO SOUL PRO -- estado real del plan + compra real via Google Play
-     Billing (suscripcion mensual). Ver mostrarInfoPro(). ══ -->
-<div id="modalInfoPro" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem" onclick="if(event.target===this)cerrarInfoPro()">
-  <div style="max-width:360px;text-align:center">
-    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.3rem">Soul Pro</p>
-    <p id="infoProPlanActual" style="font-family:'Inter',sans-serif;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:#9a8e96;margin-bottom:1rem"></p>
-    <p style="font-family:'Inter',sans-serif;font-size:.95rem;color:#d8cdd2;line-height:1.6;margin-bottom:.8rem;text-align:left">Con Pro vas a poder:</p>
-    <ul style="text-align:left;font-family:'Inter',sans-serif;font-size:.9rem;color:#d8cdd2;line-height:1.7;margin-bottom:1.2rem;padding-left:1.2rem">
-      <li>Recalcular tus matches con más frecuencia.</li>
-      <li>Acceder a los módulos de profundización -- charlas guiadas con Soul sobre lo que más te conviene trabajar (apertura al compromiso, autonomía emocional, poder personal, coherencia interna, entre otros), más allá del módulo obligatorio que ya incluye el piloto.</li>
-      <li>Un análisis de compatibilidad más detallado.</li>
-    </ul>
+<!-- ══ INFO SOUL PRO -- puramente informativo (Android es consumption-only,
+     ver la migracion a Mercado Pago via soulapp.love). Ningun CTA de pago,
+     ningun link clicable: "soulapp.love" en el cierre es texto plano a
+     proposito, nunca <a>/href/onclick. Ver mostrarInfoPro(). ══ -->
+<div id="modalInfoPro" style="display:none;position:fixed;inset:0;background:rgba(7,5,10,.92);z-index:9999;align-items:center;justify-content:center;padding:2rem;overflow-y:auto" onclick="if(event.target===this)cerrarInfoPro()">
+  <div style="max-width:380px;width:100%;text-align:left;margin:2rem 0">
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.25rem;color:#c9a84c;margin-bottom:.3rem;text-align:center">Soul Pro</p>
+    <p id="infoProPlanActual" style="font-family:'Inter',sans-serif;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:#9a8e96;margin-bottom:1.6rem;text-align:center"></p>
+
+    <p style="font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.3rem;color:#f2ece4;line-height:1.35;margin-bottom:.6rem">Tu experiencia con Soul puede ir más profundo.</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.88rem;color:#c9bdc5;line-height:1.6;margin-bottom:1.8rem">Soul no busca que conozcas más personas. Busca ayudarte a construir encuentros con más sentido, con una mirada que se va afinando a medida que te conoce.</p>
+
+    <div style="margin-bottom:1.8rem">
+      <div style="display:flex;gap:.6rem;padding:.5rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.88rem;color:#d8cdd2;line-height:1.5">Soul se toma tiempo para conocerte.</span></div>
+      <div style="display:flex;gap:.6rem;padding:.5rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.88rem;color:#d8cdd2;line-height:1.5">Vos decidís siempre qué compartir y hasta dónde avanzar.</span></div>
+      <div style="display:flex;gap:.6rem;padding:.5rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.88rem;color:#d8cdd2;line-height:1.5">La compatibilidad no se limita a datos básicos.</span></div>
+      <div style="display:flex;gap:.6rem;padding:.5rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.88rem;color:#d8cdd2;line-height:1.5">Soul acompaña antes, durante y después de cada encuentro.</span></div>
+    </div>
+
+    <div style="border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:1.1rem 1.2rem;margin-bottom:1rem;background:rgba(255,255,255,.02)">
+      <p style="font-family:'Inter',sans-serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#9a8e96;margin-bottom:.7rem">Free</p>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#9a8e96">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#c9bdc5;line-height:1.5">Conocé a Soul y construí tu perfil.</span></div>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#9a8e96">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#c9bdc5;line-height:1.5">Conversaciones con Soul y acompañamiento en tus encuentros.</span></div>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#9a8e96">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#c9bdc5;line-height:1.5">Un módulo de profundización guiado antes de cada encuentro.</span></div>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#9a8e96">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#c9bdc5;line-height:1.5">Recalculá tus matches cada 3 días.</span></div>
+    </div>
+
+    <div style="border:1px solid rgba(201,168,76,.35);border-radius:8px;padding:1.1rem 1.2rem;margin-bottom:1.8rem;background:rgba(201,168,76,.05)">
+      <p style="font-family:'Inter',sans-serif;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:#c9a84c;margin-bottom:.7rem">Soul Pro -- todo lo de Free, más</p>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;line-height:1.5">Módulos de profundización adicionales: apertura al compromiso, autonomía emocional, poder personal, coherencia interna, entre otros.</span></div>
+      <div style="display:flex;gap:.5rem;padding:.3rem 0"><span style="color:#c9a84c">✦</span><span style="font-family:'Inter',sans-serif;font-size:.85rem;color:#d8cdd2;line-height:1.5">Actualizá tus matches con mayor frecuencia.</span></div>
+    </div>
+
+    <p style="font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.1rem;color:#c9a84c;margin-bottom:.5rem">Si querés ir más profundo</p>
+    <p style="font-family:'Inter',sans-serif;font-size:.85rem;color:#c9bdc5;line-height:1.6;margin-bottom:1.8rem">Desde tu navegador ingresá a <span style="color:#c9a84c">soulapp.love</span>, iniciá sesión con tu cuenta de Soul y conocé las opciones de Soul Pro.</p>
+
     <p id="infoProMensaje" style="display:none;font-family:'Inter',sans-serif;font-size:.85rem;color:#c9a84c;line-height:1.5;margin-bottom:1rem"></p>
-    <p id="infoProSoloWebAviso" style="display:none;font-family:'Inter',sans-serif;font-size:.85rem;color:#9a8e96;line-height:1.5;margin-bottom:1.4rem">La compra de Soul Pro está disponible desde la app de Android.</p>
-    <button id="infoProComprarBtn" class="btn-gold" onclick="comprarSoulPro()" style="display:none;width:100%;margin-bottom:.6rem">Hacerme Pro -- USD 9,99/mes</button>
-    <button id="infoProGestionarBtn" class="btn-gold" onclick="gestionarSuscripcionSoulPro()" style="display:none;width:100%;margin-bottom:.6rem">Gestionar mi suscripción</button>
-    <button id="infoProRestaurarBtn" onclick="restaurarCompraSoulPro()" style="display:none;width:100%;margin-bottom:.6rem;background:none;border:1px solid #c9a84c;color:#c9a84c;border-radius:8px;padding:.7rem;font-family:'Inter',sans-serif;font-size:.85rem">Restaurar compra</button>
     <button class="btn-gold" onclick="cerrarInfoPro()" style="width:100%">Entendido</button>
   </div>
 </div>

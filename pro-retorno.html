@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soul Pro</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07050a;color:#f2ece4;font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2rem;text-align:center}
+p{font-size:.95rem;color:#c9bdc5;max-width:340px;line-height:1.6}
+.spinner{width:28px;height:28px;border:2px solid rgba(201,168,76,.25);border-top-color:#c9a84c;border-radius:50%;margin-bottom:1.4rem;animation:girar 1s linear infinite}
+@keyframes girar{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<!-- back_url de Mercado Pago -- puramente cosmetico. Esta pagina NUNCA lee
+     ni confia en ningun parametro de la URL para activar Pro; solo redirige
+     a pro.html, que es quien de verdad consulta el estado server-side
+     (/api/subscription/status, tras un /sync best-effort). -->
+<div class="spinner"></div>
+<p>Estamos confirmando tu suscripción con Mercado Pago…</p>
+<script>
+setTimeout(function () { location.href = '/pro.html?retorno=1'; }, 1500);
+</script>
+</body>
+</html>

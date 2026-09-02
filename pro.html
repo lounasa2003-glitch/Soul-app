@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Soul Pro</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#07050a;color:#f2ece4;font-family:'Inter',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:3rem 1.5rem}
+
+.soul-mark{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:.9rem;letter-spacing:.35em;color:rgba(201,168,76,.6);text-transform:uppercase;margin-bottom:2.5rem}
+
+.card{width:100%;max-width:420px;background:rgba(36,26,32,.5);border:1px solid rgba(201,168,76,.25);border-radius:8px;padding:2rem}
+
+h1{font-family:'Cormorant Garamond',serif;font-weight:300;font-size:1.7rem;color:#f2ece4;margin-bottom:.4rem}
+.sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1rem;color:rgba(242,236,228,.6);margin-bottom:1.6rem}
+
+.beneficios{list-style:none;margin:0 0 1.6rem;padding:0}
+.beneficios li{font-size:.85rem;color:#c9bdc5;padding:.4rem 0;border-bottom:1px solid rgba(201,168,76,.1)}
+.beneficios li:before{content:"✦ ";color:#c9a84c}
+
+.precio{font-family:'Cormorant Garamond',serif;font-size:2.2rem;color:#c9a84c;margin-bottom:.2rem}
+.precio span{font-size:.9rem;color:#9a8e96;font-family:'Inter',sans-serif}
+.precio-ars{font-size:.78rem;color:#9a8e96;margin-bottom:.8rem}
+.aviso-cotizacion{font-size:.75rem;color:#9a8e96;line-height:1.55;margin-bottom:1rem}
+.nota-renovacion{font-size:.72rem;color:#7a6e78;margin-bottom:1.6rem;line-height:1.5}
+
+input{width:100%;background:rgba(36,26,32,.6);border:1px solid rgba(201,168,76,.3);border-radius:4px;color:#f2ece4;font-family:'Inter',sans-serif;font-size:.85rem;padding:.75rem 1rem;outline:none;margin-bottom:.7rem}
+input:focus{border-color:rgba(201,168,76,.7)}
+
+button{width:100%;padding:.85rem 1.2rem;background:linear-gradient(135deg,#8a6e2f,#c9a84c);border:none;border-radius:4px;color:#07050a;font-family:'Inter',sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;margin-top:.3rem}
+button:disabled{opacity:.5;cursor:default}
+button.secundario{background:transparent;border:1px solid rgba(201,168,76,.35);color:#c9a84c}
+
+.err{display:none;font-size:.78rem;color:#e08a9a;margin-bottom:.7rem}
+.estado{font-size:.85rem;color:#c9bdc5;line-height:1.7;margin-bottom:1.2rem}
+.estado b{color:#c9a84c}
+
+.oculto{display:none}
+</style>
+</head>
+<body>
+
+<div class="soul-mark">Soul</div>
+
+<div class="card">
+
+  <div id="vistaLogin">
+    <h1>Iniciá sesión</h1>
+    <p class="sub">Para gestionar Soul Pro, primero entrá con tu cuenta de Soul.</p>
+    <div class="err" id="loginErr"></div>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="email">
+    <input type="password" id="loginPass" placeholder="Contraseña" autocomplete="current-password">
+    <button id="loginBtn" onclick="hacerLogin()">Entrar</button>
+  </div>
+
+  <div id="vistaPro" class="oculto">
+
+    <div id="bloqueLibre" class="oculto">
+      <h1>Soul Pro</h1>
+      <p class="sub">Para acompañarte con más profundidad en tu proceso.</p>
+      <ul class="beneficios">
+        <li>Reflexiones y módulos sin límite mensual</li>
+        <li>Debriefing completo después de cada encuentro</li>
+        <li>Prioridad en el matching</li>
+      </ul>
+      <!-- Precio objetivo en USD: decision comercial real (ver
+           lib/precioSoulPro.js, SOUL_PRO_PRECIO_USD) -- se puede hardcodear
+           porque es el numero de referencia, no el monto que se cobra. El
+           equivalente en ARS de abajo SI sale de /api/subscription/precio
+           (calculado en el backend con la cotizacion oficial del BCRA):
+           es solo informativo, nunca se manda de vuelta al backend, que
+           vuelve a calcular el monto de cero en /api/subscribe al momento
+           real de la alta (ver cargarPrecioAproximado()). -->
+      <div class="precio">USD 8,99<span> / mes</span></div>
+      <p id="precioARS" class="precio-ars"></p>
+      <!-- Aviso permanente, visible desde el alta -- decision comercial (no
+           solo texto legal): deja claro que el precio de referencia es
+           siempre USD 8,99 y que una variacion del monto en pesos entre
+           renovaciones es por tipo de cambio, no un aumento discrecional de
+           Soul. Ver lib/precioSoulPro.js. -->
+      <p class="aviso-cotizacion">Soul Pro cuesta USD 8,99 mensuales, cobrados en pesos argentinos al equivalente de la cotización oficial utilizada por Soul. El importe en pesos puede variar entre renovaciones según el tipo de cambio — no se trata de un aumento de precio de Soul.</p>
+      <p class="nota-renovacion">Se renueva automáticamente cada mes. Podés cancelar cuando quieras. La renovación se detiene y conservás Soul Pro hasta el final del período ya abonado. El pago se hace en un checkout seguro de Mercado Pago — Soul no ve ni guarda tu tarjeta.</p>
+      <div class="err" id="subscribeErr"></div>
+      <button id="subscribeBtn" onclick="continuarConMercadoPago()">Continuar con Mercado Pago</button>
+    </div>
+
+    <div id="bloquePro" class="oculto">
+      <h1>Sos Pro ✦</h1>
+      <div class="estado" id="estadoTexto"></div>
+      <button id="cancelBtn" class="secundario" onclick="cancelarSuscripcion()">Cancelar suscripción</button>
+    </div>
+
+    <div id="bloqueOtroOrigen" class="oculto">
+      <h1>Sos Pro ✦</h1>
+      <p class="estado">Tu Soul Pro no está gestionado desde acá. Si lo activaste desde Google Play o te lo dio el equipo de Soul, seguí administrándolo por ese mismo medio.</p>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// La sesion de Soul nunca persiste entre cargas (mismo criterio que
+// soul.html) -- vive solo en esta variable mientras dure esta pagina.
+var accessToken = null;
+
+function authHeaders(extra) {
+  var h = { 'Authorization': 'Bearer ' + accessToken, 'X-Soul-Authorization': 'Bearer ' + accessToken };
+  if (extra) { for (var k in extra) h[k] = extra[k]; }
+  return h;
+}
+
+async function hacerLogin() {
+  var email = document.getElementById('loginEmail').value.trim();
+  var pass = document.getElementById('loginPass').value;
+  var errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  if (!email || !pass) {
+    errEl.textContent = 'Completá tu email y contraseña.';
+    errEl.style.display = 'block';
+    return;
+  }
+  document.getElementById('loginBtn').disabled = true;
+  try {
+    var res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'login', email: email, password: pass })
+    });
+    var data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.msg || data.error_description || 'No pudimos iniciar sesión. Revisá tus datos.';
+      errEl.style.display = 'block';
+      document.getElementById('loginBtn').disabled = false;
+      return;
+    }
+    accessToken = data.access_token;
+    document.getElementById('vistaLogin').classList.add('oculto');
+    document.getElementById('vistaPro').classList.remove('oculto');
+    await cargarEstado();
+  } catch (e) {
+    errEl.textContent = 'No pudimos conectar. Probá de nuevo.';
+    errEl.style.display = 'block';
+    document.getElementById('loginBtn').disabled = false;
+  }
+}
+
+// Si viene del retorno de Mercado Pago (ver pro-retorno.html), primero se
+// pide una reconciliacion inmediata -- pero el resultado que se MUESTRA sale
+// siempre de /api/subscription/status inmediatamente despues, nunca de un
+// parametro de la URL ni de lo que devuelva /sync directamente.
+async function cargarEstado() {
+  var vieneDeRetorno = new URLSearchParams(location.search).get('retorno') === '1';
+  if (vieneDeRetorno) {
+    try { await fetch('/api/subscription/sync', { method: 'POST', headers: authHeaders() }); } catch (e) {}
+  }
+
+  var res = await fetch('/api/subscription/status', { headers: authHeaders() });
+  var data = await res.json().catch(function () { return {}; });
+
+  document.getElementById('bloqueLibre').classList.add('oculto');
+  document.getElementById('bloquePro').classList.add('oculto');
+  document.getElementById('bloqueOtroOrigen').classList.add('oculto');
+
+  if (data.plan === 'pro' && data.origen === 'mercadopago') {
+    var texto = 'Estado: <b>' + (data.estadoMercadoPago || 'activa') + '</b>.';
+    if (data.proximaRenovacion) {
+      var fecha = new Date(data.proximaRenovacion).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+      texto += '<br>Próxima renovación: <b>' + fecha + '</b>.';
+    }
+    document.getElementById('estadoTexto').innerHTML = texto;
+    document.getElementById('bloquePro').classList.remove('oculto');
+  } else if (data.plan === 'pro') {
+    document.getElementById('bloqueOtroOrigen').classList.remove('oculto');
+  } else {
+    document.getElementById('bloqueLibre').classList.remove('oculto');
+    cargarPrecioAproximado();
+  }
+}
+
+// Puramente informativo -- si esto falla (BCRA caido, etc.) se muestra un
+// texto generico y el botón "Continuar con Mercado Pago" sigue disponible
+// igual: el monto real se calcula de cero en /api/subscribe en ese momento,
+// y si ahí también falla, esa pantalla ya tiene su propio mensaje de error.
+async function cargarPrecioAproximado() {
+  var el = document.getElementById('precioARS');
+  try {
+    var res = await fetch('/api/subscription/precio', { headers: authHeaders() });
+    var data = await res.json();
+    if (!res.ok) throw new Error('no_disponible');
+    var monto = Math.round(data.montoARSAproximado).toLocaleString('es-AR');
+    el.textContent = '≈ $' + monto + ' ARS al tipo de cambio oficial de hoy';
+  } catch (e) {
+    el.textContent = 'El monto en pesos se calcula al tipo de cambio oficial del día, en el momento de suscribirte.';
+  }
+}
+
+async function continuarConMercadoPago() {
+  var errEl = document.getElementById('subscribeErr');
+  errEl.style.display = 'none';
+  document.getElementById('subscribeBtn').disabled = true;
+  try {
+    var res = await fetch('/api/subscribe', { method: 'POST', headers: authHeaders() });
+    var data = await res.json();
+    if (!res.ok) {
+      errEl.textContent = data.mensaje || 'No pudimos iniciar la suscripción.';
+      errEl.style.display = 'block';
+      document.getElementById('subscribeBtn').disabled = false;
+      return;
+    }
+    if (data.yaActivo) {
+      await cargarEstado();
+      return;
+    }
+    // A partir de aca es 100% la pantalla alojada por Mercado Pago -- Soul
+    // no vuelve a intervenir hasta que la persona regrese por back_url.
+    location.href = data.initPoint;
+  } catch (e) {
+    errEl.textContent = 'No pudimos conectar. Probá de nuevo.';
+    errEl.style.display = 'block';
+    document.getElementById('subscribeBtn').disabled = false;
+  }
+}
+
+async function cancelarSuscripcion() {
+  if (!confirm('¿Seguro que querés cancelar Soul Pro? El corte es inmediato.')) return;
+  document.getElementById('cancelBtn').disabled = true;
+  try {
+    await fetch('/api/subscription/cancel', { method: 'POST', headers: authHeaders() });
+  } catch (e) {}
+  await cargarEstado();
+  document.getElementById('cancelBtn').disabled = false;
+}
+</script>
+</body>
+</html>
