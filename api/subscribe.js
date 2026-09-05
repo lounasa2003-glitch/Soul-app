@@ -1,8 +1,8 @@
 import { verificarUsuario } from '../lib/authUtil.js';
 import { chequearLimite } from '../lib/rateLimit.js';
 import { registrarErrorSilencioso } from '../lib/logErrorSilencioso.js';
-import { crearPreapproval } from '../lib/mercadoPago.js';
-import { registrarPreapprovalPendiente, buscarUsuarioPorId } from '../lib/suscripcionesMercadoPago.js';
+import { crearPreapproval, obtenerPreapproval } from '../lib/mercadoPago.js';
+import { registrarPreapprovalPendiente, buscarUsuarioPorId, aplicarSuscripcionAUsuario } from '../lib/suscripcionesMercadoPago.js';
 import { calcularPrecioSoulProARS, registrarTrazabilidadPrecio } from '../lib/precioSoulPro.js';
 
 // Arranca una suscripcion nueva de Soul Pro via Mercado Pago. Devuelve
@@ -27,12 +27,45 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'limite_alcanzado', mensaje: 'Demasiados intentos. Esperá un toque y volvé a intentar.' });
     }
 
-    // Si ya hay una suscripcion autorizada, no se crea una segunda -- evita
-    // que alguien termine con dos preapprovals activos por tocar el boton
-    // dos veces.
+    // Antes de crear otra suscripcion, se reconcilia cualquier preapproval ya
+    // vinculado. Esto evita que un segundo clic sobrescriba el id de una
+    // suscripcion que acaba de ser autorizada pero cuyo webhook/retorno aun no
+    // actualizo Soul. Si sigue pending, se reutiliza su mismo init_point.
     const filaActual = await buscarUsuarioPorId(usuario.usuarioId);
     if (filaActual && filaActual.plan_origen === 'mercadopago' && usuario.plan === 'pro') {
       return res.status(200).json({ ok: true, yaActivo: true });
+    }
+
+    if (filaActual && filaActual.mp_preapproval_id) {
+      let existente;
+      try {
+        existente = await obtenerPreapproval(filaActual.mp_preapproval_id);
+      } catch (e) {
+        await registrarErrorSilencioso({ contexto: 'api/subscribe: verificar preapproval existente', error: e, meta: { usuarioId: usuario.usuarioId } });
+        return res.status(502).json({ error: 'no_se_pudo_verificar', mensaje: 'No pudimos verificar tu suscripción anterior. Probá de nuevo en unos minutos.' });
+      }
+
+      if (existente) {
+        if (String(existente.external_reference || '') !== String(usuario.usuarioId)) {
+          await registrarErrorSilencioso({ contexto: 'api/subscribe: external_reference no coincide', error: new Error('external_reference_no_coincide'), meta: { usuarioId: usuario.usuarioId } });
+          return res.status(409).json({ error: 'suscripcion_no_coincide', mensaje: 'No pudimos verificar la suscripción asociada a esta cuenta.' });
+        }
+
+        if (existente.status === 'authorized') {
+          await aplicarSuscripcionAUsuario(usuario.usuarioId, filaActual.mp_preapproval_id, existente);
+          return res.status(200).json({ ok: true, yaActivo: true });
+        }
+
+        if (existente.status === 'pending' && existente.init_point) {
+          return res.status(200).json({ initPoint: existente.init_point, yaPendiente: true });
+        }
+
+        if (existente.status === 'paused' || existente.status === 'cancelled') {
+          await aplicarSuscripcionAUsuario(usuario.usuarioId, filaActual.mp_preapproval_id, existente);
+        } else if (existente.status !== 'pending') {
+          return res.status(409).json({ error: 'suscripcion_en_revision', mensaje: 'Tu suscripción anterior todavía está siendo verificada.' });
+        }
+      }
     }
 
     // El precio en ARS se calcula de cero en cada alta nueva, a partir del

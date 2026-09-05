@@ -153,9 +153,19 @@ async function hacerLogin() {
 // siempre de /api/subscription/status inmediatamente despues, nunca de un
 // parametro de la URL ni de lo que devuelva /sync directamente.
 async function cargarEstado() {
-  var vieneDeRetorno = new URLSearchParams(location.search).get('retorno') === '1';
+  var parametrosRetorno = new URLSearchParams(location.search);
+  var vieneDeRetorno = parametrosRetorno.get('retorno') === '1';
   if (vieneDeRetorno) {
-    try { await fetch('/api/subscription/sync', { method: 'POST', headers: authHeaders() }); } catch (e) {}
+    var cuerpoSync = {};
+    var preapprovalIdRetorno = parametrosRetorno.get('preapproval_id');
+    if (preapprovalIdRetorno) cuerpoSync.preapprovalId = preapprovalIdRetorno;
+    try {
+      await fetch('/api/subscription/sync', {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(cuerpoSync)
+      });
+    } catch (e) {}
   }
 
   var res = await fetch('/api/subscription/status', { headers: authHeaders() });

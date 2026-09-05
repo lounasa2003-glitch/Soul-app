@@ -20,7 +20,11 @@ p{font-size:.95rem;color:#c9bdc5;max-width:340px;line-height:1.6}
 <div class="spinner"></div>
 <p>Estamos confirmando tu suscripción con Mercado Pago…</p>
 <script>
-setTimeout(function () { location.href = '/pro.html?retorno=1'; }, 1500);
+var entrada = new URLSearchParams(location.search);
+var salida = new URLSearchParams({ retorno: '1' });
+var preapprovalId = entrada.get('preapproval_id');
+if (preapprovalId) salida.set('preapproval_id', preapprovalId);
+setTimeout(function () { location.href = '/pro.html?' + salida.toString(); }, 1500);
 </script>
 </body>
 </html>
