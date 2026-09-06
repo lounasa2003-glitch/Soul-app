@@ -48,7 +48,16 @@ export default async function handler(req, res) {
         datosMP = await obtenerPreapproval(preapprovalId);
       } catch (e) {
         await registrarErrorSilencioso({ contexto: 'api/subscribe: sincronizar preapproval', error: e, meta: { usuarioId: usuario.usuarioId } });
-        return res.status(502).json({ error: 'no_se_pudo_verificar', mensaje: 'No pudimos confirmar el estado con Mercado Pago. Probá de nuevo en un rato.' });
+        const esPreview = process.env.VERCEL_ENV === 'preview';
+        const estadoMP = Number.isInteger(e && e.statusMercadoPago) ? e.statusMercadoPago : null;
+        const codigoMP = e && e.codigoMercadoPago ? String(e.codigoMercadoPago) : null;
+        const diagnostico = esPreview && estadoMP
+          ? ` (MP HTTP ${estadoMP}${codigoMP ? ` · ${codigoMP}` : ''})`
+          : '';
+        return res.status(502).json({
+          error: 'no_se_pudo_verificar',
+          mensaje: `No pudimos confirmar el estado con Mercado Pago.${diagnostico}`
+        });
       }
 
       if (!datosMP) {
