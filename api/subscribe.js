@@ -20,11 +20,48 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: 'Sesión inválida o expirada' });
     }
 
-    // 10/hora alcanza de sobra para cualquier uso legitimo (un intento, algun
-    // reintento de red) sin abrir la puerta a generar preapprovals en loop.
-    const limiteInfo = await chequearLimite(usuario.email, 'mp_subscribe', 10, 3600);
+    // Esta ruta ya existe y Vercel la publica de forma estable. El modo sync
+    // solo consulta y aplica un preapproval ya creado: nunca calcula precio,
+    // crea una suscripcion ni devuelve un init_point.
+    const esSincronizacion = req.body && req.body.accion === 'sync';
+    const limiteInfo = await chequearLimite(
+      usuario.email,
+      esSincronizacion ? 'mp_sync' : 'mp_subscribe',
+      esSincronizacion ? 30 : 10,
+      3600
+    );
     if (!limiteInfo.permitido) {
       return res.status(429).json({ error: 'limite_alcanzado', mensaje: 'Demasiados intentos. Esperá un toque y volvé a intentar.' });
+    }
+
+    if (esSincronizacion) {
+      const preapprovalId = req.body && typeof req.body.preapprovalId === 'string'
+        ? req.body.preapprovalId.trim()
+        : '';
+
+      if (!preapprovalId || !/^[A-Za-z0-9_-]{1,128}$/.test(preapprovalId)) {
+        return res.status(400).json({ error: 'preapproval_id_invalido', mensaje: 'No recibimos una suscripción válida para verificar.' });
+      }
+
+      let datosMP;
+      try {
+        datosMP = await obtenerPreapproval(preapprovalId);
+      } catch (e) {
+        await registrarErrorSilencioso({ contexto: 'api/subscribe: sincronizar preapproval', error: e, meta: { usuarioId: usuario.usuarioId } });
+        return res.status(502).json({ error: 'no_se_pudo_verificar', mensaje: 'No pudimos confirmar el estado con Mercado Pago. Probá de nuevo en un rato.' });
+      }
+
+      if (!datosMP) {
+        return res.status(404).json({ error: 'suscripcion_no_encontrada', mensaje: 'Mercado Pago no reconoce esta suscripción.' });
+      }
+
+      if (String(datosMP.external_reference || '') !== String(usuario.usuarioId)) {
+        await registrarErrorSilencioso({ contexto: 'api/subscribe: external_reference de sync no coincide', error: new Error('external_reference_no_coincide'), meta: { usuarioId: usuario.usuarioId } });
+        return res.status(403).json({ error: 'suscripcion_no_pertenece_al_usuario', mensaje: 'La suscripción aprobada corresponde a otra cuenta de Soul.' });
+      }
+
+      const campos = await aplicarSuscripcionAUsuario(usuario.usuarioId, preapprovalId, datosMP);
+      return res.status(200).json({ ok: true, plan: campos.plan || 'free', estadoMercadoPago: campos.mp_status });
     }
 
     // Antes de crear otra suscripcion, se reconcilia cualquier preapproval ya

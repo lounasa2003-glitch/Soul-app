@@ -155,17 +155,27 @@ async function hacerLogin() {
 async function cargarEstado() {
   var parametrosRetorno = new URLSearchParams(location.search);
   var vieneDeRetorno = parametrosRetorno.get('retorno') === '1';
+  var mensajeSync = '';
+  var syncErrEl = document.getElementById('subscribeErr');
+  syncErrEl.style.display = 'none';
+
   if (vieneDeRetorno) {
-    var cuerpoSync = {};
+    var cuerpoSync = { accion: 'sync' };
     var preapprovalIdRetorno = parametrosRetorno.get('preapproval_id');
     if (preapprovalIdRetorno) cuerpoSync.preapprovalId = preapprovalIdRetorno;
     try {
-      await fetch('/api/subscription-sync', {
+      var resSync = await fetch('/api/subscribe', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(cuerpoSync)
       });
-    } catch (e) {}
+      var dataSync = await resSync.json().catch(function () { return {}; });
+      if (!resSync.ok) {
+        mensajeSync = dataSync.mensaje || 'No pudimos confirmar tu suscripción con Mercado Pago.';
+      }
+    } catch (e) {
+      mensajeSync = 'No pudimos conectar con Mercado Pago para confirmar tu suscripción.';
+    }
   }
 
   var res = await fetch('/api/subscription/status', { headers: authHeaders() });
@@ -187,6 +197,10 @@ async function cargarEstado() {
     document.getElementById('bloqueOtroOrigen').classList.remove('oculto');
   } else {
     document.getElementById('bloqueLibre').classList.remove('oculto');
+    if (mensajeSync) {
+      syncErrEl.textContent = mensajeSync;
+      syncErrEl.style.display = 'block';
+    }
     cargarPrecioAproximado();
   }
 }
