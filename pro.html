@@ -160,7 +160,7 @@ async function cargarEstado() {
     var preapprovalIdRetorno = parametrosRetorno.get('preapproval_id');
     if (preapprovalIdRetorno) cuerpoSync.preapprovalId = preapprovalIdRetorno;
     try {
-      await fetch('/api/subscription/sync', {
+      await fetch('/api/subscription-sync', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify(cuerpoSync)
