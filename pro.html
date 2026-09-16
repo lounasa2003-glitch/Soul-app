@@ -104,8 +104,15 @@ button.secundario{background:transparent;border:1px solid rgba(201,168,76,.35);c
 
 <script>
 // La sesion de Soul nunca persiste entre cargas (mismo criterio que
-// soul.html) -- vive solo en esta variable mientras dure esta pagina.
+// soul.html) -- vive solo en esta variable mientras dure esta pagina. La
+// UNICA excepcion es el viaje de ida y vuelta a Mercado Pago (ver
+// continuarConMercadoPago/intentarRestaurarSesion mas abajo): ahi la pagina
+// entera se destruye al navegar a un dominio externo, asi que hace falta
+// sessionStorage para sobrevivir ese trayecto puntual -- nunca se guarda el
+// accessToken, solo el refresh_token, y se borra apenas se lee.
 var accessToken = null;
+var refreshToken = null;
+var SOUL_PRO_REFRESH_KEY = 'soulProRefreshToken';
 
 function authHeaders(extra) {
   var h = { 'Authorization': 'Bearer ' + accessToken, 'X-Soul-Authorization': 'Bearer ' + accessToken };
@@ -138,6 +145,7 @@ async function hacerLogin() {
       return;
     }
     accessToken = data.access_token;
+    refreshToken = data.refresh_token || null;
     document.getElementById('vistaLogin').classList.add('oculto');
     document.getElementById('vistaPro').classList.remove('oculto');
     await cargarEstado();
@@ -239,6 +247,15 @@ async function continuarConMercadoPago() {
       await cargarEstado();
       return;
     }
+    // Guarda SOLO el refresh_token, justo antes de salir del dominio --
+    // nunca el accessToken. Es lo minimo para poder renovar la sesion en
+    // silencio al volver (ver intentarRestaurarSesion), sin que la persona
+    // tenga que loguearse de nuevo. sessionStorage sobrevive la navegacion
+    // de ida y vuelta a Mercado Pago dentro de la misma pestaña, y se borra
+    // sola si la pestaña se cierra en el medio.
+    try {
+      if (refreshToken) sessionStorage.setItem(SOUL_PRO_REFRESH_KEY, refreshToken);
+    } catch (e) {}
     // A partir de aca es 100% la pantalla alojada por Mercado Pago -- Soul
     // no vuelve a intervenir hasta que la persona regrese por back_url.
     location.href = data.initPoint;
@@ -258,6 +275,60 @@ async function cancelarSuscripcion() {
   await cargarEstado();
   document.getElementById('cancelBtn').disabled = false;
 }
+
+// ── Retorno silencioso desde Mercado Pago ──
+// Si la carga actual viene con retorno=1 Y hay un refresh_token guardado
+// (ver continuarConMercadoPago), lo usa UNA sola vez para renovar la sesion
+// sin pedir login de nuevo -- necesario porque accessToken (variable en
+// memoria) no sobrevive la navegacion de ida y vuelta a un dominio externo.
+// El refresh_token se borra de sessionStorage apenas se lee, se use con
+// exito o no: nunca queda un token guardado mas tiempo del necesario.
+// Si falta el refresh_token o falla la renovacion, no hace nada -- la
+// pagina se queda mostrando el login normal, mismo fallback de siempre.
+var yaSeIntentoRestaurarSesion = false; // evita doble ejecucion/doble sync
+async function intentarRestaurarSesion() {
+  if (yaSeIntentoRestaurarSesion) return;
+  yaSeIntentoRestaurarSesion = true;
+
+  var vieneDeRetorno = new URLSearchParams(location.search).get('retorno') === '1';
+  if (!vieneDeRetorno) {
+    // No es un retorno de Mercado Pago (ej.: se volvio con "atras" del
+    // navegador sin pasar por pro-retorno.html, o se abrio la pagina de
+    // cero). Si habia quedado un refresh_token de un intento anterior sin
+    // usar, se limpia igual -- ningun dato temporal debe sobrevivir mas
+    // alla de la carga que lo necesita.
+    try { sessionStorage.removeItem(SOUL_PRO_REFRESH_KEY); } catch (e) {}
+    return;
+  }
+
+  var refreshGuardado = null;
+  try {
+    refreshGuardado = sessionStorage.getItem(SOUL_PRO_REFRESH_KEY);
+    sessionStorage.removeItem(SOUL_PRO_REFRESH_KEY);
+  } catch (e) {}
+
+  if (!refreshGuardado) return; // fallback: login normal, como antes
+
+  try {
+    var res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'refrescar', refresh_token: refreshGuardado })
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.access_token) return; // fallback: login normal
+
+    accessToken = data.access_token;
+    refreshToken = data.refresh_token || null;
+    document.getElementById('vistaLogin').classList.add('oculto');
+    document.getElementById('vistaPro').classList.remove('oculto');
+    await cargarEstado(); // unica llamada a sync de esta carga -- no se repite
+  } catch (e) {
+    // Fallback silencioso: se queda el login normal en pantalla.
+  }
+}
+
+intentarRestaurarSesion();
 </script>
 </body>
 </html>
