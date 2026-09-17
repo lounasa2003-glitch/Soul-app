@@ -215,12 +215,28 @@ async function cargarEstado() {
         return;
       }
     }
-    var texto = 'Estado: <b>' + (data.estadoMercadoPago || 'activa') + '</b>.';
-    if (data.proximaRenovacion) {
-      var fecha = new Date(data.proximaRenovacion).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
-      texto += '<br>Próxima renovación: <b>' + fecha + '</b>.';
+    var fecha = data.proximaRenovacion
+      ? new Date(data.proximaRenovacion).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
+    var cancelBtnEl = document.getElementById('cancelBtn');
+    if (data.estadoMercadoPago === 'cancelled') {
+      // Cancelada pero todavia dentro del periodo ya pagado (gracia real,
+      // ver lib/suscripcionesMercadoPago.js) -- nunca "cortada ya": mientras
+      // el backend siga devolviendo plan==='pro' con origen mercadopago, es
+      // porque el vencimiento sigue siendo futuro. No tiene sentido ofrecer
+      // cancelar de nuevo, pero "Continuar en Soul" sigue disponible igual.
+      document.getElementById('estadoTexto').innerHTML = fecha
+        ? ('Suscripción cancelada. Conservás Soul Pro hasta <b>' + fecha + '</b>.')
+        : 'Suscripción cancelada.';
+      cancelBtnEl.style.display = 'none';
+    } else {
+      var texto = 'Estado: <b>' + (data.estadoMercadoPago || 'activa') + '</b>.';
+      if (fecha) {
+        texto += '<br>Próxima renovación: <b>' + fecha + '</b>.';
+      }
+      document.getElementById('estadoTexto').innerHTML = texto;
+      cancelBtnEl.style.display = '';
     }
-    document.getElementById('estadoTexto').innerHTML = texto;
     document.getElementById('bloquePro').classList.remove('oculto');
   } else if (data.plan === 'pro') {
     document.getElementById('bloqueOtroOrigen').classList.remove('oculto');
@@ -316,13 +332,28 @@ function continuarEnSoul() {
 }
 
 async function cancelarSuscripcion() {
-  if (!confirm('¿Seguro que querés cancelar Soul Pro? El corte es inmediato.')) return;
+  if (!confirm('¿Seguro que querés cancelar Soul Pro? Se detendrán las próximas renovaciones y conservarás Soul Pro hasta finalizar el período ya pagado.')) return;
+
+  var errEl = document.getElementById('continuarEnSoulErr');
+  errEl.textContent = '';
+  errEl.style.display = 'none';
+
   document.getElementById('cancelBtn').disabled = true;
   try {
-    await fetch('/api/subscription/cancel', { method: 'POST', headers: authHeaders() });
-  } catch (e) {}
-  await cargarEstado();
-  document.getElementById('cancelBtn').disabled = false;
+    var res = await fetch('/api/subscription/cancel', { method: 'POST', headers: authHeaders() });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) {
+      errEl.textContent = data.mensaje || 'No pudimos cancelar la suscripción. Intentá nuevamente.';
+      errEl.style.display = 'block';
+      return;
+    }
+    await cargarEstado();
+  } catch (e) {
+    errEl.textContent = 'No pudimos cancelar la suscripción. Intentá nuevamente.';
+    errEl.style.display = 'block';
+  } finally {
+    document.getElementById('cancelBtn').disabled = false;
+  }
 }
 
 // ── Retorno silencioso desde Mercado Pago ──

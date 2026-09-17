@@ -5,9 +5,13 @@ import { cancelarPreapproval, obtenerPreapproval } from '../../lib/mercadoPago.j
 import { buscarUsuarioPorId, aplicarSuscripcionAUsuario } from '../../lib/suscripcionesMercadoPago.js';
 
 // Cancela la suscripcion de Mercado Pago de la persona autenticada. MP no
-// ofrece (confirmado en la doc oficial) una cancelacion con gracia hasta fin
-// de periodo -- el corte es inmediato tambien del lado de Soul, reflejando
-// el status real que MP devuelve apenas se cancela.
+// ofrece (confirmado en la doc oficial) un concepto propio de "cancelado con
+// gracia hasta fin de periodo" -- esa gracia la construye Soul, en
+// lib/suscripcionesMercadoPago.js (camposDesdeMP): si la persona ya tenia un
+// plan_vencimiento futuro pagado, lo conserva y sigue viendo Pro hasta esa
+// fecha; recien ahi baja a Free. Esta ruta no tiene logica propia de
+// estados -- aplicarSuscripcionAUsuario hace exactamente lo mismo que el
+// webhook o /api/subscription/sync ante un 'cancelled'.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
