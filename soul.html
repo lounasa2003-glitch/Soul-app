@@ -2684,6 +2684,35 @@ var userEmail=null;
 // eso el resultado siempre termina en "iniciá sesión para seguir", nunca
 // intenta retomar nada de memoria.
 window.addEventListener('DOMContentLoaded',async function(){
+  // ── Puente de sesion desde pro.html (ver soulSessionBridge en pro.html,
+  // solo se escribe justo despues de confirmar "authorized" al volver de
+  // Mercado Pago) -- se consume y se borra de sessionStorage de inmediato,
+  // se use con exito o no. Nunca guarda el access_token en ningun lado.
+  // Deliberadamente NO hace return aca todavia: las inicializaciones
+  // comunes de mas abajo (push, tope de fecha de nacimiento) tienen que
+  // correr siempre, haya o no puente. Si falta el puente, falta el email
+  // en la respuesta, o falla la renovacion, sesionRestauradaPorPuente
+  // queda en false y sigue el flujo normal (login/confirmarMail/recovery)
+  // sin cortar nada -- nunca deja a la persona sin una pantalla que mostrar.
+  var puenteSesion=null;
+  try{
+    puenteSesion=sessionStorage.getItem('soulSessionBridge');
+    sessionStorage.removeItem('soulSessionBridge');
+  }catch(e){}
+  var sesionRestauradaPorPuente=false;
+  if(puenteSesion){
+    try{
+      var resPuente=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'refrescar',refresh_token:puenteSesion})});
+      var dataPuente=await resPuente.json();
+      if(resPuente.ok&&dataPuente.access_token&&dataPuente.user&&dataPuente.user.email){
+        accessToken=dataPuente.access_token;
+        refreshToken=dataPuente.refresh_token;
+        userEmail=dataPuente.user.email;
+        sesionRestauradaPorPuente=true;
+      }
+    }catch(e){}
+  }
+
   escucharAperturaPush();
 
   // Tope de "hace 18 años" en el selector de fecha -- solo UX (el chequeo
@@ -2695,6 +2724,15 @@ window.addEventListener('DOMContentLoaded',async function(){
   var maxFechaStr=maxFechaNacimiento.toISOString().slice(0,10);
   var fnacEl=document.getElementById('fnac');if(fnacEl)fnacEl.max=maxFechaStr;
   var mpFnacEl=document.getElementById('mpFnac');if(mpFnacEl)mpFnacEl.max=maxFechaStr;
+
+  // Recien aca, despues de las inicializaciones comunes y antes del flujo
+  // normal de confirmacion/recuperacion de abajo, se decide si esta carga
+  // continua directo a la app (puente exitoso) o sigue como una carga
+  // nueva cualquiera.
+  if(sesionRestauradaPorPuente){
+    await cargarProgreso(userEmail);
+    return;
+  }
 
   var paramsQuery=new URLSearchParams(location.search);
   var tokenConfirmar=paramsQuery.get('confirmarMail');

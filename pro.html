@@ -194,6 +194,25 @@ async function cargarEstado() {
   document.getElementById('bloqueOtroOrigen').classList.add('oculto');
 
   if (data.plan === 'pro' && data.origen === 'mercadopago') {
+    // Puente hacia soul.html -- solo la primera vez que se confirma
+    // "authorized" justo al volver de Mercado Pago (nunca si alguien entra
+    // a pro.html despues, a gestionar/cancelar su suscripcion, porque ahi
+    // ya no hay retorno=1 en la URL). Guarda SOLO el refresh_token, nunca
+    // el access_token, en sessionStorage -- lo consume y borra soul.html
+    // de inmediato (ver su DOMContentLoaded). Si por lo que sea no se
+    // puede guardar (sessionStorage bloqueado/lleno), no se redirige: se
+    // sigue mostrando "Sos Pro" normal mas abajo, sin perder la sesion.
+    if (vieneDeRetorno && refreshToken) {
+      var puenteGuardado = false;
+      try {
+        sessionStorage.setItem('soulSessionBridge', refreshToken);
+        puenteGuardado = true;
+      } catch (e) {}
+      if (puenteGuardado) {
+        location.href = '/soul.html';
+        return;
+      }
+    }
     var texto = 'Estado: <b>' + (data.estadoMercadoPago || 'activa') + '</b>.';
     if (data.proximaRenovacion) {
       var fecha = new Date(data.proximaRenovacion).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
