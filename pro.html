@@ -90,6 +90,8 @@ button.secundario{background:transparent;border:1px solid rgba(201,168,76,.35);c
     <div id="bloquePro" class="oculto">
       <h1>Sos Pro ✦</h1>
       <div class="estado" id="estadoTexto"></div>
+      <div class="err" id="continuarEnSoulErr"></div>
+      <button id="continuarEnSoulBtn" onclick="continuarEnSoul()">Continuar en Soul</button>
       <button id="cancelBtn" class="secundario" onclick="cancelarSuscripcion()">Cancelar suscripción</button>
     </div>
 
@@ -283,6 +285,34 @@ async function continuarConMercadoPago() {
     errEl.style.display = 'block';
     document.getElementById('subscribeBtn').disabled = false;
   }
+}
+
+// Mismo puente que ya usa el retorno automatico de Mercado Pago (ver
+// soulSessionBridge en cargarEstado()), disparado ahora a mano por la
+// persona desde el boton "Continuar en Soul". Guarda SOLO el
+// refreshToken -- nunca el accessToken -- y redirige; soul.html ya sabe
+// consumirlo y borrarlo de inmediato. Si falta el refreshToken de esta
+// carga o sessionStorage no deja guardar nada, no redirige: se queda en
+// pro.html con un mensaje claro, sin perder la sesion actual.
+function continuarEnSoul() {
+  var errEl = document.getElementById('continuarEnSoulErr');
+  errEl.style.display = 'none';
+
+  if (!refreshToken) {
+    errEl.textContent = 'No pudimos continuar automáticamente. Volvé a iniciar sesión para seguir en Soul.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    sessionStorage.setItem('soulSessionBridge', refreshToken);
+  } catch (e) {
+    errEl.textContent = 'No pudimos continuar automáticamente en este navegador. Volvé a iniciar sesión para seguir en Soul.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  location.href = '/soul.html';
 }
 
 async function cancelarSuscripcion() {
