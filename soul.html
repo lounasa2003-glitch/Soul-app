@@ -306,6 +306,17 @@ body{background:#07050a;min-height:100vh;color:#f2ece4;font-family:'Inter',sans-
   </div>
 </div>
 
+<!-- ══ PUENTE DE SESION DESDE PRO.HTML — se muestra en vez del login
+     mientras se renueva la sesion y carga el progreso (ver
+     soulSessionBridge en DOMContentLoaded), para que el login de atras
+     nunca llegue a parpadear ══ -->
+<div class="etapa" id="ePuenteSesion">
+  <div class="auth-wrap">
+    <div class="auth-orb"></div>
+    <p class="auth-title">Ingresando a Soul…</p>
+  </div>
+</div>
+
 <!-- ══ RESULTADO DE TOCAR EL LINK DE CONFIRMACIÓN ══ -->
 <div class="etapa" id="eMailConfirmado">
   <div class="auth-wrap">
@@ -2701,6 +2712,15 @@ window.addEventListener('DOMContentLoaded',async function(){
   }catch(e){}
   var sesionRestauradaPorPuente=false;
   if(puenteSesion){
+    // Oculta el login de una, ANTES de esperar la red, y muestra
+    // "Ingresando a Soul..." en su lugar (ver ePuenteSesion mas arriba) --
+    // asi el login de atras nunca llega a parpadear mientras se renueva la
+    // sesion. etapaActual se actualiza para que ir() (usado mas abajo por
+    // cargarProgreso y compania) sepa que pantalla desactivar llegado el
+    // momento de entrar a la app.
+    document.getElementById('e0').classList.remove('activa');
+    document.getElementById('ePuenteSesion').classList.add('activa');
+    etapaActual='PuenteSesion';
     try{
       var resPuente=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'refrescar',refresh_token:puenteSesion})});
       var dataPuente=await resPuente.json();
@@ -2711,6 +2731,16 @@ window.addEventListener('DOMContentLoaded',async function(){
         sesionRestauradaPorPuente=true;
       }
     }catch(e){}
+    if(!sesionRestauradaPorPuente){
+      // No se pudo continuar la sesion -- vuelve al login (nunca deja la
+      // pantalla de carga pegada) con un mensaje claro.
+      document.getElementById('ePuenteSesion').classList.remove('activa');
+      document.getElementById('e0').classList.add('activa');
+      etapaActual=0;
+      var authErrEl=document.getElementById('authErr');
+      authErrEl.textContent='No pudimos continuar la sesión automáticamente. Iniciá sesión de nuevo.';
+      authErrEl.style.display='block';
+    }
   }
 
   escucharAperturaPush();
